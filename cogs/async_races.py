@@ -33,10 +33,6 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         return server
 
     ####################################################################################################################
-    async def send_ephemeral(self, interaction, msg):
-        await interaction.send(msg, ephemeral=True)
-
-    ####################################################################################################################
     # Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes it
     async def delete_message(self, guild_id, async_race_msg_id):
         async_race_msg = None
@@ -56,13 +52,10 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             except:
                 logging.info(f"Failed to find message with message ID {async_race_msg.message_id}")
 
-########################################################################################################################
-# ASYNC_RACE
-########################################################################################################################
-# This is the main slash command that will be the prefix of all of the race commands below
-    @nextcord.slash_command()
-    async def async_race(self, interaction):
-        pass
+    ####################################################################################################################
+    # Provides a list of categories as choices for a SlashOption
+    async def get_category_choices(self, server_id):
+        categories = AsyncRaceCategory.select().where(AsyncRaceCategory == server_id)
 
 ########################################################################################################################
 # ASYNC_MOD
@@ -73,54 +66,59 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         pass
 
 ########################################################################################################################
+# RACE COMMANDS
+########################################################################################################################
+
+
+########################################################################################################################
 # CATEGORY COMMANDS
 ########################################################################################################################
-    @async_mod.subcommand(description="Adds a race category")
-    async def add_category(
-        self,
-        interaction,
-        name: str = nextcord.SlashOption(description="Name of the category to be added", required=True),
-        description: str = nextcord.SlashOption(description="Description of the category to be added",
-                                                required=False,
-                                                default=None)):
-        self.log_command(interaction.user, "add_category")
-        cat = AsyncRaceCategory()
-        cat.name = name
-        cat.description = description
-        cat.server_id = interaction.guild_id
-        try:
-            cat.save()
-            await self.send_ephemeral(interaction, f"Added category {name} with id {cat.id}")
-        except:
-            await self.send_ephemeral(interaction, f"FAILED to add category {name}")
-
-    ####################################################################################################################
-    @async_mod.subcommand(description="Edits an existing race category")
-    async def edit_category(
-        self,
-        interaction,
-        id: int = nextcord.SlashOption(description="ID of the category to be edited", required=True),
-        name: str = nextcord.SlashOption(description="New name of the category",
-                                         required=False,
-                                         default=None),
-        description: str = nextcord.SlashOption(description="New description of the category",
-                                                required=False,
-                                                default=None)):
-        self.log_command(interaction.user, "edit_category")
-        try:
-            cat = AsyncRaceCategory.select().where(AsyncRaceCategory.id == id).get()
-        except:
-            cat = None
-        if name is not None:
-            cat.name = name
-        if description is not None:
-            cat.description = description
-
-        try:
-            cat.save()
-            await self.send_ephemeral(interaction, f"Successfully edited category id {cat.id}")
-        except:
-            await self.send_ephemeral(interaction, f"FAILED to edit category {name}")
+    #@async_mod.subcommand(description="Adds a race category")
+    #async def add_category(
+    #    self,
+    #    interaction,
+    #    name: str = nextcord.SlashOption(description="Name of the category to be added", required=True),
+    #    description: str = nextcord.SlashOption(description="Description of the category to be added",
+    #                                            required=False,
+    #                                            default=None)):
+    #    self.log_command(interaction.user, "ADD_CATEGORY")
+    #    cat = AsyncRaceCategory()
+    #    cat.name = name
+    #    cat.description = description
+    #    cat.server_id = interaction.guild_id
+    #    try:
+    #        cat.save()
+    #        await interaction.send(f"Added category {name} with id {cat.id}", ephemeral=True)
+    #    except:
+    #        await interaction.send(f"FAILED to add category {name}", ephemeral=True)
+#
+    #####################################################################################################################
+    #@async_mod.subcommand(description="Edits an existing race category")
+    #async def edit_category(
+    #    self,
+    #    interaction,
+    #    id: int = nextcord.SlashOption(description="ID of the category to be edited", required=True),
+    #    name: str = nextcord.SlashOption(description="New name of the category",
+    #                                     required=False,
+    #                                     default=None),
+    #    description: str = nextcord.SlashOption(description="New description of the category",
+    #                                            required=False,
+    #                                            default=None)):
+    #    self.log_command(interaction.user, "EDIT_CATEGORY")
+    #    try:
+    #        cat = AsyncRaceCategory.select().where(AsyncRaceCategory.id == id).get()
+    #    except:
+    #        cat = None
+    #    if name is not None:
+    #        cat.name = name
+    #    if description is not None:
+    #        cat.description = description
+    #
+    #    try:
+    #        cat.save()
+    #        await interaction.send(f"Successfully edited category id {cat.id}", ephemeral=True)
+    #    except:
+    #        await interaction.send(f"FAILED to edit category {name}", ephemeral=True)
 
 ########################################################################################################################
 # STARTUP and SHUTDOWN
@@ -161,26 +159,25 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             required=False,
             default=False)):
 
-        self.execution_count += 1
-        logging.info(f"This has been run {self.execution_count} times")
+        self.log_command(interaction.user, "CREATE_CATEGORY_MOD_BUTTONS")
         server = self.get_server(interaction)
         if server is None:
-            await self.send_ephemeral(interaction, "Server not found")
+            await interaction.send("Server not found", ephemeral=True)
             return
 
         # Just save the message ID for now, we'll delete and update the DB after we're sure the new message worked
         old_mod_message_id = server.category_mod_message
         if old_mod_message_id is not None and replace == False:
-            await self.send_ephemeral(interaction, "Category mod message already exists, set `replace` to True to replace")
+            await interaction.send("Category mod message already exists, set `replace` to True to replace", ephemeral=True)
             return
 
         # Construct message w/ button view
         try:
             new_mod_message = await channel.send(
                 "Click below to add or edit a race category", 
-                view=zCategoryModView(self.add_category, self.edit_category))
+                view=zCategoryModView())
         except nextcord.Forbidden:
-            self.send_ephemeral(interaction, f"Failed: Bot does not have permission for channel {channel.name}")
+            await interaction.send(f"Failed: Bot does not have permission for channel {channel.name}", ephemeral=True)
             return
         except:
             pass
@@ -192,9 +189,9 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 channel_id=channel.id, 
                 message_id=new_mod_message.id)
             new_db_message.save()
-            await self.send_ephemeral(interaction, "Successfully created category mod buttons")
+            await interaction.send("Successfully created category mod buttons", ephemeral=True)
         except:
-            await self.send_ephemeral(interaction, "Failed to create category mod buttons")
+            await interaction.send("Failed to create category mod buttons", ephemeral=True)
             # Since we failed to save the message info, we'll delete the message to prevent orphaning it
             await new_mod_message.delete()
             old_mod_message_id = None
@@ -205,6 +202,71 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         # Now remove the old message, if it exists
         await self.delete_message(interaction.guild_id, old_mod_message_id)
 
+    ####################################################################################################################
+    @async_admin.subcommand(description="Creates and pins a message with buttons for the race mod functions")
+    async def create_race_mod_buttons(
+        self,
+        interaction,
+        channel: nextcord.TextChannel = nextcord.SlashOption(
+            description="Channel to post the button view in",
+            required=True),
+        replace : bool = nextcord.SlashOption(
+            description="If a message already exists, whether it should be replaced",
+            required=False,
+            default=False)):
+
+        self.log_command(interaction.user, "CREATE_RACE_MOD_BUTTONS")
+
+        server = self.get_server(interaction)
+        if server is None:
+            await interaction.send("Server not found", ephemeral=True)
+            return
+
+        # Just save the message ID for now, we'll delete and update the DB after we're sure the new message worked
+        old_mod_message_id = server.race_mod_message
+        if old_mod_message_id is not None and replace == False:
+            await interaction.send("Race mod message already exists, set `replace` to True to replace", ephemeral=True)
+            return
+
+        # Construct message w/ button view
+        try:
+            new_mod_message = await channel.send(
+                "Click below to add or edit a races", 
+                view=zRaceModView())
+        except nextcord.Forbidden:
+            await interaction.send(f"Failed: Bot does not have permission for channel {channel.name}", ephemeral=True)
+            return
+        except:
+            pass
+
+        # Save message ID
+        try:
+            new_db_message = AsyncRaceMessage(
+                server_id=interaction.guild_id, 
+                channel_id=channel.id, 
+                message_id=new_mod_message.id)
+            new_db_message.save()
+            await interaction.send("Successfully created race mod buttons", ephemeral=True)
+        except:
+            await interaction.send("Failed to create race mod buttons", ephemeral=True)
+            # Since we failed to save the message info, we'll delete the message to prevent orphaning it
+            await new_mod_message.delete()
+            old_mod_message_id = None
+
+        server.race_mod_message = new_db_message.id
+        server.save()
+
+        # Now remove the old message, if it exists
+        await self.delete_message(interaction.guild_id, old_mod_message_id)
+
+########################################################################################################################
+# ASYNC_RACE
+########################################################################################################################
+# This is the main slash command that will be the prefix of all of the race commands below
+    @nextcord.slash_command()
+    async def async_race(self, interaction):
+        pass
+
 ########################################################################################################################
 # ECHO_TEST
 ########################################################################################################################
@@ -214,21 +276,42 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 #        await interaction.send(message, ephemeral=True)
 
 ########################################################################################################################
-## MODAL_TEST
+## MODAL_TESTS
 #########################################################################################################################
-#    @async_race.subcommand(description="Modal Test Function")
-#    async def modal_test(self, interaction):
-#        self.modal_test_fields = {}
-#        self.modal_test_fields['igt'] = nextcord.ui.TextInput(label="Enter IGT in format `H:MM:SS`", required=True)
-#        self.modal_test_fields['comment'] = nextcord.ui.TextInput(label="Funny Comments", required=False)
-#
-#        modal = zModal(self.modal_test_fields, self.modal_submit_func, "Test Modal", self)
-#        await interaction.response.send_modal(modal)
-#
-#    async def modal_submit_func(self, caller_data, modal, interaction):
-#        comment = "" if modal.fields['comment'].value is None else f" with comment {modal.fields['comment'].value}"
-#        msg = f"{interaction.user} submitted time {modal.fields['igt'].value}{comment}"
-#        await interaction.send(msg, ephemeral=True)
+    #@async_race.subcommand(description="Modal Test Function")
+    #async def modal_test(self, interaction):
+    #    self.modal_test_fields = {}
+    #    self.modal_test_fields['igt'] = nextcord.ui.TextInput(label="Enter IGT in format `H:MM:SS`", required=True)
+    #    self.modal_test_fields['comment'] = nextcord.ui.TextInput(label="Funny Comments", required=False)
+
+    #    modal = zModal(self.modal_test_fields, self.modal_submit_func, "Test Modal", self)
+    #    await interaction.response.send_modal(modal)
+
+    #async def modal_submit_func(self, caller_data, modal, interaction):
+    #    comment = "" if modal.fields['comment'].value is None else f" with comment {modal.fields['comment'].value}"
+    #    msg = f"{interaction.user} submitted time {modal.fields['igt'].value}{comment}"
+    #    await interaction.send(msg, ephemeral=True)
+
+    @async_race.subcommand(description="Race Modal Test Function")
+    async def race_modal_test(self, interaction, race_id: int = None):
+        race = None
+        if race_id is not None:
+            try:
+                race = AsyncRace.select().where(AsyncRace.id == race_id).get()
+            except:
+                race = None
+
+        # If no race id is provided we will prompt for a category first
+        if race is None:
+            await interaction.send(view=zSingleSelectView(
+                get_category_select_list(interaction.guild_id),
+                self.send_race_modal,
+                "Select Race Category",
+                None), ephemeral=True)
+        else:
+            # Otherwise we can just send the modal
+            await self.send_race_modal(race, race.category_id, interaction)
+
 
 ########################################################################################################################
 # SELECT_TEST

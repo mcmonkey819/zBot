@@ -23,7 +23,7 @@ class AsyncRaceMessage(Model):
     id         = IntegerField(primary_key= True)
     server_id  = ForeignKeyField(AsyncRaceServer, backref='messages')
     channel_id = IntegerField()
-    message_id = IntegerField()
+    message_id = IntegerField(null=True)
 
     class Meta:
         table_name = 'async_race_messages'
