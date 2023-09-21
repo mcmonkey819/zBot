@@ -39,6 +39,9 @@ class AsyncRaceCategory(Model):
         table_name = 'async_race_categories'
         database = db
 
+AsyncRaceStateActive = "ACTIVE"
+AsyncRaceStateInactive = "INACTIVE"
+AsyncRaceStateClosed = "CLOSED"
 class AsyncRace(Model):
     id                      = IntegerField(primary_key= True)
     server_id               = ForeignKeyField(AsyncRaceServer, backref='races')
@@ -48,7 +51,7 @@ class AsyncRace(Model):
     description             = CharField(null=True)
     additional_instructions = CharField(null=True)
     category_id             = ForeignKeyField(AsyncRaceCategory, backref='races')
-    state                   = CharField(constraints=[Check('state in ("INACTIVE", "ACTIVE", "CLOSED")')])
+    active                  = BooleanField(default=False)
     leaderboard_message     = ForeignKeyField(AsyncRaceMessage, backref='races', null=True)
     race_info_message       = ForeignKeyField(AsyncRaceMessage, backref='races', null=True)
     submission_role         = IntegerField(null=True)

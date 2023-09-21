@@ -33,26 +33,6 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         return server
 
     ####################################################################################################################
-    # Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes it
-    async def delete_message(self, guild_id, async_race_msg_id):
-        async_race_msg = None
-        if async_race_msg_id is not None:
-            try:
-                async_race_msg = AsyncRaceMessage.select().where(AsyncRaceMessage.id == async_race_msg_id).get()
-            except:
-                logging.info(f"Failed to find AsyncRaceMessage with ID {async_race_msg_id}")
-
-        if async_race_msg is not None:
-            logging.info(f"Delete message server ID is {async_race_msg.server_id}")
-            guild = self.bot.get_guild(guild_id)
-            channel = guild.get_channel(async_race_msg.channel_id)
-            try:
-                msg = await channel.fetch_message(async_race_msg.message_id)
-                await msg.delete()
-            except:
-                logging.info(f"Failed to find message with message ID {async_race_msg.message_id}")
-
-    ####################################################################################################################
     # Provides a list of categories as choices for a SlashOption
     async def get_category_choices(self, server_id):
         categories = AsyncRaceCategory.select().where(AsyncRaceCategory == server_id)
@@ -160,27 +140,26 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             default=False)):
 
         self.log_command(interaction.user, "CREATE_CATEGORY_MOD_BUTTONS")
-        server = self.get_server(interaction)
-        if server is None:
+        db_server = self.get_server(interaction)
+        if db_server is None:
             await interaction.send("Server not found", ephemeral=True)
             return
 
         # Just save the message ID for now, we'll delete and update the DB after we're sure the new message worked
-        old_mod_message_id = server.category_mod_message
+        old_mod_message_id = db_server.category_mod_message
         if old_mod_message_id is not None and replace == False:
             await interaction.send("Category mod message already exists, set `replace` to True to replace", ephemeral=True)
             return
 
-        # Construct message w/ button view
-        try:
-            new_mod_message = await channel.send(
-                "Click below to add or edit a race category", 
-                view=zCategoryModView())
-        except nextcord.Forbidden:
+        # Check if the bot has permission in the chosen channel
+        server = interaction.client.get_guild(interaction.guild_id)
+        has_permission = await has_text_channel_permission(self.bot.user.id, server, channel)
+        if has_permission == False:
             await interaction.send(f"Failed: Bot does not have permission for channel {channel.name}", ephemeral=True)
             return
-        except:
-            pass
+
+        # Construct message w/ button view
+        new_mod_message = await channel.send("Click below to add or edit a race category", view=zCategoryModView())
 
         # Save message ID
         try:
@@ -196,11 +175,11 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             await new_mod_message.delete()
             old_mod_message_id = None
 
-        server.category_mod_message = new_db_message.id
-        server.save()
+        db_server.category_mod_message = new_db_message.id
+        db_server.save()
 
         # Now remove the old message, if it exists
-        await self.delete_message(interaction.guild_id, old_mod_message_id)
+        await delete_message(server, old_mod_message_id)
 
     ####################################################################################################################
     @async_admin.subcommand(description="Creates and pins a message with buttons for the race mod functions")
@@ -217,27 +196,26 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         self.log_command(interaction.user, "CREATE_RACE_MOD_BUTTONS")
 
-        server = self.get_server(interaction)
-        if server is None:
+        db_server = self.get_server(interaction)
+        if db_server is None:
             await interaction.send("Server not found", ephemeral=True)
             return
 
         # Just save the message ID for now, we'll delete and update the DB after we're sure the new message worked
-        old_mod_message_id = server.race_mod_message
+        old_mod_message_id = db_server.race_mod_message
         if old_mod_message_id is not None and replace == False:
             await interaction.send("Race mod message already exists, set `replace` to True to replace", ephemeral=True)
             return
 
-        # Construct message w/ button view
-        try:
-            new_mod_message = await channel.send(
-                "Click below to add or edit a races", 
-                view=zRaceModView())
-        except nextcord.Forbidden:
+        # Check if the bot has permission in the chosen channel
+        server = interaction.client.get_guild(interaction.guild_id)
+        has_permission = await has_text_channel_permission(self.bot.user.id, server, channel)
+        if has_permission == False:
             await interaction.send(f"Failed: Bot does not have permission for channel {channel.name}", ephemeral=True)
             return
-        except:
-            pass
+
+        # Construct message w/ button view
+        new_mod_message = await channel.send("Click below to add or edit a races", view=zRaceModView())
 
         # Save message ID
         try:
@@ -253,11 +231,11 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             await new_mod_message.delete()
             old_mod_message_id = None
 
-        server.race_mod_message = new_db_message.id
-        server.save()
+        db_server.race_mod_message = new_db_message.id
+        db_server.save()
 
         # Now remove the old message, if it exists
-        await self.delete_message(interaction.guild_id, old_mod_message_id)
+        await delete_message(server, old_mod_message_id)
 
 ########################################################################################################################
 # ASYNC_RACE

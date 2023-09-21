@@ -6,6 +6,8 @@ from nextcord.ext import commands
 import nextcord
 import re
 from typing import Any, Callable
+import validators
+
 from db.zBot_db_orm import *
 
 FieldList = dict[str, nextcord.ui.Item]
@@ -34,6 +36,79 @@ def get_race_select_list(server_id):
     for r in races:
         select_list.append(nextcord.SelectOption(label=f"{r.id} - {r.description[:15]}", value=r.id, description=r.description))
     return select_list
+
+####################################################################################################################
+# Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes both the message and DB entry
+async def delete_message(server, async_race_msg_id):
+    async_race_msg = None
+    if async_race_msg_id is not None:
+        try:
+            async_race_msg = AsyncRaceMessage.select().where(AsyncRaceMessage.id == async_race_msg_id).get()
+        except:
+            logging.info(f"Failed to find AsyncRaceMessage with ID {async_race_msg_id}")
+
+    if async_race_msg is not None:
+        if async_race_msg.message_id is not None:
+            channel = server.get_channel(async_race_msg.channel_id)
+            try:
+                msg = await channel.fetch_message(async_race_msg.message_id)
+                await msg.delete()
+            except:
+                logging.info(f"Failed to find message with message ID {async_race_msg.message_id}")
+        async_race_msg.delete_instance()
+
+#####################################################################################################################
+async def has_text_channel_permission(user_id, server, channel):
+    ret = False
+
+    member = await server.fetch_member(user_id)
+    perms = channel.permissions_for(member)
+    bot_text_permission = nextcord.Permissions.text()
+    bot_text_permission.update(manage_messages=False, manage_threads=False, send_tts_messages=False)
+    if perms.is_superset(bot_text_permission):
+        ret = True
+
+    return ret
+
+#####################################################################################################################
+async def get_permitted_channel_select_list(user_id, server):
+    select_list = []
+    for c in server.text_channels:
+        if await has_text_channel_permission(user_id, server, c):
+            select_list.append(nextcord.SelectOption(label=c.name, value=c.id, description=c.name))
+    return select_list
+
+#####################################################################################################################
+def get_role_select_list(server):
+    select_list = []
+    for r in server.roles:
+        select_list.append(nextcord.SelectOption(label=r.name, value=r.id, description=r.name))
+    return select_list
+
+#####################################################################################################################
+async def post_race_info_message(race, channel):
+    race_info_msg_text = f"Use the buttons below for race {race.id}"
+    race_info_msg_text += f"\n{race.description}"
+    if race.hash is not None and race.hash != "":
+        race_info_msg_text += f"\n    Hash: {race.hash}"
+    if race.additional_instructions is not None:
+        race_info_msg_text += f"\n{race.additional_instructions}"
+    race_info_msg_text +=  f"\n\n{race.seed}"
+
+    # Check the seed to see if it contains a link that we can embed
+    seed_parts = race.seed.split()
+    seed_url = None
+    for p in seed_parts:
+        if validators.url(p) == True:
+            seed_url = p
+            break
+    if seed_url is not None:
+        seed_embed = nextcord.Embed(title="{}".format(race.description), url=seed_url, color=nextcord.Colour.random())
+        seed_embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/1/1e/Download-Icon.png")
+        msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView(), embed=seed_embed)
+    else:
+        msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView())
+    return msg
 
 ########################################################################################################################
 # BASE CLASSES
@@ -222,7 +297,7 @@ class zRaceAddEditModal(zModal):
             self.race = AsyncRace()
             self.race.server_id = self.server_id
             self.race.category_id = self.category_id
-            self.race.state = "INACTIVE"
+            self.race.create_datetime = date.today().isoformat()
         msg = f"Saved Race Info:\n"
         for c in modal.children:
             match c.custom_id:
@@ -252,17 +327,39 @@ class zRaceAddEditModal(zModal):
 ########################################################################################################################
 # BUTTON VIEWS
 ########################################################################################################################
+# View which contains race info buttons
+class zRaceInfoButtonView(nextcord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='⏱️ Submit/Edit Time')
+    async def submit_time_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        ## TODO ##
+        await interaction.send("Submit Time Coming Soon")
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='🏳️ Forfeit Race')
+    async def forfeit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        ## TODO ##
+        await interaction.send("Forfeit Coming Soon")
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='🥇 Leaderboard')
+    async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        ## TODO ##
+        await interaction.send("Leaderboard Coming Soon")
+
+
+########################################################################################################################
 # View which contains category moderation buttons
 class zCategoryModView(nextcord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='➕ Add Category')
+    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='➕ Add Category')
     async def add_category_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         # Create and send Add Category modal
         await interaction.response.send_modal(zCategoryAddEditModal(None))
 
-    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='✏️ Edit Category')
+    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='✏️ Edit Category')
     async def edit_category_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         # Get the list of categories for this server
         select_list = get_category_select_list(interaction.guild_id)
@@ -312,13 +409,6 @@ class zRaceModView(nextcord.ui.View):
 
     #################################################################################################################
     async def on_race_select(self, caller_data, race_id, interaction):
-        edit_select_list = [ 
-            nextcord.SelectOption(label="Edit Race Info",          value=0, description="Edit the seed, hash or description"),
-            nextcord.SelectOption(label="Change Race State",       value=1, description="Set the race as Active, Inactive or Closed"),
-            nextcord.SelectOption(label="Pin Race Info",           value=2, description="Create a message with race info and buttons for submit actions"),
-            nextcord.SelectOption(label="Set Leaderboard Channel", value=3, description="Set a channel to display the race leaderboard in"),
-            nextcord.SelectOption(label="Set Submit Role",         value=4, description="Choose a role to be assigned when a racer submits a time for this race"),
-            ]
         try:
             self.race = AsyncRace.select().where(AsyncRace.id == int(race_id)).get()
         except:
@@ -330,22 +420,93 @@ class zRaceModView(nextcord.ui.View):
             await interaction.send(err_msg, ephemeral=True)
             return
 
+        state_label = "Deactivate Race" if self.race.active else "Mark Race Active"
+        state_desc = "Set the race as inactive, preventing new submissions" if self.race.active else "Mark the race active, allowing new submissions"
+        edit_select_list = [ 
+            nextcord.SelectOption(label="Edit Race Info",          value=0, description="Edit the seed, hash or description"),
+            nextcord.SelectOption(label=state_label,               value=1, description=state_desc),
+            nextcord.SelectOption(label="Pin Race Info",           value=2, description="Create a message with race info and buttons for submit actions"),
+            nextcord.SelectOption(label="Set Leaderboard Channel", value=3, description="Set a channel to display the race leaderboard in"),
+            nextcord.SelectOption(label="Set Submit Role",         value=4, description="Choose a role to be assigned when a racer submits a time for this race"),
+            ]
         edit_select_view = zSingleSelectView(edit_select_list, self.on_edit_select, "Choose Edit Action...", self)
         await interaction.send(view=edit_select_view, ephemeral=True)
 
     #################################################################################################################
     async def on_edit_select(self, caller_data, edit_choice, interaction):
+        server = interaction.client.get_guild(interaction.guild_id)
         match int(edit_choice):
             case 0:
                 logging.info("  Edit Race Selected")
                 await self.send_race_modal(self.race, self.race.category_id, interaction)
             case 1:
                 logging.info("  Change Race State Selected")
+                # Toggle the active state
+                self.race.active = self.race.active ^ True
+                self.race.save()
+                await interaction.send("Race State Saved", ephemeral=True)
             case 2:
                 logging.info("  Pin Race Info Selected")
+                channel_list = await get_permitted_channel_select_list(interaction.client.user.id, server)
+                await interaction.send(view=zSingleSelectView(channel_list, self.on_race_info_channel_select, "Choose Channel...", self), ephemeral=True)
             case 3:
                 logging.info("  Set Leaderboard Channel Selected")
+                channel_list = await get_permitted_channel_select_list(interaction.client.user.id, server)
+                await interaction.send(view=zSingleSelectView(channel_list, self.on_leaderboard_channel_select, "Choose Channel...", self), ephemeral=True)
             case 4:
                 logging.info("  Set Race Role Selected")
+                role_list = get_role_select_list(server)
+                await interaction.send(view=zSingleSelectView(role_list, self.on_race_role_select, "Choose Role...", self), ephemeral=True)
             case _:
                 logging.info("  Unknown Edit Choice")
+
+    #################################################################################################################
+    async def on_race_info_channel_select(self, caller_data, channel_id, interaction):
+        # Get the channel
+        server = interaction.client.get_guild(interaction.guild_id)
+        channel = server.get_channel(int(channel_id))
+
+        if channel is not None:
+            msg = await post_race_info_message(self.race, channel)
+
+            # Create a new AsyncRaceMessage with the race info message info
+            new_db_msg = AsyncRaceMessage()
+            new_db_msg.server_id = interaction.guild_id
+            new_db_msg.channel_id = channel_id
+            new_db_msg.message_id = msg.id
+            new_db_msg.save()
+
+            # Update the race with the new race info message id
+            old_db_msg_id = self.race.race_info_message
+            self.race.race_info_message = new_db_msg.id
+            self.race.save()
+
+            # Finally delete the old message if it exists
+            await delete_message(server, old_db_msg_id)
+        else:
+            logging.info(f"Could not find channel with id {channel_id}")
+
+    #################################################################################################################
+    async def on_leaderboard_channel_select(self, caller_data, channel_id, interaction):
+        # Create new AsyncRaceMessage for the chosen channel
+        new_db_msg = AsyncRaceMessage(server_id = interaction.guild_id, channel_id = channel_id)
+        new_db_msg.save()
+
+        # Save any existing leaderboard message id already stored
+        old_db_msg_id = self.race.leaderboard_message
+
+        # Save the new message id in the race
+        self.race.leaderboard_message = new_db_msg.id
+        self.race.save()
+
+        # Delete the old AsyncRaceMessage and any discord message associated with it
+        server = interaction.client.get_guild(interaction.guild_id)
+        await delete_message(server, old_db_msg_id)
+
+        await interaction.send(f"Leaderboard channel set for race {self.race.id}", ephemeral=True)
+
+    #################################################################################################################
+    async def on_race_role_select(self, caller_data, role_id, interaction):
+        self.race.submission_role = role_id
+        self.race.save()
+        await interaction.send("Race Role Saved", ephemeral=True)
