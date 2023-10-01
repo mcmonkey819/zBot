@@ -108,7 +108,6 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         logging.info("AsyncRaces cog Ready")
         if self.test_mode:
             logging.info("  Running in test mode")
-            # check_add_db_tables()
             self.execution_count = 0
 
     async def close(self):
@@ -270,25 +269,50 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     #    msg = f"{interaction.user} submitted time {modal.fields['igt'].value}{comment}"
     #    await interaction.send(msg, ephemeral=True)
 
-    @async_race.subcommand(description="Race Modal Test Function")
-    async def race_modal_test(self, interaction, race_id: int = None):
-        race = None
-        if race_id is not None:
-            try:
-                race = AsyncRace.select().where(AsyncRace.id == race_id).get()
-            except:
-                race = None
+    ########################################################################################################################
+    #@async_race.subcommand(description="Race Modal Test Function")
+    #async def race_modal_test(self, interaction, race_id: int = None):
+    #    race = None
+    #    if race_id is not None:
+    #        try:
+    #            race = AsyncRace.select().where(AsyncRace.id == race_id).get()
+    #        except:
+    #            race = None
+#
+    #    # If no race id is provided we will prompt for a category first
+    #    if race is None:
+    #        await interaction.send(view=zSingleSelectView(
+    #            get_category_select_list(interaction.guild_id),
+    #            self.send_race_modal,
+    #            "Select Race Category",
+    #            None), ephemeral=True)
+    #    else:
+    #        # Otherwise we can just send the modal
+    #        await self.send_race_modal(race, race.category_id, interaction)
 
-        # If no race id is provided we will prompt for a category first
-        if race is None:
+    ########################################################################################################################
+    @async_race.subcommand(description="Race Submission Modal Test Function")
+    async def race_submit_modal_test(self, interaction, submission_id: int = None):
+        submission = None
+        if submission_id is not None:
+            try:
+                submission = AsyncRaceSubmission.select().where(AsyncRaceSubmission.id == submission_id).get()
+            except:
+                submission = None
+
+        # If no race id is provided we will prompt for a race first
+        if submission is None:
             await interaction.send(view=zSingleSelectView(
-                get_category_select_list(interaction.guild_id),
-                self.send_race_modal,
-                "Select Race Category",
+                get_race_select_list(interaction.guild_id),
+                self.send_submit_modal,
+                "Select Race",
                 None), ephemeral=True)
         else:
             # Otherwise we can just send the modal
-            await self.send_race_modal(race, race.category_id, interaction)
+            await self.send_submit_modal(submission, submission.race_id, interaction)
+
+    async def send_submit_modal(self, submission, race_id, interaction):
+        await interaction.response.send_modal(zRaceSubmissionModal(race_id, submission))
 
 
 ########################################################################################################################

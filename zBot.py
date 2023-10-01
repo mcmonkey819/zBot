@@ -9,6 +9,8 @@ import asyncio
 import config.bot_config as bot_config
 import config.bot_tokens as bot_tokens
 
+from db.zBot_db_orm import *
+
 logging.basicConfig(level=logging.INFO)
 
 bot_token = bot_tokens.PRODUCTION_TOKEN
@@ -37,6 +39,17 @@ class Bot(commands.Bot):
     def set_test_mode(self):
         for c in self.cogs:
             self.get_cog(c).set_test_mode()
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--recreate_all", "--ra", required=False, action='store_true')
+parser.add_argument("-recreate_tables", "-rt", nargs='*', required=False)
+args = parser.parse_args()
+
+if args.recreate_all:
+    drop_add_db_tables()
+elif args.recreate_tables is not None and len(args.recreate_tables) > 0:
+    for table_name in args.recreate_tables:
+        recreate_table(table_name)
 
 intents = nextcord.Intents.all()
 intents.members = True
