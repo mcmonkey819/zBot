@@ -254,11 +254,14 @@ class zRaceAddEditModal(zModal):
     # Takes the data submitted by the user and saves it to the DB
     async def on_submit(self, caller_data, interaction, modal):
         # If we don't already have a DB entry create one now
+        race_is_new = False
         if self.race is None:
             self.race = AsyncRace()
             self.race.server_id = self.server_id
             self.race.category_id = self.category_id
             self.race.create_datetime = date.today().isoformat()
+            race_is_new = True
+
         msg = f"Saved Race Info:\n"
         for c in modal.children:
             match c.custom_id:
@@ -283,13 +286,28 @@ class zRaceAddEditModal(zModal):
         self.race.save()
         logging.info(msg)
 
+        if race_is_new:
+            # Create default extra info assignments based on server and category
+            server_infos = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.server_id == self.server_id)
+            for s in server_infos:
+                a = AsyncRaceExtraInfoAssignment()
+                a.info_type_id = s.info_type_id
+                a.race_id = self.race.id
+                a.save()
+            cat_infos = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.category_id == self.category_id)
+            for c in cat_infos:
+                a = AsyncRaceExtraInfoAssignment()
+                a.info_type_id = c.info_type_id
+                a.race_id = self.race.id
+                a.save()
+
         await interaction.send("Race Info Saved", ephemeral=True)
 
 #####################################################################################################################
 # Modal which has fields required to submit a race time
 class zRaceSubmissionModal(zModal):
     def __init__(self, race_id, submission=None):
-        self.race_id = race_id
+        self.race = get_race(race_id)
         self.submission = submission
 
         # Set the title
@@ -323,6 +341,24 @@ class zRaceSubmissionModal(zModal):
                 row=3,
                 default_value=submission.vod_link if submission is not None else None),
         }
+
+        # Add any extra info fields
+        curr_row = 4
+        for a in self.race.extra_info_assignments:
+            t = get_extra_info_type(a.info_type_id)
+            logging.info(f"Adding submit field {t.name}")
+            # Check if there's already stored info that can be loaded as the default
+            ## TODO ##
+            default_value = None
+            fields[t.name] = nextcord.ui.TextInput(
+                label=t.name,
+                required=False,
+                custom_id=t.name,
+                row=curr_row,
+                default_value=default_value)
+            curr_row = curr_row + 1
+
+        logging.info(f"Fields {fields}")
         # Call the base class init
         super().__init__(fields, self.on_submit, title, None)
 
@@ -331,7 +367,7 @@ class zRaceSubmissionModal(zModal):
         # If we don't already have a DB entry create one now
         if self.submission is None:
             self.submission = AsyncRaceSubmission()
-            self.submission.race_id = self.race_id
+            self.submission.race_id = self.race.id
             self.submission.user_id = interaction.user.id
             self.submission.submit_datetime = zBot_now()
 
@@ -354,7 +390,7 @@ class zRaceSubmissionModal(zModal):
                 case _:
                     continue
             msg += f"{c.value}\n"
-        msg += f"  Race ID: {self.race_id}"
+        msg += f"  Race ID: {self.race.id}"
 
         self.submission.save()
         logging.info(msg)
@@ -492,7 +528,7 @@ class zRaceModView(nextcord.ui.View):
         await interaction.response.send_modal(zRaceAddEditModal(interaction.guild_id, category_id, race))
 
     #################################################################################################################
-    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='️️️️✏️ Edit Race')
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='️️️️✏️ Manage Race')
     async def edit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         race_select_view = zSingleSelectView(
             get_race_select_list(interaction.guild_id),
@@ -638,3 +674,29 @@ class zRaceModView(nextcord.ui.View):
         self.race.submission_role = role_id
         self.race.save()
         await interaction.send("Race Role Saved", ephemeral=True)
+
+#####################################################################################################################
+async def post_race_info_message(race, channel):
+    race_info_msg_text = f"Use the buttons below for race {race.id}"
+    race_info_msg_text += f"\n{race.description}"
+    if race.hash is not None and race.hash != "":
+        race_info_msg_text += f"\n    Hash: {race.hash}"
+    if race.additional_instructions is not None:
+        race_info_msg_text += f"\n{race.additional_instructions}"
+    race_info_msg_text +=  f"\n\n{race.seed}"
+
+    # Check the seed to see if it contains a link that we can embed
+    seed_parts = race.seed.split()
+    seed_url = None
+    for p in seed_parts:
+        if validators.url(p) == True:
+            seed_url = p
+            break
+    if seed_url is not None:
+        seed_embed = nextcord.Embed(title="{}".format(race.description), url=seed_url, color=nextcord.Colour.random())
+        # Add generic, creative commons licensed download thumbnail
+        seed_embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/1/1e/Download-Icon.png")
+        msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
+    else:
+        msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView(race.id))
+    return msg

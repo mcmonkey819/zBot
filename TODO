@@ -1,0 +1,25 @@
+[X] - Race submission DB tables
+[X] - Race submission form
+    [X] - Test form
+    [X] - Validate time format
+[ ] - Extra Info on submission
+    [X] - Modify Extra Info table, many-to-one style with fields: submission_id, info_type, value
+    [X] - Add ExtraInfoType
+    [X] - Assign extra info items based on server, category defaults
+    [X] - Edit extra info items on race edit
+    [ ] - Add extra info fields to submit modal
+    [X] - Set default extra info fields for server and category
+[ ] - Check for error condition before modal create
+    [ ] - Add "ValidateInitParams" in zModal class to make this easier?
+[ ] - Leaderboard print
+[ ] - Check for race submissions before allowing edit of core race info
+[X] - Change state back to active bool
+[ ] - Show race stats
+[ ] - Show active races
+[ ] - Ephemeral show race info
+[ ] - Assign racers
+BR support
+[ ] - Category points? Way to assign point values to places for races in a Category
+[ ] - Category Leaderboard
+
+Co-op Support?

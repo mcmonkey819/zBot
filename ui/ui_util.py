@@ -12,7 +12,7 @@ from db.zBot_db_orm import *
 ########################################################################################################################
 # UTILITY TYPES
 ########################################################################################################################
-FieldList = dict[str, nextcord.ui.Item]
+FieldList = dict[str, nextcord.ui.TextInput]
 SelectList = list[nextcord.SelectOption]
 
 VarTypeInt      = 1
@@ -63,8 +63,9 @@ def get_extra_info_type_select_list(server_id, race =None):
     # Get the list of extra info types for this server
     types = AsyncRaceExtraInfoType.select().where(AsyncRaceExtraInfoType.server_id == server_id)
     default_list = []
-    for r in race.extra_info_assignments:
-        default_list.append(r.info_type_id.id)
+    if race is not None:
+        for r in race.extra_info_assignments:
+            default_list.append(r.info_type_id.id)
 
     # Populate the SelectOption list with the race information
     select_list = []
@@ -128,37 +129,11 @@ def get_role_select_list(server):
     return select_list
 
 #####################################################################################################################
-async def post_race_info_message(race, channel):
-    race_info_msg_text = f"Use the buttons below for race {race.id}"
-    race_info_msg_text += f"\n{race.description}"
-    if race.hash is not None and race.hash != "":
-        race_info_msg_text += f"\n    Hash: {race.hash}"
-    if race.additional_instructions is not None:
-        race_info_msg_text += f"\n{race.additional_instructions}"
-    race_info_msg_text +=  f"\n\n{race.seed}"
-
-    # Check the seed to see if it contains a link that we can embed
-    seed_parts = race.seed.split()
-    seed_url = None
-    for p in seed_parts:
-        if validators.url(p) == True:
-            seed_url = p
-            break
-    if seed_url is not None:
-        seed_embed = nextcord.Embed(title="{}".format(race.description), url=seed_url, color=nextcord.Colour.random())
-        # Add generic, creative commons licensed download thumbnail
-        seed_embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/1/1e/Download-Icon.png")
-        msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView(), embed=seed_embed)
-    else:
-        msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView())
-    return msg
-
-#####################################################################################################################
 def get_race(race_id):
     race = None
     if race_id is not None:
         try:
-            race = AsyncRace.select().where(AsyncRace.race_id == race_id).get()
+            race = AsyncRace.select().where(AsyncRace.id == race_id).get()
         except:
             logging.info(f"Could not find race ID {race_id}")
     return race
