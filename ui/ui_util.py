@@ -247,11 +247,11 @@ class zMultiPageModalSender():
             curr_row += 1
             self.field_idx += 1
         # Create and send the modal
-        modal = zModal(fieldDict, self.on_page_submit, self.title, None)
+        modal = zModal(fieldDict, self.on_page_submit, self.title)
         await interaction.response.send_modal(modal)
 
     ####################################################################################################################
-    async def on_page_submit(self, caller_data, interaction, modal):
+    async def on_page_submit(self, interaction, modal):
         # Pull out the submitted values
         for c in modal.children:
             index = self.get_field_index(c.custom_id)

@@ -12,67 +12,61 @@ from ui.ui_util import *
 ########################################################################################################################
 # BASE CLASSES
 ########################################################################################################################
-# This Modal (form) will display a form that has fields matching the provided item list.
-# On completion it will call the provided submit_handler function, passing caller_data
-# along with a pointer to itself and the interaction object.
+# This Modal (form) will display a form that has fields matching the provided item list. On completion it will call
+# the provided submit_handler function, passing a pointer to itself and the interaction object.
 class zModal(nextcord.ui.Modal):
-    def __init__(self, fields: FieldDict, submit_handler, title: str, caller_data = None):
+    def __init__(self, fields: FieldDict, submit_handler, title: str):
         super().__init__(title, timeout=None)
         self.fields = fields
         self.submit_handler = submit_handler
-        self.caller_data = caller_data
 
         for v in self.fields.values():
             self.add_item(v)
 
     async def callback(self, interaction: nextcord.Interaction) -> None:
-        await self.submit_handler(self.caller_data, interaction, self)
+        await self.submit_handler(interaction, self)
 
 #####################################################################################################################
-# This Select (drop down selection) will display a drop down with the string options provided.
-# This variant will only allow the user to select a single option from the list
-# On completion it will call the provided submit_handler function, passing caller_data
-# along with the value for the option chosen and the interaction object.
+# This Select (drop down selection) will display a drop down with the string options provided. This variant will
+# only allow the user to select a single option from the list. On completion it will call the provided
+# submit_handler function, passing the value for the option chosen and the interaction object.
 class zSingleSelect(nextcord.ui.Select):
-    def __init__(self, select_list: SelectList, submit_handler, placeholder, caller_data = None):
+    def __init__(self, select_list: SelectList, submit_handler, placeholder):
         super().__init__(min_values=1, max_values=1, options=select_list, placeholder=placeholder)
         self.submit_handler = submit_handler
-        self.caller_data = caller_data
 
     async def callback(self, interaction: nextcord.Interaction) -> None:
-        await self.submit_handler(self.caller_data, int(interaction.data['values'][0]), interaction)
+        await self.submit_handler(int(interaction.data['values'][0]), interaction)
 
 #####################################################################################################################
 # View which contains a zSingleSelect
 class zSingleSelectView(nextcord.ui.View):
-    def __init__(self, select_list: SelectList, submit_handler, placeholder = None, caller_data = None):
+    def __init__(self, select_list: SelectList, submit_handler, placeholder = None):
         super().__init__(timeout=None)
-        self.category_select = zSingleSelect(select_list, submit_handler, placeholder, caller_data)
+        self.category_select = zSingleSelect(select_list, submit_handler, placeholder)
         self.add_item(self.category_select)
 
 #####################################################################################################################
-# This Select (drop down selection) will display a drop down with the string options provided.
-# This variant will allow the user to select up to `max_values` from the list
-# On completion it will call the provided submit_handler function, passing caller_data
-# along with a list of the values chosen and the interaction object.
+# This Select (drop down selection) will display a drop down with the string options provided. This variant will
+# allow the user to select up to `max_values` from the list. On completion it will call the provided submit_handler
+# function, passing a list of the values chosen and the interaction object.
 class zMultiSelect(nextcord.ui.Select):
-    def __init__(self, select_list: SelectList, max_values: int, submit_handler, placeholder, caller_data = None):
+    def __init__(self, select_list: SelectList, max_values: int, submit_handler, placeholder):
         super().__init__(min_values=1, max_values=max_values, options=select_list, placeholder=placeholder)
         self.submit_handler = submit_handler
-        self.caller_data = caller_data
 
     async def callback(self, interaction: nextcord.Interaction) -> None:
         value_list = []
         for v in interaction.data['values']:
             value_list.append(int(v))
-        await self.submit_handler(self.caller_data, value_list, interaction)
+        await self.submit_handler(value_list, interaction)
 
 #####################################################################################################################
 # View which contains a zMultiSelect
 class zMultiSelectView(nextcord.ui.View):
-    def __init__(self, select_list: SelectList, max_values: int, submit_handler, placeholder = None, caller_data = None):
+    def __init__(self, select_list: SelectList, max_values: int, submit_handler, placeholder = None):
         super().__init__(timeout=None)
-        self.category_select = zMultiSelect(select_list, max_values, submit_handler, placeholder, caller_data)
+        self.category_select = zMultiSelect(select_list, max_values, submit_handler, placeholder)
         self.add_item(self.category_select)
 
 ########################################################################################################################
@@ -109,10 +103,10 @@ class zCategoryAddEditModal(zModal):
                                  default_value=category.description if category is not None else None),
         }
         # Call the base class init
-        super().__init__(fields, self.on_submit, title, None)
+        super().__init__(fields, self.on_submit, title)
 
     # Takes the data submitted by the user and saves it to the DB
-    async def on_submit(self, caller_data, interaction, modal):
+    async def on_submit(self, interaction, modal):
         if self.category is None:
             # Create a new category
             self.category = AsyncRaceCategory()
@@ -164,10 +158,10 @@ class zExtraInfoTypeAddEditModal(zModal):
                                  default_value=info_type.description if info_type is not None else None),
         }
         # Call the base class init
-        super().__init__(fields, self.on_submit, title, None)
+        super().__init__(fields, self.on_submit, title)
 
     # Takes the data submitted by the user and saves it to the DB
-    async def on_submit(self, caller_data, interaction, modal):
+    async def on_submit(self, interaction, modal):
         if self.info_type is None:
             # Create a new type
             self.info_type = AsyncRaceExtraInfoType()
@@ -183,10 +177,10 @@ class zExtraInfoTypeAddEditModal(zModal):
                     continue
 
         # Send a Select with options for the variable type
-        vartype_select_view = zSingleSelectView(VartypeSelectOptionList, self.on_vartype_select, "Choose Data Type...", self)
+        vartype_select_view = zSingleSelectView(VartypeSelectOptionList, self.on_vartype_select, "Choose Data Type...")
         await interaction.send(view=vartype_select_view, ephemeral=True)
 
-    async def on_vartype_select(self, caller_data, vartype, interaction):
+    async def on_vartype_select(self, vartype, interaction):
         self.info_type.var_type = vartype
         try:
             self.info_type.save()
@@ -247,10 +241,10 @@ class zRaceAddEditModal(zModal):
                 default_value=race.additional_instructions if race is not None else None),
         }
         # Call the base class init
-        super().__init__(fields, self.on_submit, title, None)
+        super().__init__(fields, self.on_submit, title)
 
     # Takes the data submitted by the user and saves it to the DB
-    async def on_submit(self, caller_data, interaction, modal):
+    async def on_submit(self, interaction, modal):
         # If we don't already have a DB entry create one now
         race_is_new = False
         if self.race is None:
@@ -360,10 +354,10 @@ class zRaceSubmissionModal(zModal):
 
         logging.info(f"Fields {fields}")
         # Call the base class init
-        super().__init__(fields, self.on_submit, title, None)
+        super().__init__(fields, self.on_submit, title)
 
     # Takes the data submitted by the user and saves it to the DB
-    async def on_submit(self, caller_data, interaction, modal):
+    async def on_submit(self, interaction, modal):
         # If we don't already have a DB entry create one now
         if self.submission is None:
             self.submission = AsyncRaceSubmission()
@@ -406,11 +400,11 @@ class zRaceSubmissionModal(zModal):
         self.modal_test_fields['igt'] = nextcord.ui.TextInput(label="Enter IGT in format `H:MM:SS`", required=True)
         self.modal_test_fields['comment'] = nextcord.ui.TextInput(label="Funny Comments", required=False)
 
-        modal = zModal(self.modal_test_fields, self.test_submit, "Test Modal", self)
+        modal = zModal(self.modal_test_fields, self.test_submit, "Test Modal")
         await interaction.response.send_modal(modal)
         ######### END TEST CODE###############
 
-    async def test_submit(self, caller_data, modal, interaction):
+    async def test_submit(self, modal, interaction):
         await interaction.send("Test success", ephemeral=True)
 
 ########################################################################################################################
@@ -461,10 +455,10 @@ class zCategoryModView(nextcord.ui.View):
             return
 
         # Create and send category Select view, calling the category select handler
-        self.cat_select = zSingleSelectView(select_list, self.on_category_select, "Select a Category", self)
+        self.cat_select = zSingleSelectView(select_list, self.on_category_select, "Select a Category")
         await interaction.send(view=self.cat_select, ephemeral=True)
 
-    async def on_category_select(self, caller_data, category_id, interaction):
+    async def on_category_select(self, category_id, interaction):
         # Create and send Edit Category modal
         await interaction.response.send_modal(zCategoryAddEditModal(category_id))
 
@@ -478,10 +472,12 @@ class zCategoryModView(nextcord.ui.View):
     @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='👉🏾 Assign Extra Info')
     async def assign_extra_info_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         # Prompt to select from list of extra info types
-        select_view = zSingleSelectView(get_extra_info_type_select_list(interaction.guild.id), self.on_info_type_select, "Select info type to assign...", self)
+        select_view = zSingleSelectView(get_extra_info_type_select_list(interaction.guild.id),
+                                        self.on_info_type_select,
+                                        "Select info type to assign...")
         await interaction.send(view=select_view, ephemeral=True)
 
-    async def on_info_type_select(self, caller_data, info_type_choice, interaction):
+    async def on_info_type_select(self, info_type_choice, interaction):
         self.info_type_choice = info_type_choice
         # Prompt for what to assign to: server or category
         self.server_choice_id = 1
@@ -490,10 +486,10 @@ class zCategoryModView(nextcord.ui.View):
             nextcord.SelectOption(label="Server", value=self.server_choice_id, description="Assign extra info to be set by default for this server"),
             nextcord.SelectOption(label="Category", value=self.cat_choice_id, description="Assign extra info to be set by default for a race category"),
             ]
-        select_view = zSingleSelectView(select_list, self.on_assign_type_select, "Select what to assign to...", self)
+        select_view = zSingleSelectView(select_list, self.on_assign_type_select, "Select what to assign to...")
         await interaction.send(view=select_view, ephemeral=True)
 
-    async def on_assign_type_select(self, caller_data, assign_choice, interaction):
+    async def on_assign_type_select(self, assign_choice, interaction):
         if assign_choice == self.server_choice_id:
             # Check to see if this assignment has already been made
             if check_server_assignment_exists(self.info_type_choice, interaction.guild.id):
@@ -507,10 +503,12 @@ class zCategoryModView(nextcord.ui.View):
             await interaction.send("Assignment saved", ephemeral=True)
         else:
             # Send a select to prompt for which category to assign to
-            cat_select_view = zSingleSelectView(get_category_select_list(interaction.guild.id), self.on_cat_assign_select, "Select Category...", self)
+            cat_select_view = zSingleSelectView(get_category_select_list(interaction.guild.id),
+                                                self.on_cat_assign_select,
+                                                "Select Category...")
             await interaction.send(view=cat_select_view, ephemeral=True)
 
-    async def on_cat_assign_select(self, caller_data, category_id, interaction):
+    async def on_cat_assign_select(self, category_id, interaction):
         category_id = category_id
         # Check to see if this assignment has already been made
         if check_category_assignment_exists(self.info_type_choice, category_id):
@@ -537,8 +535,7 @@ class zRaceModView(nextcord.ui.View):
         await interaction.send(view=zSingleSelectView(
             get_category_select_list(interaction.guild_id),
             self.send_race_modal,
-            "Select Race Category",
-            None), ephemeral=True)
+            "Select Race Category"), ephemeral=True)
 
     #################################################################################################################
     async def send_race_modal(self, race, category_id, interaction):
@@ -550,12 +547,11 @@ class zRaceModView(nextcord.ui.View):
         race_select_view = zSingleSelectView(
             get_race_select_list(interaction.guild_id),
             self.on_race_select,
-            "Choose Race to Edit...",
-            self)
+            "Choose Race to Edit...")
         await interaction.send(view=race_select_view, ephemeral=True)
 
     #################################################################################################################
-    async def on_race_select(self, caller_data, race_id, interaction):
+    async def on_race_select(self, race_id, interaction):
         try:
             self.race = AsyncRace.select().where(AsyncRace.id == race_id).get()
         except:
@@ -583,11 +579,11 @@ class zRaceModView(nextcord.ui.View):
             nextcord.SelectOption(label="Set Leaderboard Channel", value=self.set_leaderboard_channel_id, description="Set a channel to display the race leaderboard in"),
             nextcord.SelectOption(label="Set Submit Role",         value=self.set_submit_role_id, description="Choose a role to be assigned when a racer submits a time for this race"),
             ]
-        edit_select_view = zSingleSelectView(edit_select_list, self.on_edit_select, "Choose Edit Action...", self)
+        edit_select_view = zSingleSelectView(edit_select_list, self.on_edit_select, "Choose Edit Action...")
         await interaction.send(view=edit_select_view, ephemeral=True)
 
     #################################################################################################################
-    async def on_edit_select(self, caller_data, edit_choice, interaction):
+    async def on_edit_select(self, edit_choice, interaction):
         server = interaction.client.get_guild(interaction.guild_id)
         match edit_choice:
             case self.edit_info_id:
@@ -603,26 +599,36 @@ class zRaceModView(nextcord.ui.View):
                 logging.info("  Edit Race Extra Info Selected")
                 info_list = get_extra_info_type_select_list(interaction.guild.id, self.race)
                 if len(info_list) > 0:
-                    await interaction.send(view=zMultiSelectView(info_list, len(info_list), self.on_race_extra_info_select, "Choose Info(s)...", self), ephemeral=True)
+                    await interaction.send(view=zMultiSelectView(info_list,
+                                                                 len(info_list),
+                                                                 self.on_race_extra_info_select,
+                                                                 "Choose Info(s)..."), ephemeral=True)
                 else:
                     await interaction.send("No extra info types defined for this server")
             case self.pin_race_info_id:
                 logging.info("  Pin Race Info Selected")
                 channel_list = await get_permitted_channel_select_list(interaction.client.user.id, server)
-                await interaction.send(view=zSingleSelectView(channel_list, self.on_race_info_channel_select, "Choose Channel...", self), ephemeral=True)
+                await interaction.send(view=zSingleSelectView(channel_list,
+                                                              self.on_race_info_channel_select,
+                                                              "Choose Channel..."), ephemeral=True)
             case self.set_leaderboard_channel_id:
                 logging.info("  Set Leaderboard Channel Selected")
                 channel_list = await get_permitted_channel_select_list(interaction.client.user.id, server)
-                await interaction.send(view=zSingleSelectView(channel_list, self.on_leaderboard_channel_select, "Choose Channel...", self), ephemeral=True)
+                await interaction.send(view=zSingleSelectView(channel_list,
+                                                              self.on_leaderboard_channel_select,
+                                                              "Choose Channel..."),
+                                                              ephemeral=True)
             case self.set_submit_role_id:
                 logging.info("  Set Race Role Selected")
                 role_list = get_role_select_list(server)
-                await interaction.send(view=zSingleSelectView(role_list, self.on_race_role_select, "Choose Role...", self), ephemeral=True)
+                await interaction.send(view=zSingleSelectView(role_list,
+                                                              self.on_race_role_select,
+                                                              "Choose Role..."), ephemeral=True)
             case _:
                 logging.info("  Unknown Edit Choice")
 
     #################################################################################################################
-    async def on_race_extra_info_select(self, caller_data, info_id_list, interaction):
+    async def on_race_extra_info_select(self, info_id_list, interaction):
         # Loop through the list of assignments for this race
         for i in self.race.extra_info_assignments:
             # remove rows that aren't in the user selected list
@@ -642,7 +648,7 @@ class zRaceModView(nextcord.ui.View):
         await interaction.send(f"Saved extra info for race {self.race.id}", ephemeral=True)
 
     #################################################################################################################
-    async def on_race_info_channel_select(self, caller_data, channel_id, interaction):
+    async def on_race_info_channel_select(self, channel_id, interaction):
         # Get the channel
         server = interaction.client.get_guild(interaction.guild_id)
         channel = server.get_channel(channel_id)
@@ -668,7 +674,7 @@ class zRaceModView(nextcord.ui.View):
             logging.info(f"Could not find channel with id {channel_id}")
 
     #################################################################################################################
-    async def on_leaderboard_channel_select(self, caller_data, channel_id, interaction):
+    async def on_leaderboard_channel_select(self, channel_id, interaction):
         # Create new AsyncRaceMessage for the chosen channel
         new_db_msg = AsyncRaceMessage(server_id = interaction.guild_id, channel_id = channel_id)
         new_db_msg.save()
@@ -687,7 +693,7 @@ class zRaceModView(nextcord.ui.View):
         await interaction.send(f"Leaderboard channel set for race {self.race.id}", ephemeral=True)
 
     #################################################################################################################
-    async def on_race_role_select(self, caller_data, role_id, interaction):
+    async def on_race_role_select(self, role_id, interaction):
         self.race.submission_role = role_id
         self.race.save()
         await interaction.send("Race Role Saved", ephemeral=True)
