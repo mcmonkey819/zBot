@@ -2,16 +2,20 @@
 [X] - Race submission form
     [X] - Test form
     [X] - Validate time format
+[ ] - Multi-page modal
+[ ] - Convert custom modals to use base class
 [ ] - Extra Info on submission
     [X] - Modify Extra Info table, many-to-one style with fields: submission_id, info_type, value
     [X] - Add ExtraInfoType
     [X] - Assign extra info items based on server, category defaults
     [X] - Edit extra info items on race edit
     [ ] - Add extra info fields to submit modal
+        [ ] - Need to have multiple modals to handle >4 items
     [X] - Set default extra info fields for server and category
 [ ] - Check for error condition before modal create
     [ ] - Add "ValidateInitParams" in zModal class to make this easier?
 [ ] - Leaderboard print
+[ ] - Add divider at top of race info message
 [ ] - Check for race submissions before allowing edit of core race info
 [X] - Change state back to active bool
 [ ] - Show race stats

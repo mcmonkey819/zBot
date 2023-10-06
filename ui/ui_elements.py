@@ -16,7 +16,7 @@ from ui.ui_util import *
 # On completion it will call the provided submit_handler function, passing caller_data
 # along with a pointer to itself and the interaction object.
 class zModal(nextcord.ui.Modal):
-    def __init__(self, fields: FieldList, submit_handler, title: str, caller_data = None):
+    def __init__(self, fields: FieldDict, submit_handler, title: str, caller_data = None):
         super().__init__(title, timeout=None)
         self.fields = fields
         self.submit_handler = submit_handler
@@ -111,7 +111,6 @@ class zCategoryAddEditModal(zModal):
         # Call the base class init
         super().__init__(fields, self.on_submit, title, None)
 
-
     # Takes the data submitted by the user and saves it to the DB
     async def on_submit(self, caller_data, interaction, modal):
         if self.category is None:
@@ -166,7 +165,6 @@ class zExtraInfoTypeAddEditModal(zModal):
         }
         # Call the base class init
         super().__init__(fields, self.on_submit, title, None)
-
 
     # Takes the data submitted by the user and saves it to the DB
     async def on_submit(self, caller_data, interaction, modal):
@@ -288,13 +286,16 @@ class zRaceAddEditModal(zModal):
 
         if race_is_new:
             # Create default extra info assignments based on server and category
-            server_infos = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.server_id == self.server_id)
+            server_infos = AsyncRaceExtraInfoAssignment.select().where(
+                AsyncRaceExtraInfoAssignment.server_id == self.server_id or
+                AsyncRaceExtraInfoAssignment.server_id == AsyncRaceExtraInfoServerAny)
             for s in server_infos:
                 a = AsyncRaceExtraInfoAssignment()
                 a.info_type_id = s.info_type_id
                 a.race_id = self.race.id
                 a.save()
-            cat_infos = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.category_id == self.category_id)
+            cat_infos = AsyncRaceExtraInfoAssignment.select().where(
+                AsyncRaceExtraInfoAssignment.category_id == self.category_id)
             for c in cat_infos:
                 a = AsyncRaceExtraInfoAssignment()
                 a.info_type_id = c.info_type_id
@@ -312,13 +313,12 @@ class zRaceSubmissionModal(zModal):
 
         # Set the title
         if submission is None:
-            title = "Submit TIme"
+            title = "Submit Time"
         else:
             title = f"Edit Submission"
 
         self.finish_time_id = "finish_time"
         self.comment_id     = "comment"
-        self.vod_link_id    = "vod_link"
 
         # Create the modal fields
         fields = {
@@ -334,22 +334,22 @@ class zRaceSubmissionModal(zModal):
                 custom_id=self.comment_id,
                 row=2,
                 default_value=submission.comment if submission is not None else None),
-            self.vod_link_id: nextcord.ui.TextInput(
-                label="VoD Link",
-                required=False,
-                custom_id=self.vod_link_id,
-                row=3,
-                default_value=submission.vod_link if submission is not None else None),
         }
 
         # Add any extra info fields
-        curr_row = 4
+        self.extra_infos = []
         for a in self.race.extra_info_assignments:
+            self.extra_infos.append(a)
+
+        curr_row = 3
+        while curr_row < 5 and len(self.extra_infos) > 0:
+            a = self.extra_infos.pop(0)
             t = get_extra_info_type(a.info_type_id)
             logging.info(f"Adding submit field {t.name}")
             # Check if there's already stored info that can be loaded as the default
             ## TODO ##
             default_value = None
+
             fields[t.name] = nextcord.ui.TextInput(
                 label=t.name,
                 required=False,
@@ -384,9 +384,6 @@ class zRaceSubmissionModal(zModal):
                     if c.value is not None:
                         self.submission.comment = c.value
                     msg += "  Comment: "
-                case self.vod_link_id:
-                    self.submission.vod_link = c.value
-                    msg += "  VoD Link: "
                 case _:
                     continue
             msg += f"{c.value}\n"
@@ -394,7 +391,27 @@ class zRaceSubmissionModal(zModal):
 
         self.submission.save()
         logging.info(msg)
-        await interaction.send("Race Submission Saved", ephemeral=True)
+
+        if len(self.extra_infos) > 0:
+            # There is still extra info fields to capture, we'll need to send another modal
+            await self.send_extra_info_modal(interaction)
+        else:
+            await interaction.send("Race Submission Saved", ephemeral=True)
+
+    async def send_extra_info_modal(self, interaction):
+        ## TODO ##
+        # Construct and send extra info modal
+        ######## TEST CODE #################
+        self.modal_test_fields = {}
+        self.modal_test_fields['igt'] = nextcord.ui.TextInput(label="Enter IGT in format `H:MM:SS`", required=True)
+        self.modal_test_fields['comment'] = nextcord.ui.TextInput(label="Funny Comments", required=False)
+
+        modal = zModal(self.modal_test_fields, self.test_submit, "Test Modal", self)
+        await interaction.response.send_modal(modal)
+        ######### END TEST CODE###############
+
+    async def test_submit(self, caller_data, modal, interaction):
+        await interaction.send("Test success", ephemeral=True)
 
 ########################################################################################################################
 # BUTTON VIEWS

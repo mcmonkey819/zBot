@@ -99,12 +99,12 @@ class AsyncRaceSubmission(Model):
     submit_datetime         = DateField(null=True)
     finish_time             = CharField()
     comment                 = CharField()
-    vod_link                = CharField()
 
     class Meta:
         table_name = 'async_submissions'
         database = db
 
+AsyncRaceExtraInfoServerAny = 0
 class AsyncRaceExtraInfoType(Model):
     id                      = IntegerField(primary_key= True)
     # If server_id is None, info type can be used anywhere

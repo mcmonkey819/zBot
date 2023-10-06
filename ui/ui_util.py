@@ -12,7 +12,16 @@ from db.zBot_db_orm import *
 ########################################################################################################################
 # UTILITY TYPES
 ########################################################################################################################
-FieldList = dict[str, nextcord.ui.TextInput]
+class zField():
+    def __init__(self, name: str, label: str, default_value, required: bool):
+        self.name = name
+        self.label = label
+        self.default_value = default_value
+        self.required = required
+
+FieldList = list[zField]
+FieldDict = dict[str, nextcord.ui.TextInput]
+ModalDataList = dict[str, str]
 SelectList = list[nextcord.SelectOption]
 
 VarTypeInt      = 1
@@ -182,3 +191,85 @@ def check_category_assignment_exists(info_type_id, category_id):
     except:
         a = None
     return a is not None
+
+########################################################################################################################
+# View which contains buttons for continuing or cancelling
+class zContinueCancelButtonView(nextcord.ui.View):
+    def __init__(self, continue_func, cancel_func):
+        super().__init__(timeout=None)
+        self.continue_func = continue_func
+        self.cancel_func = cancel_func
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='❌ Cancel')
+    async def cancel_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await self.cancel_func(interaction)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='➡️️ Continue')
+    async def continue_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await self.continue_func(interaction)
+
+########################################################################################################################
+# This class is used to display a form that has fields matching the provided item list, using multiple
+# modal pages if needed. The final set of data values will be sent to the provided `submit_handler` function
+# as a ModalDataList using the same keys used in the original FieldList.
+class zMultiPageModalSender():
+    def __init__():
+        pass
+
+    ####################################################################################################################
+    async def send_modal(interaction, fields: FieldList, submit_handler, title: str):
+        self.fields = fields
+        self.submit_handler = submit_handler
+        self.title = title
+        self.field_idx = 0
+        await self.send_next_modal_page(interaction)
+
+    ####################################################################################################################
+    def get_field_index(self, field_name):
+        for (i, f) in enumerate(self.fields):
+            if f.name == field_name:
+                return i
+        return None
+
+    ####################################################################################################################
+    async def send_modal_page(self, interaction):
+        fieldDict = {}
+        curr_row = 1
+        # Fill in the field dictionary for the modal we're about to create and send
+        while curr_row < 5 and self.field_idx < len(self.fields):
+            f = self.fields[self.field_idx]
+            fieldDict[f.name] = nextcord.ui.TextInput(
+                label=f.label,
+                required=f.required,
+                custom_id=f.name,
+                default_value=f.default_value,
+                row=curr_row)
+            curr_row += 1
+            self.field_idx += 1
+        # Create and send the modal
+        modal = zModal(fieldDict, self.on_page_submit, self.title, None)
+        await interaction.response.send_modal(modal)
+
+    ####################################################################################################################
+    async def on_page_submit(self, caller_data, interaction, modal):
+        # Pull out the submitted values
+        for c in modal.children:
+            index = self.get_field_index(c.custom_id)
+            if index is not None:
+                 self.submit_values[index] = c.value
+            else:
+                logging.info(f"ERROR: Index not found for modal field {c.custom_id}\n  Fields: {self.fields}")
+
+        if self.field_idx < len(self.fields):
+            # If there are still fields to send, send a button message for the user to continue or cancel
+            await interaction.send("Additional information required",
+                                   view=zContinueCancelButtonView(self.send_modal_page, self.cancel_submit),
+                                   ephemeral=True)
+        else:
+            # Otherwise we're done, so call the originally provided submit handler
+            self.submit_handler(interaction, self.submit_values)
+
+    ####################################################################################################################
+    async def cancel_submit(interaction):
+        await interaction.send("Cancelled")
+        self.submit_handler(interaction, None)
