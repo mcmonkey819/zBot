@@ -7,70 +7,11 @@ import nextcord
 import re
 
 from db.zBot_db_orm import *
+from db.db_util import *
 from ui.ui_util import *
 
 ########################################################################################################################
-# BASE CLASSES
-########################################################################################################################
-# This Modal (form) will display a form that has fields matching the provided item list. On completion it will call
-# the provided submit_handler function, passing a pointer to itself and the interaction object.
-class zModal(nextcord.ui.Modal):
-    def __init__(self, fields: FieldDict, submit_handler, title: str):
-        super().__init__(title, timeout=None)
-        self.fields = fields
-        self.submit_handler = submit_handler
-
-        for v in self.fields.values():
-            self.add_item(v)
-
-    async def callback(self, interaction: nextcord.Interaction) -> None:
-        await self.submit_handler(interaction, self)
-
-#####################################################################################################################
-# This Select (drop down selection) will display a drop down with the string options provided. This variant will
-# only allow the user to select a single option from the list. On completion it will call the provided
-# submit_handler function, passing the value for the option chosen and the interaction object.
-class zSingleSelect(nextcord.ui.Select):
-    def __init__(self, select_list: SelectList, submit_handler, placeholder):
-        super().__init__(min_values=1, max_values=1, options=select_list, placeholder=placeholder)
-        self.submit_handler = submit_handler
-
-    async def callback(self, interaction: nextcord.Interaction) -> None:
-        await self.submit_handler(int(interaction.data['values'][0]), interaction)
-
-#####################################################################################################################
-# View which contains a zSingleSelect
-class zSingleSelectView(nextcord.ui.View):
-    def __init__(self, select_list: SelectList, submit_handler, placeholder = None):
-        super().__init__(timeout=None)
-        self.category_select = zSingleSelect(select_list, submit_handler, placeholder)
-        self.add_item(self.category_select)
-
-#####################################################################################################################
-# This Select (drop down selection) will display a drop down with the string options provided. This variant will
-# allow the user to select up to `max_values` from the list. On completion it will call the provided submit_handler
-# function, passing a list of the values chosen and the interaction object.
-class zMultiSelect(nextcord.ui.Select):
-    def __init__(self, select_list: SelectList, max_values: int, submit_handler, placeholder):
-        super().__init__(min_values=1, max_values=max_values, options=select_list, placeholder=placeholder)
-        self.submit_handler = submit_handler
-
-    async def callback(self, interaction: nextcord.Interaction) -> None:
-        value_list = []
-        for v in interaction.data['values']:
-            value_list.append(int(v))
-        await self.submit_handler(value_list, interaction)
-
-#####################################################################################################################
-# View which contains a zMultiSelect
-class zMultiSelectView(nextcord.ui.View):
-    def __init__(self, select_list: SelectList, max_values: int, submit_handler, placeholder = None):
-        super().__init__(timeout=None)
-        self.category_select = zMultiSelect(select_list, max_values, submit_handler, placeholder)
-        self.add_item(self.category_select)
-
-########################################################################################################################
-# MODALS
+# Category Moderation
 ########################################################################################################################
 # Modal which has fields required to create/edit a category
 class zCategoryAddEditModal(zModal):
@@ -125,6 +66,95 @@ class zCategoryAddEditModal(zModal):
             await interaction.send(f"Saved category {self.category.name}", ephemeral=True)
         except:
             await interaction.send(f"FAILED to save category {self.category.name}", ephemeral=True)
+
+########################################################################################################################
+# View which contains category moderation buttons
+class zCategoryModView(nextcord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    ####################################################################################################################
+    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='➕ Add Category')
+    async def add_category_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Create and send Add Category modal
+        await interaction.response.send_modal(zCategoryAddEditModal(None))
+
+    ####################################################################################################################
+    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='✏️ Edit Category')
+    async def edit_category_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Get the list of categories for this server
+        select_list = get_category_select_list(interaction.guild_id)
+
+        if len(select_list) == 0:
+            await interaction.send("No categories defined for this server", ephemeral=True)
+            return
+
+        # Create and send category Select view, calling the category select handler
+        self.cat_select = zSingleSelectView(select_list, self.on_category_select, "Select a Category")
+        await interaction.send(view=self.cat_select, ephemeral=True)
+
+    async def on_category_select(self, category_id, interaction):
+        # Create and send Edit Category modal
+        await interaction.response.send_modal(zCategoryAddEditModal(category_id))
+
+    ####################################################################################################################
+    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='➕ Add Submit Info Type')
+    async def add_submit_info_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Create and send Add Category modal
+        await interaction.response.send_modal(zExtraInfoTypeAddEditModal(None))
+
+    ####################################################################################################################
+    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='👉🏾 Assign Extra Info')
+    async def assign_extra_info_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Prompt to select from list of extra info types
+        select_view = zSingleSelectView(get_extra_info_type_select_list(interaction.guild.id),
+                                        self.on_info_type_select,
+                                        "Select info type to assign...")
+        await interaction.send(view=select_view, ephemeral=True)
+
+    async def on_info_type_select(self, info_type_choice, interaction):
+        self.info_type_choice = info_type_choice
+        # Prompt for what to assign to: server or category
+        self.server_choice_id = 1
+        self.cat_choice_id = 2
+        select_list = [
+            nextcord.SelectOption(label="Server", value=self.server_choice_id, description="Assign extra info to be set by default for this server"),
+            nextcord.SelectOption(label="Category", value=self.cat_choice_id, description="Assign extra info to be set by default for a race category"),
+            ]
+        select_view = zSingleSelectView(select_list, self.on_assign_type_select, "Select what to assign to...")
+        await interaction.send(view=select_view, ephemeral=True)
+
+    async def on_assign_type_select(self, assign_choice, interaction):
+        if assign_choice == self.server_choice_id:
+            # Check to see if this assignment has already been made
+            if check_server_assignment_exists(self.info_type_choice, interaction.guild.id):
+                await interaction.send("Assignment already exists", ephemeral=True)
+                return
+            # Then create a new DB assignment with the selected info
+            assignment = AsyncRaceExtraInfoAssignment()
+            assignment.info_type_id = self.info_type_choice
+            assignment.server_id = interaction.guild.id
+            assignment.save()
+            await interaction.send("Assignment saved", ephemeral=True)
+        else:
+            # Send a select to prompt for which category to assign to
+            cat_select_view = zSingleSelectView(get_category_select_list(interaction.guild.id),
+                                                self.on_cat_assign_select,
+                                                "Select Category...")
+            await interaction.send(view=cat_select_view, ephemeral=True)
+
+    async def on_cat_assign_select(self, category_id, interaction):
+        category_id = category_id
+        # Check to see if this assignment has already been made
+        if check_category_assignment_exists(self.info_type_choice, category_id):
+                await interaction.send("Assignment already exists", ephemeral=True)
+                return
+        # Then create a new DB assignment with the selected info
+        assignment = AsyncRaceExtraInfoAssignment()
+        assignment.info_type_id = self.info_type_choice
+        assignment.category_id = category_id
+        assignment.save()
+        await interaction.send("Assignment saved", ephemeral=True)
 
 ########################################################################################################################
 # Modal which has fields required to create/edit an extra info type
@@ -188,7 +218,9 @@ class zExtraInfoTypeAddEditModal(zModal):
         except:
             await interaction.send(f"FAILED to save info type {self.info_type.name}", ephemeral=True)
 
-#####################################################################################################################
+########################################################################################################################
+# Race Moderation
+########################################################################################################################
 # Modal which has fields required to create/edit a race.
 class zRaceAddEditModal(zModal):
     def __init__(self, server_id, category_id, race=None):
@@ -298,117 +330,6 @@ class zRaceAddEditModal(zModal):
 
         await interaction.send("Race Info Saved", ephemeral=True)
 
-#####################################################################################################################
-# Modal which has fields required to submit a race time
-class zRaceSubmissionModal(zModal):
-    def __init__(self, race_id, submission=None):
-        self.race = get_race(race_id)
-        self.submission = submission
-
-        # Set the title
-        if submission is None:
-            title = "Submit Time"
-        else:
-            title = f"Edit Submission"
-
-        self.finish_time_id = "finish_time"
-        self.comment_id     = "comment"
-
-        # Create the modal fields
-        fields = {
-            self.finish_time_id: nextcord.ui.TextInput(
-                label="Finish Time (H:MM:SS)",
-                required=True,
-                custom_id=self.finish_time_id,
-                row=1,
-                default_value=submission.finish_time if submission is not None else None),
-            self.comment_id: nextcord.ui.TextInput(
-                label="Comment",
-                required=False,
-                custom_id=self.comment_id,
-                row=2,
-                default_value=submission.comment if submission is not None else None),
-        }
-
-        # Add any extra info fields
-        self.extra_infos = []
-        for a in self.race.extra_info_assignments:
-            self.extra_infos.append(a)
-
-        curr_row = 3
-        while curr_row < 5 and len(self.extra_infos) > 0:
-            a = self.extra_infos.pop(0)
-            t = get_extra_info_type(a.info_type_id)
-            logging.info(f"Adding submit field {t.name}")
-            # Check if there's already stored info that can be loaded as the default
-            ## TODO ##
-            default_value = None
-
-            fields[t.name] = nextcord.ui.TextInput(
-                label=t.name,
-                required=False,
-                custom_id=t.name,
-                row=curr_row,
-                default_value=default_value)
-            curr_row = curr_row + 1
-
-        logging.info(f"Fields {fields}")
-        # Call the base class init
-        super().__init__(fields, self.on_submit, title)
-
-    # Takes the data submitted by the user and saves it to the DB
-    async def on_submit(self, interaction, modal):
-        # If we don't already have a DB entry create one now
-        if self.submission is None:
-            self.submission = AsyncRaceSubmission()
-            self.submission.race_id = self.race.id
-            self.submission.user_id = interaction.user.id
-            self.submission.submit_datetime = zBot_now()
-
-        msg = f"Saved Submission Info:\n"
-        for c in modal.children:
-            match c.custom_id:
-                case self.finish_time_id:
-                    #if game_time_is_valid(c.value) == False:
-                    #    await interaction.send("Invalid Time, please use 'H:MM:SS' format", ephemeral=True)
-                    #    return
-                    self.submission.finish_time = c.value
-                    msg += "  Finish Time: "
-                case self.comment_id:
-                    if c.value is not None:
-                        self.submission.comment = c.value
-                    msg += "  Comment: "
-                case _:
-                    continue
-            msg += f"{c.value}\n"
-        msg += f"  Race ID: {self.race.id}"
-
-        self.submission.save()
-        logging.info(msg)
-
-        if len(self.extra_infos) > 0:
-            # There is still extra info fields to capture, we'll need to send another modal
-            await self.send_extra_info_modal(interaction)
-        else:
-            await interaction.send("Race Submission Saved", ephemeral=True)
-
-    async def send_extra_info_modal(self, interaction):
-        ## TODO ##
-        # Construct and send extra info modal
-        ######## TEST CODE #################
-        self.modal_test_fields = {}
-        self.modal_test_fields['igt'] = nextcord.ui.TextInput(label="Enter IGT in format `H:MM:SS`", required=True)
-        self.modal_test_fields['comment'] = nextcord.ui.TextInput(label="Funny Comments", required=False)
-
-        modal = zModal(self.modal_test_fields, self.test_submit, "Test Modal")
-        await interaction.response.send_modal(modal)
-        ######### END TEST CODE###############
-
-    async def test_submit(self, modal, interaction):
-        await interaction.send("Test success", ephemeral=True)
-
-########################################################################################################################
-# BUTTON VIEWS
 ########################################################################################################################
 # View which contains race info buttons
 class zRaceInfoButtonView(nextcord.ui.View):
@@ -419,8 +340,9 @@ class zRaceInfoButtonView(nextcord.ui.View):
     @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='⏱️ Submit/Edit Time')
     async def submit_time_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         # Lookup if the user has a submission for this race already
-        submission = None
-        await interaction.response.send_modal(zRaceSubmissionModal(self.race_id, submission))
+        submission = get_race_submission(interaction.user.id, self.race_id)
+        submit_handler = zRaceSubmitHandler(self.race_id, submission)
+        await submit_handler.send_submit_modal(interaction)
 
     @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='🏳️ Forfeit Race')
     async def forfeit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
@@ -431,95 +353,6 @@ class zRaceInfoButtonView(nextcord.ui.View):
     async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         ## TODO ##
         await interaction.send("Leaderboard Coming Soon")
-
-########################################################################################################################
-# View which contains category moderation buttons
-class zCategoryModView(nextcord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    ####################################################################################################################
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='➕ Add Category')
-    async def add_category_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Create and send Add Category modal
-        await interaction.response.send_modal(zCategoryAddEditModal(None))
-
-    ####################################################################################################################
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='✏️ Edit Category')
-    async def edit_category_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Get the list of categories for this server
-        select_list = get_category_select_list(interaction.guild_id)
-
-        if len(select_list) == 0:
-            await interaction.send("No categories defined for this server", ephemeral=True)
-            return
-
-        # Create and send category Select view, calling the category select handler
-        self.cat_select = zSingleSelectView(select_list, self.on_category_select, "Select a Category")
-        await interaction.send(view=self.cat_select, ephemeral=True)
-
-    async def on_category_select(self, category_id, interaction):
-        # Create and send Edit Category modal
-        await interaction.response.send_modal(zCategoryAddEditModal(category_id))
-
-    ####################################################################################################################
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='➕ Add Submit Info Type')
-    async def add_submit_info_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Create and send Add Category modal
-        await interaction.response.send_modal(zExtraInfoTypeAddEditModal(None))
-
-    ####################################################################################################################
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='👉🏾 Assign Extra Info')
-    async def assign_extra_info_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Prompt to select from list of extra info types
-        select_view = zSingleSelectView(get_extra_info_type_select_list(interaction.guild.id),
-                                        self.on_info_type_select,
-                                        "Select info type to assign...")
-        await interaction.send(view=select_view, ephemeral=True)
-
-    async def on_info_type_select(self, info_type_choice, interaction):
-        self.info_type_choice = info_type_choice
-        # Prompt for what to assign to: server or category
-        self.server_choice_id = 1
-        self.cat_choice_id = 2
-        select_list = [
-            nextcord.SelectOption(label="Server", value=self.server_choice_id, description="Assign extra info to be set by default for this server"),
-            nextcord.SelectOption(label="Category", value=self.cat_choice_id, description="Assign extra info to be set by default for a race category"),
-            ]
-        select_view = zSingleSelectView(select_list, self.on_assign_type_select, "Select what to assign to...")
-        await interaction.send(view=select_view, ephemeral=True)
-
-    async def on_assign_type_select(self, assign_choice, interaction):
-        if assign_choice == self.server_choice_id:
-            # Check to see if this assignment has already been made
-            if check_server_assignment_exists(self.info_type_choice, interaction.guild.id):
-                await interaction.send("Assignment already exists", ephemeral=True)
-                return
-            # Then create a new DB assignment with the selected info
-            assignment = AsyncRaceExtraInfoAssignment()
-            assignment.info_type_id = self.info_type_choice
-            assignment.server_id = interaction.guild.id
-            assignment.save()
-            await interaction.send("Assignment saved", ephemeral=True)
-        else:
-            # Send a select to prompt for which category to assign to
-            cat_select_view = zSingleSelectView(get_category_select_list(interaction.guild.id),
-                                                self.on_cat_assign_select,
-                                                "Select Category...")
-            await interaction.send(view=cat_select_view, ephemeral=True)
-
-    async def on_cat_assign_select(self, category_id, interaction):
-        category_id = category_id
-        # Check to see if this assignment has already been made
-        if check_category_assignment_exists(self.info_type_choice, category_id):
-                await interaction.send("Assignment already exists", ephemeral=True)
-                return
-        # Then create a new DB assignment with the selected info
-        assignment = AsyncRaceExtraInfoAssignment()
-        assignment.info_type_id = self.info_type_choice
-        assignment.category_id = category_id
-        assignment.save()
-        await interaction.send("Assignment saved", ephemeral=True)
 
 ########################################################################################################################
 # Race Mod buttons: Edit Race Info, Edit Category/Role/Leaderboard Channel, Change Race State, Pin Race Info
@@ -547,7 +380,7 @@ class zRaceModView(nextcord.ui.View):
         race_select_view = zSingleSelectView(
             get_race_select_list(interaction.guild_id),
             self.on_race_select,
-            "Choose Race to Edit...")
+            "Choose Race to Manage...")
         await interaction.send(view=race_select_view, ephemeral=True)
 
     #################################################################################################################
@@ -579,7 +412,7 @@ class zRaceModView(nextcord.ui.View):
             nextcord.SelectOption(label="Set Leaderboard Channel", value=self.set_leaderboard_channel_id, description="Set a channel to display the race leaderboard in"),
             nextcord.SelectOption(label="Set Submit Role",         value=self.set_submit_role_id, description="Choose a role to be assigned when a racer submits a time for this race"),
             ]
-        edit_select_view = zSingleSelectView(edit_select_list, self.on_edit_select, "Choose Edit Action...")
+        edit_select_view = zSingleSelectView(edit_select_list, self.on_edit_select, "Choose Action...")
         await interaction.send(view=edit_select_view, ephemeral=True)
 
     #################################################################################################################
@@ -723,3 +556,96 @@ async def post_race_info_message(race, channel):
     else:
         msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView(race.id))
     return msg
+
+########################################################################################################################
+# Racer Actions
+#####################################################################################################################
+# Handles a user race submission action
+class zRaceSubmitHandler():
+    def __init__(self, race_id, submission=None):
+        self.race = get_race(race_id)
+        self.submission = submission
+
+        # Set the title
+        if submission is None:
+            title = "Submit Time"
+        else:
+            title = f"Edit Submission"
+
+        self.finish_time_id = "finish_time"
+        self.comment_id     = "comment"
+
+        # Create the modal fields
+        self.fields = [
+            zField(custom_id=self.finish_time_id,
+                   label="Enter IGT in format `H:MM:SS`",
+                   default_value=submission.finish_time if submission is not None else None,
+                   required=True),
+            zField(custom_id=self.comment_id,
+                   label="Comment",
+                   default_value=submission.comment if submission is not None else None,
+                   required=False),
+        ]
+
+        # Add any extra info fields
+        for a in self.race.extra_info_assignments:
+            t = get_extra_info_type(a.info_type_id)
+            info = get_extra_info(self.submission, a.info_type_id)
+            self.fields.append(zField(
+                custom_id=str(a.info_type_id),
+                label=t.name,
+                default_value=info.data if info is not None else None,
+                placeholder=t.description,
+                required=a.required))
+
+    ####################################################################################################################
+    # Displays the multi-page modal used to capture submission info
+    async def send_submit_modal(self, interaction):
+        modal_sender = zMultiPageModalSender()
+        await modal_sender.send_modal(interaction,
+                                      self.fields,
+                                      self.on_submit,
+                                      "Race Submission")
+
+    ####################################################################################################################
+    # Takes the data submitted by the user and saves it to the DB
+    async def on_submit(self, interaction, submitted_values):
+        # If we don't already have a DB entry create one now
+        if self.submission is None:
+            self.submission = AsyncRaceSubmission()
+            self.submission.race_id = self.race.id
+            self.submission.user_id = interaction.user.id
+            self.submission.submit_datetime = zBot_now()
+
+        msg = f"Submission Info:\n"
+        for i, v in enumerate(submitted_values):
+            msg += f"\n  {self.fields[i].custom_id}: {v}"
+            match self.fields[i].custom_id:
+                case self.finish_time_id:
+                    self.submission.finish_time = v
+                    self.submission.save()
+                case self.comment_id:
+                    self.submission.comment = v
+                case _:
+                    self.save_extra_info(self.fields[i], v)
+        msg += f"  Race ID: {self.race.id}"
+
+        self.submission.save()
+        logging.info(msg)
+        await interaction.send("Race Submission Saved", ephemeral=True)
+
+    ####################################################################################################################
+    # Saves an individual extra info value
+    def save_extra_info(self, field: zField, value):
+        # We store the info_type_id in the custom ID of the zField
+        info = get_extra_info(self.submission, field.custom_id)
+        # We need to create a new DB entry
+        if info is None:
+            info = AsyncRaceExtraInfo()
+            info.submission_id = self.submission.id
+            info.info_type_id = int(field.custom_id)
+        # == TODO ==
+        # Validate the value passed in based on the info type
+        # == TODO ==
+        info.data = value
+        info.save()

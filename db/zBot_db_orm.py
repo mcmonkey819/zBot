@@ -30,6 +30,16 @@ def game_time_is_valid(self, time_str):
                valid_time_str = True
         return valid_time_str
 
+class AsyncRaceMessage(Model):
+    id                      = IntegerField(primary_key= True)
+    server_id               = IntegerField()
+    channel_id              = IntegerField()
+    message_id              = IntegerField(null=True)
+
+    class Meta:
+        table_name = 'async_race_messages'
+        database = db
+
 class AsyncRaceServer(Model):
     id                      = IntegerField(primary_key=True)
     name                    = CharField()
@@ -40,16 +50,6 @@ class AsyncRaceServer(Model):
 
     class Meta:
         table_name = 'async_race_servers'
-        database = db
-
-class AsyncRaceMessage(Model):
-    id                      = IntegerField(primary_key= True)
-    server_id               = ForeignKeyField(AsyncRaceServer, backref='messages')
-    channel_id              = IntegerField()
-    message_id              = IntegerField(null=True)
-
-    class Meta:
-        table_name = 'async_race_messages'
         database = db
 
 class AsyncRaceCategory(Model):
@@ -98,7 +98,7 @@ class AsyncRaceSubmission(Model):
     user_id                 = IntegerField()
     submit_datetime         = DateField(null=True)
     finish_time             = CharField()
-    comment                 = CharField()
+    comment                 = CharField(null=True)
 
     class Meta:
         table_name = 'async_submissions'
@@ -121,7 +121,7 @@ class AsyncRaceExtraInfo(Model):
     id                      = IntegerField(primary_key= True)
     submission_id           = ForeignKeyField(AsyncRaceSubmission, backref='extra_info')
     info_type_id            = ForeignKeyField(AsyncRaceExtraInfoType, backref='extra_info')
-    info                    = CharField()
+    data                    = CharField()
 
     class Meta:
         table_name = 'async_race_extra_info'
@@ -133,6 +133,7 @@ class AsyncRaceExtraInfoAssignment(Model):
     server_id               = IntegerField(null=True)
     category_id             = ForeignKeyField(AsyncRaceCategory, backref='extra_info_assignments', null=True)
     race_id                 = ForeignKeyField(AsyncRace, backref='extra_info_assignments', null=True)
+    required                = BooleanField(default=False)
 
     class Meta:
         table_name = 'async_race_extra_info_assignments'

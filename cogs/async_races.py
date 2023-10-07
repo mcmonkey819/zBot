@@ -37,6 +37,116 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     async def get_category_choices(self, server_id):
         categories = AsyncRaceCategory.select().where(AsyncRaceCategory == server_id)
 
+    ####################################################################################################################
+    async def send_category_mod_message(self, channel):
+        return await channel.send("Click below to add or edit a race category", view=zCategoryModView())
+
+    ####################################################################################################################
+    async def send_race_mod_message(self, channel):
+        return await channel.send("Click below to add or edit a races", view=zRaceModView())
+
+    #####################################################################################################################
+    async def get_nextcord_server(self, server_id):
+        return await self.bot.fetch_guild(server_id)
+
+    ####################################################################################################################
+    # Called on shut down, deletes the messages posted by the bot for race and category moderation
+    async def cleanup_server_bot_messages(self, guild):
+        server = get_server(guild.id)
+        if server is not None:
+            # Clean up the category mod message
+            if server.category_mod_message is not None:
+                await delete_message(guild, server.category_mod_message, True)
+
+            # And the race mod message
+            if server.race_mod_message is not None:
+                await delete_message(guild, server.race_mod_message, True)
+
+            # And finally any pinned races
+            try:
+                race_list = AsyncRace.select().where(AsyncRace.server_id == server.id)
+            except:
+                race_list = []
+            for r in race_list:
+                if r.race_info_message is not None and r.race_info_message != 0:
+                    await delete_message(guild, r.race_info_message, True)
+
+    ####################################################################################################################
+    async def recreate_mod_message(self, guild, db_msg_id, is_category_mod):
+        err = False
+        if db_msg_id is not None:
+            db_msg = get_race_message(db_msg_id)
+            if db_msg is not None:
+                channel = guild.get_channel(db_msg.channel_id)
+                if channel is not None:
+                    if await has_text_channel_permission(self.bot.user.id, guild, channel):
+                        if is_category_mod:
+                            new_msg = await self.send_category_mod_message(channel)
+                        else:
+                            new_msg = await self.send_race_mod_message(channel)
+                        db_msg.message_id = new_msg.id
+                        db_msg.save()
+                else:
+                    # We can't find the channel or no longer have permissions, so we can't create a new message. Instead
+                    # remove the DB entry
+                    logging.info(f"Can't recreate mod message in server ID {guild.id} channel ID {db_msg.channel_id}")
+                    db_msg.delete_instance()
+                    err = True
+            else:
+                err = True
+
+        if err:
+            if is_category_mod:
+                server.category_mod_message = None
+            else:
+                server.race_mod_message = None
+            server.save()
+
+    ####################################################################################################################
+    async def recreate_race_info_message(self, guild, race):
+        err = False
+        if race is not None and race.race_info_message is not None:
+            db_msg = get_race_message(race.race_info_message)
+            if db_msg is not None:
+                channel = guild.get_channel(db_msg.channel_id)
+                if channel is not None:
+                    if await has_text_channel_permission(self.bot.user.id, guild, channel):
+                        new_msg = await post_race_info_message(race, channel)
+                        db_msg.message_id = new_msg.id
+                        db_msg.save()
+                else:
+                    # We can't find the channel or no longer have permissions, so we can't create a new message. Instead
+                    # remove the DB entry
+                    logging.info(f"Can't recreate race info message in server ID {guild.id} channel ID {db_msg.channel_id}")
+                    db_msg.delete_instance()
+                    err = True
+            else:
+                err = True
+
+            if err:
+                race.race_info_message = None
+                race.save()
+
+    ####################################################################################################################
+    # Called on start up, recreates the messages posted by the bot for race and category moderation
+    async def recreate_server_bot_messages(self, guild):
+        server = get_server(guild.id)
+        if server is not None:
+            # Try to recreate the category mod message
+            await self.recreate_mod_message(guild, server.category_mod_message, True)
+
+            # And then the race mod message
+            await self.recreate_mod_message(guild, server.race_mod_message, False)
+
+            # And finally any pinned races
+            try:
+                race_list = AsyncRace.select().where(AsyncRace.server_id == guild.id)
+            except:
+                race_list = []
+            for race in race_list:
+                if race.race_info_message is not None and race.race_info_message != 0:
+                    await self.recreate_race_info_message(guild, race)
+
 ########################################################################################################################
 # ASYNC_MOD
 ########################################################################################################################
@@ -101,15 +211,25 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     #        await interaction.send(f"FAILED to edit category {name}", ephemeral=True)
 
 ########################################################################################################################
-# STARTUP and SHUTDOWN
+# EVENTS
 ########################################################################################################################
     @commands.Cog.listener("on_ready")
     async def on_ready_handler(self):
-        logging.info("AsyncRaces cog Ready")
         if self.test_mode:
             logging.info("  Running in test mode")
-            self.execution_count = 0
+        logging.info("AsyncRaces cog Ready")
 
+    ####################################################################################################################
+    @commands.Cog.listener("on_guild_available")
+    async def on_guild_available_handler(self, guild):
+        await self.recreate_server_bot_messages(guild)
+
+    ####################################################################################################################
+    @commands.Cog.listener("on_guild_unavailable")
+    async def on_guild_unavailable_handler(self, guild):
+        await self.cleanup_server_bot_messages(guild)
+
+    ####################################################################################################################
     async def close(self):
         logging.info("Shutting down AsyncRaces cog")
 
@@ -158,7 +278,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             return
 
         # Construct message w/ button view
-        new_mod_message = await channel.send("Click below to add or edit a race category", view=zCategoryModView())
+        new_mod_message = await self.send_category_mod_message(channel)
 
         # Save message ID
         try:
@@ -214,7 +334,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             return
 
         # Construct message w/ button view
-        new_mod_message = await channel.send("Click below to add or edit a races", view=zRaceModView())
+        new_mod_message = await self.send_race_mod_message(channel)
 
         # Save message ID
         try:
@@ -235,6 +355,31 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         # Now remove the old message, if it exists
         await delete_message(server, old_mod_message_id)
+
+    ####################################################################################################################
+    @async_admin.subcommand(description="Cleans up bot created messages: race info, category and race moderation")
+    async def cleanup_bot_messages(self,
+        interaction,
+        cleanup_all : bool = nextcord.SlashOption(
+            description="Whether to cleanup all servers or just the one this command is run from",
+            required=False,
+            default=False)):
+
+        self.log_command(interaction.user, "CLEANUP_BOT_MESSAGES")
+
+        if cleanup_all:
+            # Only the bot owner is allowed to purge all
+            if interaction.user.id == CoolestGuy:
+                server_list = AsyncRaceServer.select()
+                for s in server_list:
+                    guild = await self.get_nextcord_server(s.id)
+                    if guild is not None:
+                        await self.cleanup_server_bot_messages(guild)
+            else:
+                await interaction.send("Only the bot owner is allowed to cleanup all servers", ephemeral=True)
+        else:
+            await self.cleanup_server_bot_messages(interaction.guild)
+            await interaction.send("Done!", ephemeral=True)
 
 ########################################################################################################################
 # ASYNC_RACE
@@ -261,12 +406,38 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     #    self.modal_test_fields['igt'] = nextcord.ui.TextInput(label="Enter IGT in format `H:MM:SS`", required=True)
     #    self.modal_test_fields['comment'] = nextcord.ui.TextInput(label="Funny Comments", required=False)
 
-    #    modal = zModal(self.modal_test_fields, self.modal_submit_func, "Test Modal", self)
+    #    modal = zModal(self.modal_test_fields, self.modal_submit_func, "Test Modal")
     #    await interaction.response.send_modal(modal)
 
-    #async def modal_submit_func(self, caller_data, modal, interaction):
+    #async def modal_submit_func(self, modal, interaction):
     #    comment = "" if modal.fields['comment'].value is None else f" with comment {modal.fields['comment'].value}"
     #    msg = f"{interaction.user} submitted time {modal.fields['igt'].value}{comment}"
+    #    await interaction.send(msg, ephemeral=True)
+
+    #@async_race.subcommand(description="Multi-Page Modal Test Function")
+    #async def multi_page_modal_test(self, interaction):
+    #    self.multi_page_modal_test_fields = [
+    #        zField('igt',         "Enter IGT in format `H:MM:SS`", None,   True),
+    #        zField('comment',     "Funny Comments",                "KEKW", False),
+    #        zField('vod_link',    "VoD",                           None,   False),
+    #        zField('death_count', "# of Deaths",                   69,     False),
+    #        zField('bonks',       "# of Bonks",                    216,    True),
+    #        zField('route',       "Route Description",             None,   False),
+    #    ]
+
+    #    modal_sender = zMultiPageModalSender()
+    #    await modal_sender.send_modal(interaction,
+    #                                  self.multi_page_modal_test_fields,
+    #                                  self.multi_page_modal_test_fields_submit_func,
+    #                                  "Multi-Page Test Modal")
+
+    #async def multi_page_modal_test_fields_submit_func(self, interaction, submitted_values):
+    #    if submitted_values is None:
+    #        msg = "User Cancelled"
+    #    else:
+    #        msg = "Submitted Values: \n"
+    #        for i, v in enumerate(submitted_values):
+    #            msg += f"\n  {self.multi_page_modal_test_fields[i].name}: {v}"
     #    await interaction.send(msg, ephemeral=True)
 
     ########################################################################################################################
@@ -284,8 +455,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     #        await interaction.send(view=zSingleSelectView(
     #            get_category_select_list(interaction.guild_id),
     #            self.send_race_modal,
-    #            "Select Race Category",
-    #            None), ephemeral=True)
+    #            "Select Race Category"), ephemeral=True)
     #    else:
     #        # Otherwise we can just send the modal
     #        await self.send_race_modal(race, race.category_id, interaction)
@@ -305,8 +475,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             await interaction.send(view=zSingleSelectView(
                 get_race_select_list(interaction.guild_id),
                 self.send_submit_modal,
-                "Select Race",
-                None), ephemeral=True)
+                "Select Race"), ephemeral=True)
         else:
             # Otherwise we can just send the modal
             await self.send_submit_modal(submission, submission.race_id, interaction)
@@ -328,15 +497,15 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 #        options.append(nextcord.SelectOption(label="Test 3", description="Third Test Value", value=3))
 #
 #        if num_selections > 1:
-#            await interaction.send(view=zMultiSelectView(options, num_selections, self.multi_select_submit_func, self), ephemeral=True)
+#            await interaction.send(view=zMultiSelectView(options, num_selections, self.multi_select_submit_func), ephemeral=True)
 #        else:
-#            await interaction.send(view=zSingleSelectView(options, self.select_submit_func, self), ephemeral=True)
+#            await interaction.send(view=zSingleSelectView(options, self.select_submit_func), ephemeral=True)
 #
-#    async def select_submit_func(self, caller_data, selected_value, interaction):
+#    async def select_submit_func(self, selected_value, interaction):
 #        msg = f"{interaction.user} selected value {selected_value}"
 #        await interaction.send(msg, ephemeral=True)
 #
-#    async def multi_select_submit_func(self, caller_data, selected_values, interaction):
+#    async def multi_select_submit_func(self, selected_values, interaction):
 #        msg = f"{interaction.user} selected values: "
 #        for v in selected_values:
 #            msg += f"{v} "
