@@ -346,8 +346,12 @@ class zRaceInfoButtonView(nextcord.ui.View):
 
     @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='🏳️ Forfeit Race')
     async def forfeit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        ## TODO ##
-        await interaction.send("Forfeit Coming Soon")
+        # Check if the user has already submitted a time for this race
+        if get_race_submission(interaction.user.id, self.race_id) is not None:
+            await interaction.send("Time already submitted for this race, use `Submit/Edit` button to edit", ephemeral=True)
+            return
+        else:
+            forfeit_race(interaction.user.id, self.race_id)
 
     @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='🥇 Leaderboard')
     async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
@@ -533,13 +537,18 @@ class zRaceModView(nextcord.ui.View):
 
 #####################################################################################################################
 async def post_race_info_message(race, channel):
-    race_info_msg_text = f"Use the buttons below for race {race.id}"
-    race_info_msg_text += f"\n{race.description}"
-    if race.hash is not None and race.hash != "":
-        race_info_msg_text += f"\n    Hash: {race.hash}"
+    race_info_msg_text = "> \n"
+    race_info_msg_text += f"> Use the buttons below for Race ID {race.id}\n"
+    race_info_msg_text += f"> Created On: {race.create_datetime}\n"
+    race_info_msg_text += "> \n"
+    race_info_msg_text += f"> {race.description}\n"
     if race.additional_instructions is not None:
-        race_info_msg_text += f"\n{race.additional_instructions}"
-    race_info_msg_text +=  f"\n\n{race.seed}"
+        race_info_msg_text += f"> {race.additional_instructions}\n"
+    race_info_msg_text += "> \n"
+    race_info_msg_text +=  f">        {race.seed}\n"
+    race_info_msg_text += "> \n"
+    if race.hash is not None and race.hash != "":
+        race_info_msg_text += f"> Hash: **{race.hash}**\n"
 
     # Check the seed to see if it contains a link that we can embed
     seed_parts = race.seed.split()

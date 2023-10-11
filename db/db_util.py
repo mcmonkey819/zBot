@@ -23,6 +23,8 @@ VartypeSelectOptionList = [
     nextcord.SelectOption(label="Date/Time", value=VarTypeDateTime, description="Date & Time string, typically something like 'YYYY-MM-DD HH:MM:SS'"),
 ]
 
+ForfeitFinishTime = "23:59:59"
+
 ########################################################################################################################
 # DB Getters
 #####################################################################################################################

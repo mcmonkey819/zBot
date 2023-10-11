@@ -80,6 +80,48 @@ def get_role_select_list(server):
         select_list.append(nextcord.SelectOption(label=r.name, value=r.id, description=r.name))
     return select_list
 
+#####################################################################################################################
+def forfeit_race(user_id, race_id):
+    race = get_race(race_id)
+    if race is not None:
+        # Create a new race submission and save the core info
+        submission = AsyncRaceSubmission()
+        submission.race_id = race_id
+        submission.user_id = user_id
+        submission.submit_datetime = zBot_now()
+        submission.finish_time = ForfeitFinishTime
+        submission.save()
+
+#####################################################################################################################
+async def display_ephemeral_leaderboard(interaction, race_id):
+    # Get the race submissions for this race, sorted by finish_time
+    race_submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id)
+
+    # Get extra info types assigned to this race
+    extra_info_assignments = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.race_id == race_id)
+
+    # Create the labels row
+    #leaderboard_lists = [["Place"], ["Name"], ["Finish Time"]]
+
+    # Add the extra info labels
+    #if extra_info_assignments is not None:
+    #    for a in extra_info_assignments:
+    #        t = get_extra_info_type(a.info_type_id)
+    #        leaderboard_lists.append([t.name])
+
+    # Put the comment last
+    #leaderboard_lists.append(["Comment"])
+
+    # Add any extra info types to the table
+    #if race_submissions is not None:
+    #    for i, s in enumerate(race_submissions):
+    #        idx = i+1
+    #        leaderboard_lists[]
+
+    # Create a list of lists using the submissions
+    # Tablulate the list of lists
+    # Send the message
+
 ########################################################################################################################
 # BASE CLASSES
 ########################################################################################################################
@@ -225,3 +267,4 @@ class zMultiPageModalSender():
     ####################################################################################################################
     async def cancel_submit(self, interaction):
         await self.submit_handler(interaction, None)
+

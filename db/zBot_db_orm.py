@@ -112,6 +112,7 @@ class AsyncRaceExtraInfoType(Model):
     name                    = CharField()
     description             = CharField()
     var_type                = IntegerField()
+    default_value           = CharField()
 
     class Meta:
         table_name = 'async_race_extra_info_types'

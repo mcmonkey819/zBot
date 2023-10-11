@@ -39,11 +39,11 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
     ####################################################################################################################
     async def send_category_mod_message(self, channel):
-        return await channel.send("Click below to add or edit a race category", view=zCategoryModView())
+        return await channel.send("> \n> Click below to add or edit a race category", view=zCategoryModView())
 
     ####################################################################################################################
     async def send_race_mod_message(self, channel):
-        return await channel.send("Click below to add or edit a races", view=zRaceModView())
+        return await channel.send("> \n> Click below to add or edit a races", view=zRaceModView())
 
     #####################################################################################################################
     async def get_nextcord_server(self, server_id):
