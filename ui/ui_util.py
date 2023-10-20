@@ -28,7 +28,7 @@ SelectList = list[nextcord.SelectOption]
 ########################################################################################################################
 # UTILITY FUNCTIONS
 ########################################################################################################################
-# Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes message and optionally deletes or 
+# Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes message and optionally deletes or
 # zeroes the DB entry
 async def delete_message(server, async_race_msg_id, zero_db = False):
     async_race_msg = None
@@ -93,6 +93,39 @@ def forfeit_race(user_id, race_id):
         submission.save()
 
 #####################################################################################################################
+# Given a numeric place, returns the ordinal string. e.g. 1 returns "1st", 2 "2nd" etc
+def get_place_str(self, place):
+    place_str = ""
+    if place == 0:
+        # This is an error and should never be reached, if it is might as well have some fun with it
+        place_str = "Worst"
+    else:
+        place_str += str(place)
+        tens = 0
+        while (tens + 10) < place:
+            tens += 10
+        ones_digit = place - tens
+        if ones_digit == 1:
+            if tens == 10:
+                place_str += "th"
+            else:
+                place_str += "st"
+        elif ones_digit == 2:
+            if tens == 10:
+                place_str += "th"
+            else:
+                place_str += "nd"
+        elif ones_digit == 3:
+            if tens == 10:
+                place_str += "th"
+            else:
+                place_str += "rd"
+        else:
+            place_str += "th"
+
+    return place_str
+
+#####################################################################################################################
 async def display_ephemeral_leaderboard(interaction, race_id):
     # Get the race submissions for this race, sorted by finish_time
     race_submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id)
@@ -100,27 +133,43 @@ async def display_ephemeral_leaderboard(interaction, race_id):
     # Get extra info types assigned to this race
     extra_info_assignments = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.race_id == race_id)
 
+    table_data = ""
+    places = []
     # Create the labels row
-    #leaderboard_lists = [["Place"], ["Name"], ["Finish Time"]]
+    column_labels = ["Name", "Finish Time"]
 
     # Add the extra info labels
-    #if extra_info_assignments is not None:
-    #    for a in extra_info_assignments:
-    #        t = get_extra_info_type(a.info_type_id)
-    #        leaderboard_lists.append([t.name])
+    if extra_info_assignments is not None:
+        for a in extra_info_assignments:
+            t = get_extra_info_type(a.info_type_id)
+            if t is not None:
+                column_labels.append(t.name)
+    else:
+        extra_info_assignments = []
 
     # Put the comment last
-    #leaderboard_lists.append(["Comment"])
+    column_labels.append("Comment")
 
-    # Add any extra info types to the table
-    #if race_submissions is not None:
-    #    for i, s in enumerate(race_submissions):
-    #        idx = i+1
-    #        leaderboard_lists[]
+    if race_submissions is not None:
+        for i, s in enumerate(race_submissions):
+            places.append(get_place_str(i+1))
+            # Get the username
+            user = interaction.client.get_user(s.user_id)
+            username = "" if user is None else user.display_name
+            table_row = [username, s.finish_time]
+            for a in extra_info_assignments:
+                # Lookup the extra infos for this submission and add them to the table
+                info = get_extra_info(s, a.info_type_id)
+                if info is not None:
+                    table_row.append(info.data)
+            table_row.append(s.comment)
+            table_data.append(table_row)
 
-    # Create a list of lists using the submissions
-    # Tablulate the list of lists
+    # Tablulate the submission data
+    msgText = tabulate(table_data, headers="firstrow", showindex=places, tablefmt="rounded_grid")
+
     # Send the message
+    await interaction.send(msgText, ephemeral=True)
 
 ########################################################################################################################
 # BASE CLASSES
