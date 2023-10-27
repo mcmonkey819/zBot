@@ -73,8 +73,8 @@ def get_extra_info(submission, info_type_id):
     if submission is not None:
         try:
             info = AsyncRaceExtraInfo.select().where(
-                AsyncRaceExtraInfo.submission_id == submission.id and
-                AsyncRaceExtraInfo.info_type_id == info_type_id).get()
+                (AsyncRaceExtraInfo.submission_id == submission.id) &
+                (AsyncRaceExtraInfo.info_type_id == info_type_id)).get()
         except:
             info = None
     return info
@@ -83,8 +83,8 @@ def get_extra_info(submission, info_type_id):
 def get_race_submission(user_id, race_id):
     try:
         submission = AsyncRaceSubmission.select().where(
-            AsyncRaceSubmission.user_id == user_id and
-            AsyncRaceSubmission.race_id == race_id).get()
+            (AsyncRaceSubmission.user_id == user_id) &
+            (AsyncRaceSubmission.race_id == race_id)).get()
     except:
         submission = None
     return submission
@@ -99,6 +99,16 @@ def get_race_message(message_id):
     return msg
 
 ########################################################################################################################
+def get_race_assignment(user_id, race_id):
+    try:
+        a = AsyncRaceRoster().select().where(
+                (AsyncRaceRoster.user_id == user_id) &
+                (AsyncRaceRoster.race_id == race_id)).get()
+    except:
+        a = None
+    return a
+
+########################################################################################################################
 # Other Utility Functions
 #####################################################################################################################
 # Returns the current date/time in the format used in the database
@@ -109,8 +119,8 @@ def zBot_now():
 def check_server_assignment_exists(info_type_id, server_id):
     try:
         a = AsyncRaceExtraInfoAssignment.select().where(
-            AsyncRaceExtraInfoAssignment.info_type_id == info_type_id and
-            AsyncRaceExtraInfoAssignment.server_id == server_id).get()
+            (AsyncRaceExtraInfoAssignment.info_type_id == info_type_id) &
+            (AsyncRaceExtraInfoAssignment.server_id == server_id)).get()
     except:
         a = None
     return a is not None
@@ -119,8 +129,8 @@ def check_server_assignment_exists(info_type_id, server_id):
 def check_category_assignment_exists(info_type_id, category_id):
     try:
         a = AsyncRaceExtraInfoAssignment.select().where(
-                AsyncRaceExtraInfoAssignment.info_type_id == info_type_id and
-                AsyncRaceExtraInfoAssignment.category_id == category_id).get()
+                (AsyncRaceExtraInfoAssignment.info_type_id == info_type_id) &
+                (AsyncRaceExtraInfoAssignment.category_id == category_id)).get()
     except:
         a = None
     return a is not None
@@ -161,3 +171,22 @@ def get_extra_info_type_select_list(server_id, race =None):
     for t in types:
         select_list.append(nextcord.SelectOption(label=f"{t.name}", value=t.id, description=t.description, default=t.id in default_list))
     return select_list
+
+########################################################################################################################
+def race_has_submissions(race_id):
+    submissions = AsyncRaceSubmission.select().where(
+        AsyncRaceSubmission.race_id == race_id)
+
+    if submissions is None or len(submissions) == 0:
+        return False
+    else:
+        return True
+
+########################################################################################################################
+def assign_racer(user_id, race_id):
+    # We only want to create a new row if one doesn't already exist
+    if get_race_assignment(user_id, race_id) is None:
+        assignment = AsyncRaceRoster()
+        assignment.user_id = user_id
+        assignment.race_id = race_id
+        assignment.save()

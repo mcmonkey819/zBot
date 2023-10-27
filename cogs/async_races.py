@@ -178,9 +178,9 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     #    cat.server_id = interaction.guild_id
     #    try:
     #        cat.save()
-    #        await interaction.send(f"Added category {name} with id {cat.id}", ephemeral=True)
+    #        await send_message(interaction, f"Added category {name} with id {cat.id}")
     #    except:
-    #        await interaction.send(f"FAILED to add category {name}", ephemeral=True)
+    #        await send_message(interaction, f"FAILED to add category {name}")
 #
     #####################################################################################################################
     #@async_mod.subcommand(description="Edits an existing race category")
@@ -206,9 +206,9 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     #
     #    try:
     #        cat.save()
-    #        await interaction.send(f"Successfully edited category id {cat.id}", ephemeral=True)
+    #        await send_message(interaction, f"Successfully edited category id {cat.id}")
     #    except:
-    #        await interaction.send(f"FAILED to edit category {name}", ephemeral=True)
+    #        await send_message(interaction, f"FAILED to edit category {name}")
 
 ########################################################################################################################
 # EVENTS
@@ -261,20 +261,20 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         self.log_command(interaction.user, "CREATE_CATEGORY_MOD_BUTTONS")
         db_server = self.get_server(interaction)
         if db_server is None:
-            await interaction.send("Server not found", ephemeral=True)
+            await send_message(interaction, "Server not found")
             return
 
         # Just save the message ID for now, we'll delete and update the DB after we're sure the new message worked
         old_mod_message_id = db_server.category_mod_message
         if old_mod_message_id is not None and replace == False:
-            await interaction.send("Category mod message already exists, set `replace` to True to replace", ephemeral=True)
+            await send_message(interaction, "Category mod message already exists, set `replace` to True to replace")
             return
 
         # Check if the bot has permission in the chosen channel
-        server = interaction.client.get_guild(interaction.guild_id)
+        server = get_server_from_interaction(interaction)
         has_permission = await has_text_channel_permission(self.bot.user.id, server, channel)
         if has_permission == False:
-            await interaction.send(f"Failed: Bot does not have permission for channel {channel.name}", ephemeral=True)
+            await send_message(interaction, f"Failed: Bot does not have permission for channel {channel.name}")
             return
 
         # Construct message w/ button view
@@ -287,9 +287,9 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 channel_id=channel.id, 
                 message_id=new_mod_message.id)
             new_db_message.save()
-            await interaction.send("Successfully created category mod buttons", ephemeral=True)
+            await send_message(interaction, "Successfully created category mod buttons")
         except:
-            await interaction.send("Failed to create category mod buttons", ephemeral=True)
+            await send_message(interaction, "Failed to create category mod buttons")
             # Since we failed to save the message info, we'll delete the message to prevent orphaning it
             await new_mod_message.delete()
             old_mod_message_id = None
@@ -317,20 +317,20 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         db_server = self.get_server(interaction)
         if db_server is None:
-            await interaction.send("Server not found", ephemeral=True)
+            await send_message(interaction, "Server not found")
             return
 
         # Just save the message ID for now, we'll delete and update the DB after we're sure the new message worked
         old_mod_message_id = db_server.race_mod_message
         if old_mod_message_id is not None and replace == False:
-            await interaction.send("Race mod message already exists, set `replace` to True to replace", ephemeral=True)
+            await send_message(interaction, "Race mod message already exists, set `replace` to True to replace")
             return
 
         # Check if the bot has permission in the chosen channel
-        server = interaction.client.get_guild(interaction.guild_id)
+        server = get_server_from_interaction(interaction)
         has_permission = await has_text_channel_permission(self.bot.user.id, server, channel)
         if has_permission == False:
-            await interaction.send(f"Failed: Bot does not have permission for channel {channel.name}", ephemeral=True)
+            await send_message(interaction, f"Failed: Bot does not have permission for channel {channel.name}")
             return
 
         # Construct message w/ button view
@@ -343,9 +343,9 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 channel_id=channel.id, 
                 message_id=new_mod_message.id)
             new_db_message.save()
-            await interaction.send("Successfully created race mod buttons", ephemeral=True)
+            await send_message(interaction, "Successfully created race mod buttons")
         except:
-            await interaction.send("Failed to create race mod buttons", ephemeral=True)
+            await send_message(interaction, "Failed to create race mod buttons")
             # Since we failed to save the message info, we'll delete the message to prevent orphaning it
             await new_mod_message.delete()
             old_mod_message_id = None
@@ -376,10 +376,10 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                     if guild is not None:
                         await self.cleanup_server_bot_messages(guild)
             else:
-                await interaction.send("Only the bot owner is allowed to cleanup all servers", ephemeral=True)
+                await send_message(interaction, "Only the bot owner is allowed to cleanup all servers")
         else:
             await self.cleanup_server_bot_messages(interaction.guild)
-            await interaction.send("Done!", ephemeral=True)
+            await send_message(interaction, "Done!")
 
 ########################################################################################################################
 # ASYNC_RACE
@@ -395,7 +395,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 #    @async_race.subcommand(description="Test command, simply echos the text provided with the command")
 #    async def echo_test(self, interaction, message):
 #        self.log_command(interaction.user, "echo_test")
-#        await interaction.send(message, ephemeral=True)
+#        await send_message(interaction, message)
 
 ########################################################################################################################
 ## MODAL_TESTS
@@ -412,7 +412,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     #async def modal_submit_func(self, modal, interaction):
     #    comment = "" if modal.fields['comment'].value is None else f" with comment {modal.fields['comment'].value}"
     #    msg = f"{interaction.user} submitted time {modal.fields['igt'].value}{comment}"
-    #    await interaction.send(msg, ephemeral=True)
+    #    await send_message(interaction, msg)
 
     #@async_race.subcommand(description="Multi-Page Modal Test Function")
     #async def multi_page_modal_test(self, interaction):
@@ -438,7 +438,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     #        msg = "Submitted Values: \n"
     #        for i, v in enumerate(submitted_values):
     #            msg += f"\n  {self.multi_page_modal_test_fields[i].name}: {v}"
-    #    await interaction.send(msg, ephemeral=True)
+    #    await send_message(interaction, msg)
 
     ########################################################################################################################
     #@async_race.subcommand(description="Race Modal Test Function")
@@ -452,10 +452,10 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 #
     #    # If no race id is provided we will prompt for a category first
     #    if race is None:
-    #        await interaction.send(view=zSingleSelectView(
+    #        await send_message(interaction, view=zSingleSelectView(
     #            get_category_select_list(interaction.guild_id),
     #            self.send_race_modal,
-    #            "Select Race Category"), ephemeral=True)
+    #            "Select Race Category"))
     #    else:
     #        # Otherwise we can just send the modal
     #        await self.send_race_modal(race, race.category_id, interaction)
@@ -472,10 +472,10 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         # If no race id is provided we will prompt for a race first
         if submission is None:
-            await interaction.send(view=zSingleSelectView(
-                get_race_select_list(interaction.guild_id),
-                self.send_submit_modal,
-                "Select Race"), ephemeral=True)
+            await interaction.send(
+                view=zSingleSelectView(get_race_select_list(interaction.guild_id),
+                                       self.send_submit_modal,
+                                       "Select Race"), ephemeral=True)
         else:
             # Otherwise we can just send the modal
             await self.send_submit_modal(submission, submission.race_id, interaction)
@@ -497,19 +497,31 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 #        options.append(nextcord.SelectOption(label="Test 3", description="Third Test Value", value=3))
 #
 #        if num_selections > 1:
-#            await interaction.send(view=zMultiSelectView(options, num_selections, self.multi_select_submit_func), ephemeral=True)
+#            await interaction.send(view=zMultiSelectView(options, num_selections, self.multi_select_submit_func))
 #        else:
-#            await interaction.send(view=zSingleSelectView(options, self.select_submit_func), ephemeral=True)
+#            await interaction.send(view=zSingleSelectView(options, self.select_submit_func))
 #
 #    async def select_submit_func(self, selected_value, interaction):
 #        msg = f"{interaction.user} selected value {selected_value}"
-#        await interaction.send(msg, ephemeral=True)
+#        await send_message(interaction, msg)
 #
 #    async def multi_select_submit_func(self, selected_values, interaction):
 #        msg = f"{interaction.user} selected values: "
 #        for v in selected_values:
 #            msg += f"{v} "
-#        await interaction.send(msg, ephemeral=True)
+#        await send_message(interaction, msg)
+
+#    @async_race.subcommand(description="User Select Test Function")
+#    async def user_select_test(self, 
+#                               interaction):
+#        await interaction.send(view=zUserSelectView(self.user_select_submit_func, placeholder="Pick a name, any name..."), ephemeral=True)
+#
+#    async def user_select_submit_func(self, selected_value, interaction):
+#        if selected_value is not None and len(selected_values) > 0:
+#            msg = f"{interaction.user} selected member {selected_value.name} also known as {selected_value.nick}"
+#        else:
+#            msg = "No user selected"
+#        await send_message(interaction, msg)
 
 def setup(bot):
     bot.add_cog(AsyncRaces(bot))

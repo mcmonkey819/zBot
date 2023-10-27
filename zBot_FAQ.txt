@@ -1,0 +1,13 @@
+=====================================================================
+FAQ
+=====================================================================
+
+Race Moderation
+=====================================================================
+Q - Why can't I see the Edit Race Info or Edit Extra Info options for Manage Race?
+A - If there are already submissions to a race then these options are unavailable. In this case a new race should be created with the correct information. Remember to notify the racers who have already submitted so they can resubmit their time (if it's still applicable)
+
+Q - Why is there no option to assign racers for Manage Race?
+A - It is likely that the race is marked as active. Only inactive races with no submissions can be assigned.
+
+

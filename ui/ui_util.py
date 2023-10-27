@@ -5,9 +5,13 @@ import logging
 import math
 import nextcord
 import re
+from tabulate import tabulate
 import validators
 
 from db.zBot_db_orm import *
+from db.db_util import *
+
+tabulate.PRESERVE_WHITESPACE = True
 
 ########################################################################################################################
 # UTILITY TYPES
@@ -31,12 +35,7 @@ SelectList = list[nextcord.SelectOption]
 # Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes message and optionally deletes or
 # zeroes the DB entry
 async def delete_message(server, async_race_msg_id, zero_db = False):
-    async_race_msg = None
-    if async_race_msg_id is not None:
-        try:
-            async_race_msg = AsyncRaceMessage.select().where(AsyncRaceMessage.id == async_race_msg_id).get()
-        except:
-            logging.info(f"Failed to find AsyncRaceMessage with ID {async_race_msg_id}")
+    async_race_msg = get_race_message(async_race_msg_id)
 
     if async_race_msg is not None:
         if async_race_msg.message_id is not None:
@@ -81,6 +80,10 @@ def get_role_select_list(server):
     return select_list
 
 #####################################################################################################################
+def get_server_from_interaction(interaction):
+    return interaction.client.get_guild(interaction.guild_id)
+
+#####################################################################################################################
 def forfeit_race(user_id, race_id):
     race = get_race(race_id)
     if race is not None:
@@ -94,7 +97,7 @@ def forfeit_race(user_id, race_id):
 
 #####################################################################################################################
 # Given a numeric place, returns the ordinal string. e.g. 1 returns "1st", 2 "2nd" etc
-def get_place_str(self, place):
+def get_place_str(place):
     place_str = ""
     if place == 0:
         # This is an error and should never be reached, if it is might as well have some fun with it
@@ -133,7 +136,7 @@ async def display_ephemeral_leaderboard(interaction, race_id):
     # Get extra info types assigned to this race
     extra_info_assignments = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.race_id == race_id)
 
-    table_data = ""
+    table_data = []
     places = []
     # Create the labels row
     column_labels = ["Name", "Finish Time"]
@@ -149,6 +152,7 @@ async def display_ephemeral_leaderboard(interaction, race_id):
 
     # Put the comment last
     column_labels.append("Comment")
+    table_data.append(column_labels)
 
     if race_submissions is not None:
         for i, s in enumerate(race_submissions):
@@ -166,10 +170,136 @@ async def display_ephemeral_leaderboard(interaction, race_id):
             table_data.append(table_row)
 
     # Tablulate the submission data
-    msgText = tabulate(table_data, headers="firstrow", showindex=places, tablefmt="rounded_grid")
+    tableText = tabulate(table_data, headers="firstrow", showindex=places, tablefmt="double_grid")
 
     # Send the message
-    await interaction.send(msgText, ephemeral=True)
+    await send_message(interaction, tableText, ephemeral=True, codeblock=True)
+
+####################################################################################################################
+# This function breaks a response into multiple messages that meet the Discord API character limit
+def buildResponseMessageList(message):
+    DiscordApiCharLimit = 2000 - 10
+    message_list = []
+    # If we're under the character limit, just send the message
+    if len(message) <= DiscordApiCharLimit:
+        message_list.append(message)
+    else:
+        # Otherwise we'll build a list of lines, then build messages from that list
+        # until we hit the message limit.
+        line_list = message.split("\n")
+        if line_list is not None:
+            curr_message = ""
+            curr_message_len = 0
+
+            for line in line_list:
+                # If adding this line would put us over the limit, add the current message to the list and start over
+                if curr_message_len + len(line) > DiscordApiCharLimit:
+                    if curr_message == "":
+                        logging.error("ERROR in buildResponseMessageList")
+                        continue
+                    message_list.append(curr_message)
+                    curr_message = ""
+                    curr_message_len = 0
+
+                # If this single line is > 2000 characters, break it into sentences.
+                if len(line) > DiscordApiCharLimit:
+                    sentences = re.split('[.?!;]', line)
+                    for s in sentences:
+                        if curr_message_len + len(s) > charLimit:
+                            if curr_message == "":
+                                logging.error("ERROR in buildResponseMessageList")
+                                continue
+                            message_list.append(curr_message)
+                            curr_message = ""
+                            curr_message_len = 0
+                        curr_message += s
+                        curr_message_len += len(s)
+                else:
+                    curr_message += line + "\n"
+                    curr_message_len += len(line) + 1
+            if curr_message != "":
+                message_list.append(curr_message)
+    return message_list
+
+#####################################################################################################################
+async def post_race_info_message(race, channel):
+    race_info_msg_text = "> \n"
+    race_info_msg_text += f"> Use the buttons below for Race ID {race.id}\n"
+    race_info_msg_text += f"> Created On: {race.create_datetime}\n"
+    race_info_msg_text += "> \n"
+    race_info_msg_text += f"> {race.description}\n"
+    if race.additional_instructions is not None:
+        race_info_msg_text += f"> {race.additional_instructions}\n"
+    race_info_msg_text += "> \n"
+    race_info_msg_text +=  f">        {race.seed}\n"
+    race_info_msg_text += "> \n"
+    if race.hash is not None and race.hash != "":
+        race_info_msg_text += f"> Hash: **{race.hash}**\n"
+
+    # Check the seed to see if it contains a link that we can embed
+    seed_parts = race.seed.split()
+    seed_url = None
+    for p in seed_parts:
+        if validators.url(p) == True:
+            seed_url = p
+            break
+    if seed_url is not None:
+        seed_embed = nextcord.Embed(title="{}".format(race.description), url=seed_url, color=nextcord.Colour.random())
+        # Add generic, creative commons licensed download thumbnail
+        seed_embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/1/1e/Download-Icon.png")
+        msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
+    else:
+        msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView(race.id))
+    return msg
+
+#####################################################################################################################
+async def send_message(interaction, msg, ephemeral=True, codeblock=False):
+    msgList = buildResponseMessageList(msg)
+
+    for m in msgList:
+        if codeblock:
+            m = f"```\n{m}\n```"
+
+        await interaction.send(m, ephemeral=ephemeral)
+
+#################################################################################################################
+async def unpin_race(race_id, interaction):
+    # Get the pin message from the DB
+    race = get_race(race_id)
+    if race is not None:
+        await delete_message(get_server_from_interaction(interaction), race.race_info_message)
+        db_msg = get_race_message(race.race_info_message)
+        if db_msg is not None:
+            db_msg.delete_instance()
+        race.race_info_message_id = None
+        race.save()
+    await send_message(interaction, f"Unpinned race ID {race_id}")
+
+#################################################################################################################
+async def pin_race_info(channel_id, race, interaction):
+    # Get the channel
+    server = get_server_from_interaction(interaction)
+    channel = server.get_channel(channel_id)
+
+    if channel is not None:
+        msg = await post_race_info_message(race, channel)
+
+        # Create a new AsyncRaceMessage with the race info message info
+        new_db_msg = AsyncRaceMessage()
+        new_db_msg.server_id = interaction.guild_id
+        new_db_msg.channel_id = channel_id
+        new_db_msg.message_id = msg.id
+        new_db_msg.save()
+
+        # Update the race with the new race info message id
+        old_db_msg_id = race.race_info_message
+        race.race_info_message = new_db_msg.id
+        race.save()
+
+        # Finally delete the old message if it exists
+        await delete_message(server, old_db_msg_id)
+    else:
+        logging.info(f"Could not find channel with id {channel_id}")
 
 ########################################################################################################################
 # BASE CLASSES
@@ -248,6 +378,41 @@ class zContinueCancelButtonView(nextcord.ui.View):
         await self.continue_func(interaction)
 
 ########################################################################################################################
+# View which contains buttons for continuing or cancelling
+class zYesNoButtonView(nextcord.ui.View):
+    def __init__(self, yes_func, no_func):
+        super().__init__(timeout=None)
+        self.yes_func = yes_func
+        self.no_func = no_func
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='👎🏾 No')
+    async def no_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await self.no_func(interaction)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='👍🏾 Yes')
+    async def yes_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await self.yes_func(interaction)
+
+#####################################################################################################################
+# This Select (drop down selection) will display a drop down with the string options provided. This variant will
+# allow selecting a User from a list of users
+class zUserSelect(nextcord.ui.UserSelect):
+    def __init__(self, submit_handler, placeholder):
+        super().__init__(min_values=1, max_values=1, placeholder=placeholder)
+        self.submit_handler = submit_handler
+
+    async def callback(self, interaction: nextcord.Interaction) -> None:
+        await self.submit_handler(self.values[0], interaction)
+
+#####################################################################################################################
+# View which contains a zUserSelect
+class zUserSelectView(nextcord.ui.View):
+    def __init__(self, submit_handler, placeholder = None):
+        super().__init__(timeout=None)
+        self.user_select = zUserSelect(submit_handler, placeholder)
+        self.add_item(self.user_select)
+
+########################################################################################################################
 # This class is used to display a form that has fields matching the provided item list, using multiple
 # modal pages if needed. The final set of data values will be sent to the provided `submit_handler` function
 # as a ModalDataList using the same keys used in the original FieldList.
@@ -317,3 +482,29 @@ class zMultiPageModalSender():
     async def cancel_submit(self, interaction):
         await self.submit_handler(interaction, None)
 
+########################################################################################################################
+# View which contains race info buttons
+class zRaceInfoButtonView(nextcord.ui.View):
+    def __init__(self, race_id):
+        super().__init__(timeout=None)
+        self.race_id = race_id
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='⏱️ Submit/Edit Time')
+    async def submit_time_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Lookup if the user has a submission for this race already
+        submission = get_race_submission(interaction.user.id, self.race_id)
+        submit_handler = zRaceSubmitHandler(self.race_id, submission)
+        await submit_handler.send_submit_modal(interaction)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='🏳️ Forfeit Race')
+    async def forfeit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Check if the user has already submitted a time for this race
+        if get_race_submission(interaction.user.id, self.race_id) is not None:
+            await send_message(interaction, "Time already submitted for this race, use `Submit/Edit` button to edit")
+            return
+        else:
+            forfeit_race(interaction.user.id, self.race_id)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='🥇 Leaderboard')
+    async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await display_ephemeral_leaderboard(interaction, self.race_id)
