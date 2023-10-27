@@ -5,10 +5,6 @@ General Stuff
 
 Race Moderation
 -------------------------------------------------------
-[X] - Check for race submissions before allowing edit of core race info
-[X] - Assign racers
-[X] - Unpin
-[X] - Query about unpin when pinning a race in the same channel
 
 Racer Actions
 -------------------------------------------------------
@@ -29,6 +25,10 @@ Questionable Stuff
 
 Done
 -------------------------------------------------------
+[X] - Check for race submissions before allowing edit of core race info
+[X] - Assign racers
+[X] - Unpin
+[X] - Query about unpin when pinning a race in the same channel
 [X] - Race submission DB tables
 [X] - Race submission form
     [X] - Test form
