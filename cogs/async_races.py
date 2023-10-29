@@ -45,6 +45,10 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     async def send_race_mod_message(self, channel):
         return await channel.send("> \n> Click below to add or edit a races", view=zRaceModView())
 
+    ####################################################################################################################
+    async def send_racer_info_message(self, channel):
+        return await channel.send("> \n> Click below to see available races or check your stats", view=zRacerButtonView())
+
     #####################################################################################################################
     async def get_nextcord_server(self, server_id):
         return await self.bot.fetch_guild(server_id)
@@ -62,6 +66,10 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             if server.race_mod_message is not None:
                 await delete_message(guild, server.race_mod_message, True)
 
+            # And the racer info message
+            if server.racer_info_message is not None:
+                await delete_message(guild, server.racer_info_message, True)
+
             # And finally any pinned races
             try:
                 race_list = AsyncRace.select().where(AsyncRace.server_id == server.id)
@@ -72,7 +80,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                     await delete_message(guild, r.race_info_message, True)
 
     ####################################################################################################################
-    async def recreate_mod_message(self, guild, db_msg_id, is_category_mod):
+    async def recreate_button_view(self, guild, db_msg_id, message_type: MessageType):
         err = False
         if db_msg_id is not None:
             db_msg = get_race_message(db_msg_id)
@@ -80,10 +88,16 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 channel = guild.get_channel(db_msg.channel_id)
                 if channel is not None:
                     if await has_text_channel_permission(self.bot.user.id, guild, channel):
-                        if is_category_mod:
-                            new_msg = await self.send_category_mod_message(channel)
-                        else:
-                            new_msg = await self.send_race_mod_message(channel)
+                        match message_type:
+                            case MessageType.CATEGORY_MOD:
+                                new_msg = await self.send_category_mod_message(channel)
+                            case MessageType.RACE_MOD:
+                                new_msg = await self.send_race_mod_message(channel)
+                            case MessageType.RACER_INFO:
+                                new_msg = await self.send_racer_info_message(channel)
+                            case _:
+                                logging.info(f"Error: unrecognized MessageType: {message_type}")
+                                err = True
                         db_msg.message_id = new_msg.id
                         db_msg.save()
                 else:
@@ -96,10 +110,13 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 err = True
 
         if err:
-            if is_category_mod:
-                server.category_mod_message = None
-            else:
-                server.race_mod_message = None
+            match message_type:
+                case MessageType.CATEGORY_MOD:
+                    server.category_mod_message = None
+                case MessageType.RACE_MOD:
+                    server.race_mod_message = None
+                case MessageType.RACER_INFO:
+                    server.racer_info_message = None
             server.save()
 
     ####################################################################################################################
@@ -133,10 +150,13 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         server = get_server(guild.id)
         if server is not None:
             # Try to recreate the category mod message
-            await self.recreate_mod_message(guild, server.category_mod_message, True)
+            await self.recreate_button_view(guild, server.category_mod_message, MessageType.CATEGORY_MOD)
 
             # And then the race mod message
-            await self.recreate_mod_message(guild, server.race_mod_message, False)
+            await self.recreate_button_view(guild, server.race_mod_message, MessageType.RACE_MOD)
+
+            # And the racer info message
+            await self.recreate_button_view(guild, server.racer_info_message, MessageType.RACER_INFO)
 
             # And finally any pinned races
             try:
@@ -355,6 +375,62 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         # Now remove the old message, if it exists
         await delete_message(server, old_mod_message_id)
+
+    ####################################################################################################################
+    @async_admin.subcommand(description="Creates and pins a message with buttons for the racer info functions")
+    async def create_racer_info_buttons(
+        self,
+        interaction,
+        channel: nextcord.TextChannel = nextcord.SlashOption(
+            description="Channel to post the button view in",
+            required=True),
+        replace : bool = nextcord.SlashOption(
+            description="If a message already exists, whether it should be replaced",
+            required=False,
+            default=False)):
+
+        self.log_command(interaction.user, "CREATE_RACER_INFO_BUTTONS")
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await send_message(interaction, "Server not found")
+            return
+
+        # Just save the message ID for now, we'll delete and update the DB after we're sure the new message worked
+        old_message_id = db_server.racer_info_message
+        if old_message_id is not None and replace == False:
+            await send_message(interaction, "Racer info message already exists, set `replace` to True to replace")
+            return
+
+        # Check if the bot has permission in the chosen channel
+        server = get_server_from_interaction(interaction)
+        has_permission = await has_text_channel_permission(self.bot.user.id, server, channel)
+        if has_permission == False:
+            await send_message(interaction, f"Failed: Bot does not have permission for channel {channel.name}")
+            return
+
+        # Construct message w/ button view
+        new_message = await self.send_racer_info_message(channel)
+
+        # Save message ID
+        try:
+            new_db_message = AsyncRaceMessage(
+                server_id=interaction.guild_id, 
+                channel_id=channel.id, 
+                message_id=new_message.id)
+            new_db_message.save()
+            await send_message(interaction, "Successfully created racer info buttons")
+        except:
+            await send_message(interaction, "Failed to create racer info buttons")
+            # Since we failed to save the message info, we'll delete the message to prevent orphaning it
+            await new_message.delete()
+            old_message_id = None
+
+        db_server.racer_info_message = new_db_message.id
+        db_server.save()
+
+        # Now remove the old message, if it exists
+        await delete_message(server, old_message_id)
 
     ####################################################################################################################
     @async_admin.subcommand(description="Cleans up bot created messages: race info, category and race moderation")

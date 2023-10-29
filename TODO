@@ -5,11 +5,16 @@ General Stuff
 
 Race Moderation
 -------------------------------------------------------
+[ ] - Option to ping on new race for category
+[ ] - If ping on create, create role allow racers to add role for pinging
 
 Racer Actions
 -------------------------------------------------------
+[X] - Add racer_message field to AsyncRaceServer (including posting/cleanup)
 [ ] - Show race stats
-[ ] - Show active races
+[X] - Display assigned races
+[X] - Show open races  per category
+[X] - Query open races (no one is assigned) rather than query all races
 [ ] - Ephemeral show race info
 
 BR support

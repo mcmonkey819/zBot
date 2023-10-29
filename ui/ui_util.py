@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 from datetime import datetime, date
+from enum import Enum
 import logging
 import math
 import nextcord
@@ -28,6 +29,11 @@ FieldList = list[zField]
 FieldDict = dict[str, nextcord.ui.TextInput]
 ModalDataList = dict[str, str]
 SelectList = list[nextcord.SelectOption]
+
+class MessageType(Enum):
+    CATEGORY_MOD = 1
+    RACE_MOD     = 2
+    RACER_INFO   = 3
 
 ########################################################################################################################
 # UTILITY FUNCTIONS
@@ -170,10 +176,10 @@ async def display_ephemeral_leaderboard(interaction, race_id):
             table_data.append(table_row)
 
     # Tablulate the submission data
-    tableText = tabulate(table_data, headers="firstrow", showindex=places, tablefmt="double_grid")
+    table_text = tabulate(table_data, headers="firstrow", showindex=places, tablefmt="double_grid")
 
     # Send the message
-    await send_message(interaction, tableText, ephemeral=True, codeblock=True)
+    await send_message(interaction, table_text, ephemeral=True, codeblock=True)
 
 ####################################################################################################################
 # This function breaks a response into multiple messages that meet the Discord API character limit
@@ -222,7 +228,7 @@ def buildResponseMessageList(message):
     return message_list
 
 #####################################################################################################################
-async def post_race_info_message(race, channel):
+def get_race_info_message(race):
     race_info_msg_text = "> \n"
     race_info_msg_text += f"> Use the buttons below for Race ID {race.id}\n"
     race_info_msg_text += f"> Created On: {race.create_datetime}\n"
@@ -237,6 +243,7 @@ async def post_race_info_message(race, channel):
         race_info_msg_text += f"> Hash: **{race.hash}**\n"
 
     # Check the seed to see if it contains a link that we can embed
+    seed_embed = None
     seed_parts = race.seed.split()
     seed_url = None
     for p in seed_parts:
@@ -247,20 +254,35 @@ async def post_race_info_message(race, channel):
         seed_embed = nextcord.Embed(title="{}".format(race.description), url=seed_url, color=nextcord.Colour.random())
         # Add generic, creative commons licensed download thumbnail
         seed_embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/1/1e/Download-Icon.png")
-        msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
-    else:
-        msg = await channel.send(race_info_msg_text, view=zRaceInfoButtonView(race.id))
-    return msg
+
+    return race_info_msg_text, seed_embed
 
 #####################################################################################################################
-async def send_message(interaction, msg, ephemeral=True, codeblock=False):
+async def post_race_info_message(race, channel):
+    msg_text, seed_embed = get_race_info_message(race)
+    return await channel.send(msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
+
+#####################################################################################################################
+async def send_message(interaction, msg="", ephemeral=True, codeblock=False, view=None, embed=None):
     msgList = buildResponseMessageList(msg)
 
     for m in msgList:
         if codeblock:
             m = f"```\n{m}\n```"
 
-        await interaction.send(m, ephemeral=ephemeral)
+        # Add the embed and view to the last message if there is one provided
+        if m == msgList[-1]:
+            if view is not None and embed is not None:
+                await interaction.send(m, ephemeral=ephemeral, view=view, embed=embed)
+            elif view is not None:
+                await interaction.send(m, ephemeral=ephemeral, view=view)
+            elif embed is not None:
+                await interaction.send(m, ephemeral=ephemeral, embed=embed)
+            else:
+                await interaction.send(m, ephemeral=ephemeral)
+        else:
+            await interaction.send(m, ephemeral=ephemeral)
+
 
 #################################################################################################################
 async def unpin_race(race_id, interaction):
@@ -300,6 +322,27 @@ async def pin_race_info(channel_id, race, interaction):
         await delete_message(server, old_db_msg_id)
     else:
         logging.info(f"Could not find channel with id {channel_id}")
+
+#################################################################################################################
+def get_race_list_table(races, server_id):
+    labels = ["ID", "Category", "Race Description", "# Submissions"]
+
+    categories = AsyncRaceCategory.select().where(AsyncRaceCategory.server_id == server_id)
+    if len(categories) == 0:
+        logging.info(f"Error in get_race_list_table: no categories found for server ID {server_id}")
+        return "An error occurred, please let a bot admin know"
+
+    category_name_lookup = {}
+    for c in categories:
+        category_name_lookup[c.id] = c.name
+
+    table_data = [labels]
+    for r in races:
+        num_submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == r.id).count()
+        table_data.append([str(r.id), category_name_lookup[r.category_id.id], r.description, num_submissions])
+
+    return tabulate(table_data, headers="firstrow", tablefmt="double_grid")
+
 
 ########################################################################################################################
 # BASE CLASSES
@@ -471,9 +514,10 @@ class zMultiPageModalSender():
 
         if self.field_idx < len(self.fields):
             # If there are still fields to send, send a button message for the user to continue or cancel
-            await interaction.send("Additional information required",
-                                   view=zContinueCancelButtonView(self.send_modal_page, self.cancel_submit),
-                                   ephemeral=True)
+            await send_message(
+                interaction,
+                "Additional information required",
+                view=zContinueCancelButtonView(self.send_modal_page, self.cancel_submit))
         else:
             # Otherwise we're done, so call the originally provided submit handler
             await self.submit_handler(interaction, self.submit_values)

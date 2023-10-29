@@ -47,6 +47,7 @@ class AsyncRaceServer(Model):
     admin_role_id           = IntegerField()
     category_mod_message    = IntegerField(null=True)
     race_mod_message        = IntegerField(null=True)
+    racer_info_message      = IntegerField(null=True)
 
     class Meta:
         table_name = 'async_race_servers'

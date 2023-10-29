@@ -109,6 +109,22 @@ def get_race_assignment(user_id, race_id):
     return a
 
 ########################################################################################################################
+def get_open_races(server_id):
+    races = AsyncRace.select().where(AsyncRace.server_id == server_id)
+    ret_list = []
+    for r in races:
+        # An open race is a race that does NOT have assignments
+        if AsyncRaceRoster.select().where(AsyncRaceRoster.race_id == r.id).count() == 0:
+            ret_list.append(r)
+    return ret_list
+
+########################################################################################################################
+def get_assigned_races(user_id, server_id):
+    return AsyncRace.select().join(AsyncRaceRoster).where(
+        (AsyncRaceRoster.user_id == user_id) &
+        (AsyncRace.server_id == server_id))
+
+########################################################################################################################
 # Other Utility Functions
 #####################################################################################################################
 # Returns the current date/time in the format used in the database
