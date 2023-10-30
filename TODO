@@ -15,11 +15,12 @@ Racer Actions
 [X] - Display assigned races
 [X] - Show open races  per category
 [X] - Query open races (no one is assigned) rather than query all races
-[ ] - Ephemeral show race info
+[X] - Show race details
 
 BR support
 -------------------------------------------------------
 [ ] - Category points? Way to assign point values to places for races in a Category
+    [ ] - Different scoring options: MMR, Mario Kart style, custom?
 [ ] - Category Leaderboard
 
 Questionable Stuff
@@ -27,6 +28,7 @@ Questionable Stuff
 [?] - Hookup required flag for extra info creation
 [?] - Convert custom modals to use base class
 [?] - Co-op Support
+[?] - Customize thumbnail image per category
 
 Done
 -------------------------------------------------------
