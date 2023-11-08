@@ -34,9 +34,49 @@ class MessageType(Enum):
     CATEGORY_MOD = 1
     RACE_MOD     = 2
     RACER_INFO   = 3
+    SERVER_MOD   = 4
 
 ########################################################################################################################
 # UTILITY FUNCTIONS
+########################################################################################################################
+
+########################################################################################################################
+# Checks if a user has the provided role
+def user_has_role(server, user, role_id):
+    role = server.get_role(role_id)
+    return role in user.roles
+
+########################################################################################################################
+# Checks if a user is a race admin on the server
+def user_is_admin(server, user):
+    db_server = get_server(server.id)
+    return user_has_role(server, user, db_server.admin_role_id)
+
+########################################################################################################################
+# Checks if a user is a race moderator on the server
+def user_is_mod(server, user):
+    db_server = get_server(server.id)
+    return user_has_role(server, user, db_server.mod_role_id)
+
+########################################################################################################################
+async def check_user_is_admin(interaction):
+    server = get_server_from_interaction(interaction)
+    user = await server.fetch_member(interaction.user.id)
+    is_admin = user_is_admin(server, user)
+    if is_admin == False:
+        await send_message(interaction, f"Only Race Admins have permission for this function")
+    return is_admin
+
+########################################################################################################################
+async def check_user_is_mod(interaction):
+    server = get_server_from_interaction(interaction)
+    user = await server.fetch_member(interaction.user.id)
+    is_mod = user_is_mod(server, user)
+    if is_mod == False:
+        await send_message(interaction, f"Only Race Moderators have permission for this function")
+    return is_mod
+
+
 ########################################################################################################################
 # Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes message and optionally deletes or
 # zeroes the DB entry
@@ -258,11 +298,6 @@ def get_race_info_message(race):
     return race_info_msg_text, seed_embed
 
 #####################################################################################################################
-async def post_race_info_message(race, channel):
-    msg_text, seed_embed = get_race_info_message(race)
-    return await channel.send(msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
-
-#####################################################################################################################
 async def send_message(interaction, msg="", ephemeral=True, codeblock=False, view=None, embed=None):
     msgList = buildResponseMessageList(msg)
 
@@ -330,7 +365,7 @@ def get_race_list_table(races, server_id):
     categories = AsyncRaceCategory.select().where(AsyncRaceCategory.server_id == server_id)
     if len(categories) == 0:
         logging.info(f"Error in get_race_list_table: no categories found for server ID {server_id}")
-        return "An error occurred, please let a bot admin know"
+        return "An error occurred, please contact a bot admin"
 
     category_name_lookup = {}
     for c in categories:
@@ -342,7 +377,6 @@ def get_race_list_table(races, server_id):
         table_data.append([str(r.id), category_name_lookup[r.category_id.id], r.description, num_submissions])
 
     return tabulate(table_data, headers="firstrow", tablefmt="double_grid")
-
 
 ########################################################################################################################
 # BASE CLASSES
@@ -421,7 +455,28 @@ class zContinueCancelButtonView(nextcord.ui.View):
         await self.continue_func(interaction)
 
 ########################################################################################################################
-# View which contains buttons for continuing or cancelling
+# View which contains buttons for a yes or no question
+class zYesNoCancelButtonView(nextcord.ui.View):
+    def __init__(self, yes_func, no_func, cancel_func):
+        super().__init__(timeout=None)
+        self.yes_func = yes_func
+        self.no_func = no_func
+        self.cancel_func = cancel_func
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='❌ Cancel')
+    async def cancel_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await self.cancel_func(interaction)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='👎🏾 No')
+    async def no_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await self.no_func(interaction)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='👍🏾 Yes')
+    async def yes_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await self.yes_func(interaction)
+
+########################################################################################################################
+# View which contains buttons for yes, no or cancel
 class zYesNoButtonView(nextcord.ui.View):
     def __init__(self, yes_func, no_func):
         super().__init__(timeout=None)
@@ -525,30 +580,3 @@ class zMultiPageModalSender():
     ####################################################################################################################
     async def cancel_submit(self, interaction):
         await self.submit_handler(interaction, None)
-
-########################################################################################################################
-# View which contains race info buttons
-class zRaceInfoButtonView(nextcord.ui.View):
-    def __init__(self, race_id):
-        super().__init__(timeout=None)
-        self.race_id = race_id
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='⏱️ Submit/Edit Time')
-    async def submit_time_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Lookup if the user has a submission for this race already
-        submission = get_race_submission(interaction.user.id, self.race_id)
-        submit_handler = zRaceSubmitHandler(self.race_id, submission)
-        await submit_handler.send_submit_modal(interaction)
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='🏳️ Forfeit Race')
-    async def forfeit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Check if the user has already submitted a time for this race
-        if get_race_submission(interaction.user.id, self.race_id) is not None:
-            await send_message(interaction, "Time already submitted for this race, use `Submit/Edit` button to edit")
-            return
-        else:
-            forfeit_race(interaction.user.id, self.race_id)
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='🥇 Leaderboard')
-    async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await display_ephemeral_leaderboard(interaction, self.race_id)

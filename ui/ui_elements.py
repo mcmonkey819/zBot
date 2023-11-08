@@ -10,6 +10,11 @@ from db.zBot_db_orm import *
 from db.db_util import *
 from ui.ui_util import *
 
+####################################################################################################################
+async def post_race_info_message(race, channel):
+    msg_text, seed_embed = get_race_info_message(race)
+    return await channel.send(msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
+
 ########################################################################################################################
 # Category Moderation
 ########################################################################################################################
@@ -46,6 +51,7 @@ class zCategoryAddEditModal(zModal):
         # Call the base class init
         super().__init__(fields, self.on_submit, title)
 
+    ####################################################################################################################
     # Takes the data submitted by the user and saves it to the DB
     async def on_submit(self, interaction, modal):
         if self.category is None:
@@ -63,9 +69,112 @@ class zCategoryAddEditModal(zModal):
                     continue
         try:
             self.category.save()
-            await send_message(interaction, f"Saved category {self.category.name}")
         except:
             await send_message(interaction, f"FAILED to save category {self.category.name}")
+
+        # Ask the user if they'd like to associate a role with this category
+        server = get_server_from_interaction(interaction)
+        self.role_select_list = [
+            nextcord.SelectOption(
+                label="None...",
+                value=-1,
+                description="No role will be associated with this category"),
+            nextcord.SelectOption(
+                label="Create New...",
+                value=-2,
+                description="Bot will create a new role to use specific to this category")
+        ]
+        self.role_select_list += get_role_select_list(server)
+        await send_message(
+            interaction,
+            "Select a role to ping on race creation for this category (or None)",
+            view=zSingleSelectView(self.role_select_list, self.on_create_role_select, "Select Role..."))
+
+    ####################################################################################################################
+    async def on_create_role_select(self, role_id, interaction):
+        if role_id > 0:
+            self.category.create_role = role_id
+        elif role_id == -1:
+            self.category.create_role = None
+        elif role_id == -2:
+            # Create new role
+            server = get_server_from_interaction(interaction)
+            create_role = await server.create_role(name=self.category.name+"Racer")
+            if create_role is not None:
+                self.category.create_role = create_role.id
+        self.category.save()
+
+        # Finally ask about a role to be given to users on submission to a race in this category
+        await send_message(
+            interaction,
+            "Select a role to give to racers when they submit to races for this category (or None)",
+            view=zSingleSelectView(self.role_select_list, self.on_submit_role_select, "Select Role..."))
+
+    ####################################################################################################################
+    async def on_submit_role_select(self, role_id, interaction):
+        if role_id > 0:
+            self.category.submit_role = role_id
+        elif role_id == -1:
+            self.category.submit_role = None
+        elif role_id == -2:
+            # Create new role
+            server = get_server_from_interaction(interaction)
+            submit_role = await server.create_role(name=self.category.name+"Done")
+            if submit_role is not None:
+                self.category.submit_role = submit_role.id
+        self.category.save()
+        await send_message(interaction, f"Saved category {self.category.name}")
+
+########################################################################################################################
+# View which contains server admin buttons
+class zServerAdminView(nextcord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    ####################################################################################################################
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='✏️ Edit Mod Role')
+    async def edit_mod_role_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if await check_user_is_admin(interaction) == False:
+            return
+
+        server = get_server_from_interaction(interaction)
+        role_list = get_role_select_list(server)
+        await send_message(interaction, view=zSingleSelectView(role_list, 
+                                                               self.on_mod_role_select,
+                                                               "Choose Role..."))
+
+    ####################################################################################################################
+    async def on_mod_role_select(self, role_id, interaction):
+        db_server = get_server(interaction.guild_id)
+        if db_server is not None:
+            db_server.mod_role_id = role_id
+            db_server.save()
+            await send_message(interaction, "Saved Race Moderator Role")
+        else:
+            await send_message(interaction, "An error occurred, please contact a bot admin")
+
+    ####################################################################################################################
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='️📢 Set Announcements Channel')
+    async def set_announcements_channel(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if await check_user_is_admin(interaction) == False:
+            return
+
+        server = get_server_from_interaction(interaction)
+        channel_list = await get_permitted_channel_select_list(interaction.client.user.id, server)
+        await send_message(interaction, view=zSingleSelectView(channel_list, 
+                                                               self.on_announcements_channel_select,
+                                                               "Choose Channel..."))
+
+    ####################################################################################################################
+    async def on_announcements_channel_select(self, channel_id, interaction):
+        db_server = get_server(interaction.guild_id)
+        if db_server is not None:
+            db_server.announcement_channel_id = channel_id
+            db_server.save()
+            await send_message(interaction, "Saved Announcements Channel")
+        else:
+            await send_message(interaction, "An error occurred, please contact a bot admin")
+
 
 ########################################################################################################################
 # View which contains category moderation buttons
@@ -74,14 +183,20 @@ class zCategoryModView(nextcord.ui.View):
         super().__init__(timeout=None)
 
     ####################################################################################################################
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='➕ Add Category')
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='➕ Add Category')
     async def add_category_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if await check_user_is_mod(interaction) == False:
+            return
+
         # Create and send Add Category modal
         await interaction.response.send_modal(zCategoryAddEditModal(None))
 
     ####################################################################################################################
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='✏️ Edit Category')
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='✏️ Edit Category')
     async def edit_category_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if await check_user_is_mod(interaction) == False:
+            return
+
         # Get the list of categories for this server
         select_list = get_category_select_list(interaction.guild_id)
 
@@ -98,14 +213,20 @@ class zCategoryModView(nextcord.ui.View):
         await interaction.response.send_modal(zCategoryAddEditModal(category_id))
 
     ####################################################################################################################
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='➕ Add Submit Info Type')
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='➕ Add Submit Info Type')
     async def add_submit_info_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if await check_user_is_mod(interaction) == False:
+            return
+
         # Create and send Add Category modal
         await interaction.response.send_modal(zExtraInfoTypeAddEditModal(None))
 
     ####################################################################################################################
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='👉🏾 Assign Extra Info')
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='👉🏾 Assign Extra Info')
     async def assign_extra_info_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if await check_user_is_mod(interaction) == False:
+            return
+
         # Prompt to select from list of extra info types
         select_view = zSingleSelectView(get_extra_info_type_select_list(interaction.guild.id),
                                         self.on_info_type_select,
@@ -341,6 +462,9 @@ class zRaceModView(nextcord.ui.View):
     #################################################################################################################
     @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='➕ Add Race')
     async def add_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if await check_user_is_mod(interaction) == False:
+            return
+
         # Prompt the user to select a category for the race, then send the add race modal
         await send_message(interaction, view=zSingleSelectView(get_category_select_list(interaction.guild_id),
                                                                self.send_race_modal,
@@ -353,6 +477,9 @@ class zRaceModView(nextcord.ui.View):
     #################################################################################################################
     @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='️️️️✏️ Manage Race')
     async def edit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        if await check_user_is_mod(interaction) == False:
+            return
+
         race_select_view = zSingleSelectView(
             get_race_select_list(interaction.guild_id),
             self.on_race_select,
@@ -418,10 +545,7 @@ class zRaceModView(nextcord.ui.View):
                 await self.send_race_modal(self.race, self.race.category_id, interaction)
             case self.edit_state_id:
                 logging.info("  Change Race State Selected")
-                # Toggle the active state
-                self.race.active = self.race.active ^ True
-                self.race.save()
-                await send_message(interaction, "Race State Saved")
+                await self.update_race_state(interaction)
             case self.edit_extra_info_id:
                 logging.info("  Edit Race Extra Info Selected")
                 info_list = get_extra_info_type_select_list(interaction.guild.id, self.race)
@@ -458,6 +582,63 @@ class zRaceModView(nextcord.ui.View):
                 await self.select_racer(interaction)
             case _:
                 logging.info("  Unknown Edit Choice")
+
+    #################################################################################################################
+    async def update_race_state(self, interaction):
+        # Toggle the active state
+        self.race.active = self.race.active ^ True
+        self.race.save()
+        await send_message(interaction, "Race State Saved")
+
+        server = get_server_from_interaction(interaction)
+        
+        if self.race.active:
+            # If we just activated the race there's a submit role for this category, clear the submit role
+            # from all users
+            if self.race.category_id.submit_role is not None:
+                submit_role = server.get_role(self.race.category_id.submit_role)
+                if submit_role is not None:
+                    for m in interaction.guild.members:
+                        await m.remove_roles(submit_role)
+
+            #  If there's a create role for this category, ask if we should send an announcement
+            if self.race.category_id.create_role is not None:
+                self.create_role = server.get_role(self.race.category_id.create_role)
+                if self.create_role is not None:
+                    # Ask about pinging the create role
+                    self.create_role_message = f"A new {self.race.category_id.name} race is now active!"
+                    await send_message(interaction, f"The {self.create_role.name} role will be pinged with the message: {self.create_role_message} \
+                        \n\nWould you like to edit the message? ('Cancel' will cancel the message from being sent)",
+                        view=zYesNoCancelButtonView(yes_func = self.edit_create_role_message,
+                                                    no_func = self.post_create_role_message,
+                                                    cancel_func = self.on_create_role_message_cancel))
+
+    #################################################################################################################
+    async def on_create_role_message_cancel(self, interaction):
+        await send_message(interaction, "Ping cancelled.")
+
+    #################################################################################################################
+    async def edit_create_role_message(self, interaction):
+        ping_message_input = nextcord.ui.TextInput(
+            label="Ping Message",
+            required=True,
+            default_value=self.create_role_message,
+            row=1)
+        await interaction.response.send_modal(zModal({"ping_message": ping_message_input},
+            self.on_create_role_message_submit,
+            "Edit Ping Message"))
+
+    #################################################################################################################
+    async def on_create_role_message_submit(self, interaction, modal):
+        self.create_role_message = modal.children[0].value
+        await self.post_create_role_message(interaction)
+
+    #################################################################################################################
+    async def post_create_role_message(self, interaction):
+        server = get_server_from_interaction(interaction)
+        channel = server.get_channel(self.race.server_id.announcement_channel_id)
+        await channel.send(f"{self.create_role.mention} {self.create_role_message}")
+        await send_message(interaction, "Message posted")
 
     #################################################################################################################
     async def on_race_extra_info_select(self, info_id_list, interaction):
@@ -717,3 +898,30 @@ class zRacerButtonView(nextcord.ui.View):
             return
         msg_text, seed_embed = get_race_info_message(race)
         await send_message(interaction, msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
+
+########################################################################################################################
+# View which contains race info buttons
+class zRaceInfoButtonView(nextcord.ui.View):
+    def __init__(self, race_id):
+        super().__init__(timeout=None)
+        self.race_id = race_id
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='⏱️ Submit/Edit Time')
+    async def submit_time_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Lookup if the user has a submission for this race already
+        submission = get_race_submission(interaction.user.id, self.race_id)
+        submit_handler = zRaceSubmitHandler(self.race_id, submission)
+        await submit_handler.send_submit_modal(interaction)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='🏳️ Forfeit Race')
+    async def forfeit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Check if the user has already submitted a time for this race
+        if get_race_submission(interaction.user.id, self.race_id) is not None:
+            await send_message(interaction, "Time already submitted for this race, use `Submit/Edit` button to edit")
+            return
+        else:
+            forfeit_race(interaction.user.id, self.race_id)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='🥇 Leaderboard')
+    async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await display_ephemeral_leaderboard(interaction, self.race_id)

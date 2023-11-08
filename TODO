@@ -1,12 +1,13 @@
 General Stuff
 -------------------------------------------------------
-[ ] - Check for error condition before modal create
-    [ ] - Add "ValidateInitParams" in zModal class to make this easier?
+[X] - Edit server settings button to change roles and announcements channel
+[X] - Check permissions  for admin/moderator functions/buttons
+[ ] - Add defer logic
 
 Race Moderation
 -------------------------------------------------------
-[ ] - Option to ping on new race for category
-[ ] - If ping on create, create role allow racers to add role for pinging
+[X] - Option to ping on new race for category
+[X] - If category has a submit_role, clear the role when a new race in that category is made active
 
 Racer Actions
 -------------------------------------------------------
@@ -22,13 +23,18 @@ BR support
 [ ] - Category points? Way to assign point values to places for races in a Category
     [ ] - Different scoring options: MMR, Mario Kart style, custom?
 [ ] - Category Leaderboard
+[ ] - Scoring types: mario kart, MMR, par time, league
 
-Questionable Stuff
+Optional Stuff
 -------------------------------------------------------
 [?] - Hookup required flag for extra info creation
 [?] - Convert custom modals to use base class
 [?] - Co-op Support
 [?] - Customize thumbnail image per category
+[?] - Check for error condition before modal create
+    [?] - Add "ValidateInitParams" in zModal class to make this easier?
+[?] - If ping on create, create role allow racers to add role for pinging
+    [?] - Use reactions to select/deselect roles
 
 Done
 -------------------------------------------------------

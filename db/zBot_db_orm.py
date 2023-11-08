@@ -45,9 +45,11 @@ class AsyncRaceServer(Model):
     name                    = CharField()
     mod_role_id             = IntegerField()
     admin_role_id           = IntegerField()
+    server_mod_message      = IntegerField(null=True)
     category_mod_message    = IntegerField(null=True)
     race_mod_message        = IntegerField(null=True)
     racer_info_message      = IntegerField(null=True)
+    role_selection_message  = IntegerField(null=True)
 
     class Meta:
         table_name = 'async_race_servers'
@@ -58,7 +60,8 @@ class AsyncRaceCategory(Model):
     server_id               = ForeignKeyField(AsyncRaceServer, backref='categories')
     name                    = CharField()
     description             = CharField()
-    #extra_info_fields       = 
+    create_role             = IntegerField(null=True)
+    submit_role             = IntegerField(null=True)
 
     class Meta:
         table_name = 'async_race_categories'
