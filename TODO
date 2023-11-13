@@ -3,6 +3,7 @@ General Stuff
 [X] - Edit server settings button to change roles and announcements channel
 [X] - Check permissions  for admin/moderator functions/buttons
 [ ] - Add defer logic
+[X] - Database conversion script
 
 Race Moderation
 -------------------------------------------------------
@@ -24,6 +25,10 @@ BR support
     [ ] - Different scoring options: MMR, Mario Kart style, custom?
 [ ] - Category Leaderboard
 [ ] - Scoring types: mario kart, MMR, par time, league
+
+Manual DB Conversion Steps
+-------------------------------------------------------
+[ ] - Add create/submit roles for weekly and BWS categories
 
 Optional Stuff
 -------------------------------------------------------
