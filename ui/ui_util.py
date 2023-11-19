@@ -49,6 +49,7 @@ def user_has_role(server, user, role_id):
 ########################################################################################################################
 # Checks if a user is a race admin on the server
 def user_is_admin(server, user):
+    logging.info(f"Server ID: {server.id}")
     db_server = get_server(server.id)
     return user_has_role(server, user, db_server.admin_role_id)
 
