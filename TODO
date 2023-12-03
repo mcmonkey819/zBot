@@ -4,11 +4,13 @@ General Stuff
 [X] - Check permissions  for admin/moderator functions/buttons
 [ ] - Add defer logic
 [X] - Database conversion script
+[ ] - Convert code block to embed
 
 Race Moderation
 -------------------------------------------------------
 [X] - Option to ping on new race for category
 [X] - If category has a submit_role, clear the role when a new race in that category is made active
+[ ] - Select list length limited to 25, implement workaround
 
 Racer Actions
 -------------------------------------------------------
@@ -29,11 +31,11 @@ BR support
 Manual DB Conversion Steps
 -------------------------------------------------------
 [ ] - Add create/submit roles for weekly and BWS categories
+[X] - Duplicate 40 bonks data in test server for more testing
 
 Optional Stuff
 -------------------------------------------------------
 [?] - Hookup required flag for extra info creation
-[?] - Convert custom modals to use base class
 [?] - Co-op Support
 [?] - Customize thumbnail image per category
 [?] - Check for error condition before modal create
