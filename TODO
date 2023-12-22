@@ -3,14 +3,17 @@ General Stuff
 [X] - Edit server settings button to change roles and announcements channel
 [X] - Check permissions  for admin/moderator functions/buttons
 [ ] - Add defer logic
+    [X] - Added defer function, it cannot be used when a modal is being sent
+    [ ] - Add defer to all relevant locations
 [X] - Database conversion script
 [ ] - Convert code block to embed
+[ ] - Test on BTT with Forty bonks DB data
 
 Race Moderation
 -------------------------------------------------------
 [X] - Option to ping on new race for category
 [X] - If category has a submit_role, clear the role when a new race in that category is made active
-[ ] - Select list length limited to 25, implement workaround
+[X] - Handle more than 25 select entries (*SingleSelect only)
 
 Racer Actions
 -------------------------------------------------------

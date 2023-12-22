@@ -299,6 +299,10 @@ def get_race_info_message(race):
     return race_info_msg_text, seed_embed
 
 #####################################################################################################################
+async def defer(interaction):
+    await interaction.response.defer(with_message=True, ephemeral=True)
+
+#####################################################################################################################
 async def send_message(interaction, msg="", ephemeral=True, codeblock=False, view=None, embed=None):
     msgList = buildResponseMessageList(msg)
 
@@ -400,13 +404,34 @@ class zModal(nextcord.ui.Modal):
 # This Select (drop down selection) will display a drop down with the string options provided. This variant will
 # only allow the user to select a single option from the list. On completion it will call the provided
 # submit_handler function, passing the value for the option chosen and the interaction object.
+# Discord Select objects can only accept 25 entires, if more than 25 are supplied in the select_list the
+# zSingleSelect will display the first 24 and a "Show More..." entry which, if selected, will create and show
+# another zSingleSelct with single_select[24:] slice of the list
 class zSingleSelect(nextcord.ui.Select):
     def __init__(self, select_list: SelectList, submit_handler, placeholder):
-        super().__init__(min_values=1, max_values=1, options=select_list, placeholder=placeholder)
+        if len(select_list) > 25:
+            self.placeholder = placeholder
+            self.orig_select_list = select_list
+            self.show_more_id = -1
+            option_list = select_list[:24]
+            option_list.append(nextcord.SelectOption(
+                label="Show More...",
+                description = "Show More Options",
+                value = self.show_more_id))
+        else:
+            option_list = select_list
+        super().__init__(min_values=1, max_values=1, options=option_list, placeholder=placeholder)
         self.submit_handler = submit_handler
 
     async def callback(self, interaction: nextcord.Interaction) -> None:
-        await self.submit_handler(int(interaction.data['values'][0]), interaction)
+        if self.orig_select_list is not None and int(interaction.data['values'][0]) == self.show_more_id:
+            # Send a Select view with the next entries
+            await send_message(interaction, view=zSingleSelectView(
+                submit_handler=self.submit_handler,
+                select_list = self.orig_select_list[25:],
+                placeholder = self.placeholder))
+        else:
+            await self.submit_handler(int(interaction.data['values'][0]), interaction)
 
 #####################################################################################################################
 # View which contains a zSingleSelect
@@ -420,6 +445,8 @@ class zSingleSelectView(nextcord.ui.View):
 # This Select (drop down selection) will display a drop down with the string options provided. This variant will
 # allow the user to select up to `max_values` from the list. On completion it will call the provided submit_handler
 # function, passing a list of the values chosen and the interaction object.
+# NOTE: Only 25 entries can be displayed in a Discord select, if more than 25 are supplied in the select_list
+# then only the first 25 will be used
 class zMultiSelect(nextcord.ui.Select):
     def __init__(self, select_list: SelectList, max_values: int, submit_handler, placeholder):
         super().__init__(min_values=1, max_values=max_values, options=select_list, placeholder=placeholder)
