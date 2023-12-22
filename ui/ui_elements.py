@@ -139,7 +139,7 @@ class zServerAdminView(nextcord.ui.View):
 
         server = get_server_from_interaction(interaction)
         role_list = get_role_select_list(server)
-        await send_message(interaction, view=zSingleSelectView(role_list, 
+        await send_message(interaction, view=zSingleSelectView(role_list,
                                                                self.on_mod_role_select,
                                                                "Choose Role..."))
 
@@ -161,7 +161,7 @@ class zServerAdminView(nextcord.ui.View):
 
         server = get_server_from_interaction(interaction)
         channel_list = await get_permitted_channel_select_list(interaction.client.user.id, server)
-        await send_message(interaction, view=zSingleSelectView(channel_list, 
+        await send_message(interaction, view=zSingleSelectView(channel_list,
                                                                self.on_announcements_channel_select,
                                                                "Choose Channel..."))
 
@@ -480,11 +480,15 @@ class zRaceModView(nextcord.ui.View):
         if await check_user_is_mod(interaction) == False:
             return
 
-        race_select_view = zSingleSelectView(
-            get_race_select_list(interaction.guild_id),
-            self.on_race_select,
-            "Choose Race to Manage...")
-        await send_message(interaction, view=race_select_view)
+        race_list = get_race_select_list(interaction.guild_id)
+        if len(race_list) == 0:
+            await send_message(interaction, "There are no races currently created")
+        else:
+            race_select_view = zSingleSelectView(
+                get_race_select_list(interaction.guild_id),
+                self.on_race_select,
+                "Choose Race to Manage...")
+            await send_message(interaction, view=race_select_view)
 
     #################################################################################################################
     async def on_race_select(self, race_id, interaction):
@@ -609,7 +613,7 @@ class zRaceModView(nextcord.ui.View):
                     if submit_role is not None:
                         for m in interaction.guild.members:
                             await m.remove_roles(submit_role)
-    
+
                 #  If there's a create role for this category, ask if we should send an announcement
                 if self.race.category_id.create_role is not None:
                     self.create_role = server.get_role(self.race.category_id.create_role)
@@ -744,7 +748,7 @@ class zRaceModView(nextcord.ui.View):
         assign_racer(user.id, self.race.id)
         # Ask if there are more users to assign. If not we're done, if so loop back to sending the UserSelect
         await send_message(interaction,
-                           "Are there more racers to assign?", 
+                           "Are there more racers to assign?",
                            view=zYesNoButtonView(self.select_racer,
                                                  lambda interaction : send_message(interaction, "Done!")))
 
