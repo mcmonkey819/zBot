@@ -137,7 +137,7 @@ def convert_database(clear_first=False):
             zbot_race.description = r.description
             zbot_race.additional_instructions = r.additional_instructions
             zbot_race.category_id = cat_lookup[r.category_id]
-            zbot_race.active = r.active
+            zbot_race.state = RaceStateActive if r.active else RaceStateCompleted
             zbot_race.save()
         except:
             print(f"Error converting race ID {r.id}. Category ID: {r.category_id}")

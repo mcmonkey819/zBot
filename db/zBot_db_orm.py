@@ -62,6 +62,7 @@ class AsyncRaceCategory(Model):
     description             = CharField()
     create_role             = IntegerField(null=True)
     submit_role             = IntegerField(null=True)
+    points_type             = IntegerField(null=True)
 
     class Meta:
         table_name = 'async_race_categories'
@@ -81,6 +82,7 @@ class AsyncRace(Model):
     leaderboard_message     = ForeignKeyField(AsyncRaceMessage, backref='races', null=True)
     race_info_message       = ForeignKeyField(AsyncRaceMessage, backref='races', null=True)
     submission_role         = IntegerField(null=True)
+    state                   = IntegerField()
 
     class Meta:
         table_name = 'async_races'
@@ -103,6 +105,7 @@ class AsyncRaceSubmission(Model):
     submit_datetime         = DateField(null=True)
     finish_time             = CharField()
     comment                 = CharField(null=True)
+    points                  = IntegerField(null=True)
 
     class Meta:
         table_name = 'async_submissions'
@@ -144,6 +147,16 @@ class AsyncRaceExtraInfoAssignment(Model):
         table_name = 'async_race_extra_info_assignments'
         database = db
 
+class AsyncRaceCategoryPoints(Model):
+    id                      = IntegerField(primary_key= True)
+    user_id                 = IntegerField()
+    category_id             = ForeignKeyField(AsyncRaceCategory, backref='extra_info_assignments', null=True)
+    points                  = IntegerField()
+
+    class Meta:
+        table_name = 'async_race_category_points'
+        database = db
+
 ####################################################################################################################
 # Deletes all existing tables, then recreates them.
 def drop_add_db_tables():
@@ -156,7 +169,8 @@ def drop_add_db_tables():
         AsyncRaceSubmission,
         AsyncRaceExtraInfoType,
         AsyncRaceExtraInfo,
-        AsyncRaceExtraInfoAssignment])
+        AsyncRaceExtraInfoAssignment,
+        AsyncRaceCategoryPoints])
     add_db_tables()
 
 ####################################################################################################################
@@ -171,7 +185,8 @@ def add_db_tables():
         AsyncRaceSubmission,
         AsyncRaceExtraInfoType,
         AsyncRaceExtraInfo,
-        AsyncRaceExtraInfoAssignment])
+        AsyncRaceExtraInfoAssignment,
+        AsyncRaceCategoryPoints])
 
 ####################################################################################################################
 # Recreates the indicated table
@@ -205,5 +220,8 @@ def recreate_table(table_name):
         case "AsyncRaceExtraInfoAssignment":
             db.drop_tables([AsyncRaceExtraInfoAssignment])
             db.create_tables([AsyncRaceExtraInfoAssignment])
+        case "AsyncRaceCategoryPoints":
+            db.drop_tables([AsyncRaceCategoryPoints])
+            db.create_tables([AsyncRaceCategoryPoints])
         case _:
             logging.info(f"Unrecognized table name {table_name}")

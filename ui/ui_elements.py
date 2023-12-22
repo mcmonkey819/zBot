@@ -499,9 +499,6 @@ class zRaceModView(nextcord.ui.View):
             await send_message(interaction, err_msg)
             return
 
-        state_label = "Deactivate Race" if self.race.active else "Mark Race Active"
-        state_desc = "Set the race as inactive, preventing new submissions" if self.race.active else "Mark the race active, allowing new submissions"
-
         # Check if the race is already pinned
         if self.race.race_info_message is not None:
             pin_label = "Unpin Race Info"
@@ -519,7 +516,7 @@ class zRaceModView(nextcord.ui.View):
         self.edit_extra_info_id = 6
 
         edit_select_list = [
-                nextcord.SelectOption(label=state_label,               value=self.edit_state_id, description=state_desc),
+                nextcord.SelectOption(label="Change Race State",       value=self.edit_state_id, description="Change the race state"),
                 nextcord.SelectOption(label=pin_label,                 value=self.pin_race_info_id, description=pin_desc),
                 nextcord.SelectOption(label="Set Leaderboard Channel", value=self.set_leaderboard_channel_id, description="Set a channel to display the race leaderboard in"),
                 nextcord.SelectOption(label="Set Submit Role",         value=self.set_submit_role_id, description="Choose a role to be assigned when a racer submits a time for this race"),
@@ -528,7 +525,7 @@ class zRaceModView(nextcord.ui.View):
         # Only allow edit of race info or extra info if there are NO submissions
         if race_has_submissions(race_id) == False:
             # Only allow assigning racers if the race is inactive and there are no submissions
-            if self.race.active == False:
+            if self.race.state == RaceStateInactive:
                 edit_select_list.append(nextcord.SelectOption(label="Assign Racers",  value=self.assign_racers_id, description="Assign specific racers to this race"))
             edit_select_list.append(nextcord.SelectOption(label="Edit Race Info",  value=self.edit_info_id, description="Edit the seed, hash or description"))
             edit_select_list.append(nextcord.SelectOption(label="Edit Extra Info", value=self.edit_extra_info_id, description="Edit what extra info will be stored on submissions"))
@@ -585,33 +582,47 @@ class zRaceModView(nextcord.ui.View):
 
     #################################################################################################################
     async def update_race_state(self, interaction):
-        # Toggle the active state
-        self.race.active = self.race.active ^ True
-        self.race.save()
-        await send_message(interaction, "Race State Saved")
+        # Send race state select
+        select_list = RaceStateSelectOptionList
+        for s in select_list:
+            if s.value == self.race.state:
+                s.default = True
+        race_state_select_view = zSingleSelectView(select_list, self.on_race_state_select, "Choose New Race State...")
+        await send_message(interaction, view=race_state_select_view)
 
-        server = get_server_from_interaction(interaction)
-        
-        if self.race.active:
-            # If we just activated the race there's a submit role for this category, clear the submit role
-            # from all users
-            if self.race.category_id.submit_role is not None:
-                submit_role = server.get_role(self.race.category_id.submit_role)
-                if submit_role is not None:
-                    for m in interaction.guild.members:
-                        await m.remove_roles(submit_role)
+    #################################################################################################################
+    async def on_race_state_select(self, race_state, interaction):
+        logging.info(f"Selected state: {race_state}")
+        if race_state != self.race.state:
+            # Save the selected state
+            self.race.state = race_state
+            self.race.save()
+            await send_message(interaction, "Race State Saved")
 
-            #  If there's a create role for this category, ask if we should send an announcement
-            if self.race.category_id.create_role is not None:
-                self.create_role = server.get_role(self.race.category_id.create_role)
-                if self.create_role is not None:
-                    # Ask about pinging the create role
-                    self.create_role_message = f"A new {self.race.category_id.name} race is now active!"
-                    await send_message(interaction, f"The {self.create_role.name} role will be pinged with the message: {self.create_role_message} \
-                        \n\nWould you like to edit the message? ('Cancel' will cancel the message from being sent)",
-                        view=zYesNoCancelButtonView(yes_func = self.edit_create_role_message,
-                                                    no_func = self.post_create_role_message,
-                                                    cancel_func = self.on_create_role_message_cancel))
+            server = get_server_from_interaction(interaction)
+
+            if self.race.state == RaceStateActive:
+                # If we just activated the race there's a submit role for this category, clear the submit role
+                # from all users
+                if self.race.category_id.submit_role is not None:
+                    submit_role = server.get_role(self.race.category_id.submit_role)
+                    if submit_role is not None:
+                        for m in interaction.guild.members:
+                            await m.remove_roles(submit_role)
+    
+                #  If there's a create role for this category, ask if we should send an announcement
+                if self.race.category_id.create_role is not None:
+                    self.create_role = server.get_role(self.race.category_id.create_role)
+                    if self.create_role is not None:
+                        # Ask about pinging the create role
+                        self.create_role_message = f"A new {self.race.category_id.name} race is now active!"
+                        await send_message(interaction, f"The {self.create_role.name} role will be pinged with the message: {self.create_role_message} \
+                            \n\nWould you like to edit the message? ('Cancel' will cancel the message from being sent)",
+                            view=zYesNoCancelButtonView(yes_func = self.edit_create_role_message,
+                                                        no_func = self.post_create_role_message,
+                                                        cancel_func = self.on_create_role_message_cancel))
+        else:
+            await send_message("Race state NOT changed (same state selected as current state")
 
     #################################################################################################################
     async def on_create_role_message_cancel(self, interaction):

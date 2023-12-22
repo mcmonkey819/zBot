@@ -23,6 +23,22 @@ VartypeSelectOptionList = [
     nextcord.SelectOption(label="Date/Time", value=VarTypeDateTime, description="Date & Time string, typically something like 'YYYY-MM-DD HH:MM:SS'"),
 ]
 
+RaceStateInactive = 0
+RaceStateActive = 1
+RaceStateCompleted = 2
+
+RaceStateStrDict = {
+    RaceStateInactive:  "Inactive",
+    RaceStateActive:    "Active",
+    RaceStateCompleted: "Completed"
+}
+
+RaceStateSelectOptionList = [
+    nextcord.SelectOption(label="Inactive", value=RaceStateInactive, description="Mark the race as inactive"),
+    nextcord.SelectOption(label="Active", value=RaceStateActive, description="Mark the race as active (accepting submissions)"),
+    nextcord.SelectOption(label="Completed", value=RaceStateCompleted, description="Close the race to further submissions (and calculate score, if applicable)"),
+]
+
 ForfeitFinishTime = "23:59:59"
 
 ########################################################################################################################
