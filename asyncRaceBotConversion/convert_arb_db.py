@@ -54,7 +54,7 @@ def convert_database(clear_first=False):
     collection_rate.server_id = arb_server_id
     collection_rate.name = "Collection Rate"
     collection_rate.description = "Collection Rate as displayed at the end credits"
-    collection_rate.var_type = VarTypeInt
+    collection_rate.var_type = VarType.Int
     collection_rate.default_value = "216"
     collection_rate.save()
 
@@ -64,7 +64,7 @@ def convert_database(clear_first=False):
         rta.server_id = arb_server_id
         rta.name = "Real Time"
         rta.description = "Real Time - i.e. LiveSplit time"
-        rta.var_type = VarTypeGameTime
+        rta.var_type = VarType.GameTime
         rta.default_value = "23:59:59"
         rta.save()
 
@@ -72,7 +72,7 @@ def convert_database(clear_first=False):
         next_mode.server_id = arb_server_id
         next_mode.name = "Next Mode Suggestion"
         next_mode.description = "Suggestion for the next weekly mode for the biweekly wheel spin"
-        next_mode.var_type = VarTypeStr
+        next_mode.var_type = VarType.Str
         next_mode.default_value = None
         next_mode.save()
     elif arb_server_id == forty_bonks_tourney_server_id:
@@ -80,7 +80,7 @@ def convert_database(clear_first=False):
         vod_link.server_id = arb_server_id
         vod_link.name = "VoD Link"
         vod_link.description = "Link to a video of race completion"
-        vod_link.var_type = VarTypeStr
+        vod_link.var_type = VarType.Str
         vod_link.default_value = None
         vod_link.save()
 
@@ -137,7 +137,7 @@ def convert_database(clear_first=False):
             zbot_race.description = r.description
             zbot_race.additional_instructions = r.additional_instructions
             zbot_race.category_id = cat_lookup[r.category_id]
-            zbot_race.state = RaceStateActive if r.active else RaceStateCompleted
+            zbot_race.state = RaceState.Active if r.active else RaceState.Completed
             zbot_race.save()
         except:
             print(f"Error converting race ID {r.id}. Category ID: {r.category_id}")

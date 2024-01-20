@@ -410,7 +410,7 @@ class zModal(nextcord.ui.Modal):
 class zSingleSelect(nextcord.ui.Select):
     def __init__(self, select_list: SelectList, submit_handler, placeholder):
         if len(select_list) > 25:
-            self.placeholder = placeholder
+            self.orig_placeholder = placeholder
             self.orig_select_list = select_list
             self.show_more_id = -1
             option_list = select_list[:24]
@@ -419,6 +419,7 @@ class zSingleSelect(nextcord.ui.Select):
                 description = "Show More Options",
                 value = self.show_more_id))
         else:
+            self.orig_select_list = None
             option_list = select_list
         super().__init__(min_values=1, max_values=1, options=option_list, placeholder=placeholder)
         self.submit_handler = submit_handler
@@ -429,7 +430,7 @@ class zSingleSelect(nextcord.ui.Select):
             await send_message(interaction, view=zSingleSelectView(
                 submit_handler=self.submit_handler,
                 select_list = self.orig_select_list[25:],
-                placeholder = self.placeholder))
+                placeholder = self.orig_placeholder))
         else:
             await self.submit_handler(int(interaction.data['values'][0]), interaction)
 
@@ -438,8 +439,8 @@ class zSingleSelect(nextcord.ui.Select):
 class zSingleSelectView(nextcord.ui.View):
     def __init__(self, select_list: SelectList, submit_handler, placeholder = None):
         super().__init__(timeout=None)
-        self.category_select = zSingleSelect(select_list, submit_handler, placeholder)
-        self.add_item(self.category_select)
+        self.select = zSingleSelect(select_list, submit_handler, placeholder)
+        self.add_item(self.select)
 
 #####################################################################################################################
 # This Select (drop down selection) will display a drop down with the string options provided. This variant will

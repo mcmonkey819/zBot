@@ -157,6 +157,18 @@ class AsyncRaceCategoryPoints(Model):
         table_name = 'async_race_category_points'
         database = db
 
+class AsyncRaceCategoryPointParams(Model):
+    id                    = IntegerField(primary_key= True)
+    category_id           = ForeignKeyField(AsyncRaceCategory, backref='extra_info_assignments', null=True)
+    trueskill_mu          = FloatField()
+    trueskill_sigma       = FloatField()
+    trueskill_draw_chance = FloatField()
+    fixed_draw_threshold  = IntegerField()
+
+    class Meta:
+        table_name = 'async_race_category_point_params'
+        database = db
+
 ####################################################################################################################
 # Deletes all existing tables, then recreates them.
 def drop_add_db_tables():
@@ -170,7 +182,8 @@ def drop_add_db_tables():
         AsyncRaceExtraInfoType,
         AsyncRaceExtraInfo,
         AsyncRaceExtraInfoAssignment,
-        AsyncRaceCategoryPoints])
+        AsyncRaceCategoryPoints,
+        AsyncRaceCategoryPointParams])
     add_db_tables()
 
 ####################################################################################################################
@@ -186,7 +199,8 @@ def add_db_tables():
         AsyncRaceExtraInfoType,
         AsyncRaceExtraInfo,
         AsyncRaceExtraInfoAssignment,
-        AsyncRaceCategoryPoints])
+        AsyncRaceCategoryPoints,
+        AsyncRaceCategoryPointParams])
 
 ####################################################################################################################
 # Recreates the indicated table
@@ -223,5 +237,8 @@ def recreate_table(table_name):
         case "AsyncRaceCategoryPoints":
             db.drop_tables([AsyncRaceCategoryPoints])
             db.create_tables([AsyncRaceCategoryPoints])
+        case "AsyncRaceCategoryPointParams":
+            db.drop_tables([AsyncRaceCategoryPointParams])
+            db.create_tables([AsyncRaceCategoryPointParams])
         case _:
             logging.info(f"Unrecognized table name {table_name}")

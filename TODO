@@ -7,7 +7,9 @@ General Stuff
     [ ] - Add defer to all relevant locations
 [X] - Database conversion script
 [ ] - Convert code block to embed
+    [ ] - Detailed message with buttons under the embed
 [ ] - Test on BTT with Forty bonks DB data
+[ ] - Create test plan
 
 Race Moderation
 -------------------------------------------------------
@@ -26,11 +28,19 @@ Racer Actions
 
 BR support
 -------------------------------------------------------
-[ ] - Assign Category points on race end
+[X] - Assign Category points on race end
 [ ] - Display Category Leaderboard
-[ ] - Function to calculate par time for a race
+[ ] - Function to calculate points for a race
+    [X] - NULL
+    [X] - MarioKart
+    [ ] - Truekill
+        [ ] - Create table to hold TrueSkill environment values for each category
+        [ ] - Fill in the rest of the score function
+    [X] - Par time
+    [X] - Fixed
+        [ ] - Add tie/close loss threshold info to DB
+        [X] - What to do for races that aren't 1v1? (answer: nothing for now)
 [ ] - Manual points assignment
-[ ] - Scoring types: mario kart, MMR, par time, league
 [ ] - Modify category points types
     [ ] - UI to set tie/close loss margins (and mario kart values?)
 
