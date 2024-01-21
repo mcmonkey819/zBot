@@ -30,15 +30,15 @@ BR support
 -------------------------------------------------------
 [X] - Assign Category points on race end
 [ ] - Display Category Leaderboard
-[ ] - Function to calculate points for a race
+[X] - Function to calculate points for a race
     [X] - NULL
     [X] - MarioKart
-    [ ] - Truekill
-        [ ] - Create table to hold TrueSkill environment values for each category
-        [ ] - Fill in the rest of the score function
+    [X] - Trueskill
+        [X] - Create table to hold TrueSkill environment values for each category
+        [X] - Fill in the rest of the score function
     [X] - Par time
     [X] - Fixed
-        [ ] - Add tie/close loss threshold info to DB
+        [X] - Add tie/close loss threshold info to DB
         [X] - What to do for races that aren't 1v1? (answer: nothing for now)
 [ ] - Manual points assignment
 [ ] - Modify category points types

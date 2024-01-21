@@ -2,6 +2,7 @@ from datetime import datetime, date
 import logging
 import nextcord
 import elo
+import trueskill
 
 from db.zBot_db_orm import *
 
@@ -170,6 +171,34 @@ def get_category_submissions(user_id, category_id):
     return cat_submissions
 
 ########################################################################################################################
+def get_category_trueskill_params(category_id):
+    try:
+        trueskill_params = AsyncRaceTrueSkillParams.select().where(
+            AsyncRaceTrueSkillParams.category_id == category_id).get()
+    except:
+        trueskill_params = None
+    return trueskill_params
+
+########################################################################################################################
+def get_racer_trueskill_params(category_id, user_id):
+    try:
+        trueskill_params = AsyncRaceTrueSkillRacerParams.select().where(
+            (AsyncRaceTrueSkillRacerParams.category_id == category_id) &
+            (AsyncRaceTrueSkillRacerParams.user_id == user_id)).get()
+    except:
+        trueskill_params = None
+    return trueskill_params
+
+########################################################################################################################
+def get_race_draw_threshold(category_id):
+    try:
+        draw_threshold = AsyncRaceCategoryDrawThreshold.select().where(
+            AsyncRaceCategoryDrawThreshold.category_id == category_id).get()
+    except:
+        draw_threshold = None
+    return draw_threshold
+
+########################################################################################################################
 # Other Utility Functions
 #####################################################################################################################
 # Returns the current date/time in the format used in the database
@@ -320,6 +349,14 @@ def calculate_par_time(submissions):
     par_time = float(total_seconds / times_to_average)
 
 ########################################################################################################################
+def get_draw_threshold_seconds(category_id):
+    # The default cutoff for a tie is within 2 seconds if there is not one  specified by the category
+    draw_threshold_seconds = 2
+    draw_threshold = get_race_draw_threshold(race.category_id.id)
+    if draw_threshold is None:
+        draw_threshold_seconds = draw_threshold.draw_threshold_seconds
+
+########################################################################################################################
 def score_race(race):
     match race.category_id.points_type:
         case PointsType.NoScoring:
@@ -397,35 +434,58 @@ def score_trueskill_race(race):
     submissions = get_sorted_race_submissions(race.id)
 
     # Setup Trueskill environment
-    # Get this category default values from DB
-    # mu, sigma, draw_chance = get_db_trueskill_env
-    # env = Trueskill(mu=mu, sigma=sigma, draw_probability=draw_chance)
+    # Get this category's trueskill params from DB
+    trueskill_params = get_category_trueskill_params(race.category_id.id)
+    if trueskill_params is not None:
+        env = Trueskill(mu=trueskill_params.mu,
+                        sigma=trueskill_params.sigma,
+                        draw_probability=trueskill_params.draw_chance)
 
-    # Create a list of rating objects matching the submissions
-    rating_dict = {}
-    for s in submissions:
-        player_rating = None
-        # Lookup this racer's category data
-        # racer_mu, racer_sigma = get_racer_trueskill()
-        # player_rating = env.create_rating(mu=racer_mu, sigma=racer_sigma)
+        # Create a list of rating objects matching the submissions
+        rating_dict = {}
+        for s in submissions:
+            player_rating = None
 
-        # If the player doesn't exist in this category yet, create a new player rating
-        # player_rating = env.create_rating()
+            # Lookup this racer's category data
+            player_params = get_racer_trueskill_params(race.category_id.id, s.user_id)
+            if player_params is not None:
+                player_rating = env.create_rating(mu=player_params.mu, sigma=player_params.sigma)
+            else:
+                # If the player doesn't exist in this category yet, create a new player rating
+                player_rating = env.create_rating()
 
-        rating_dict[s.user_id] = player_rating
+            rating_dict[s.user_id] = player_rating
 
-    # Rate the race
-    new_rates = env.rate(rating_list)
+        # Rate the race
+        new_rates = env.rate(rating_dict)
 
-    # Now walk the submission list again and update the rating. The points for this race
-    # represents a snapshot of the rating at this point in time. The category points is the
-    # most current rating
-    for s in submissions:
-        s.points = rating_list[s.user_id]
+        # Now walk the submission list again and update the ratings.
+        for s in submissions:
+            # The points for this race represents a snapshot of the rating at this point in time. 
+            s.points = new_rates[s.user_id].mu
+            s.save()
 
-        cat_points = get_create_category_points(race.category_id.id, s.user_id)
-        cat_points.points = s.points
-        cat_points.save()
+            # The category points is the most up to date rating
+            cat_points = get_create_category_points(race.category_id.id, s.user_id)
+            cat_points.points = new_rates[s.user_id].mu
+            cat_points.save()
+
+            # Finally save the updated, underlying trueskill params
+            update_create_trueskill_racer_params(race.category_id.id,
+                                                 s.user_id,
+                                                 new_rates[s.user_id].mu,
+                                                 new_rates[s.user_id].sigma)
+
+########################################################################################################################
+def update_create_trueskill_racer_params(category_id, user_id, mu, sigma):
+    player_params = get_racer_trueskill_params(category_id, user_id)
+    if player_params is None:
+        player_params = AsyncRaceTrueSkillRacerParams()
+        player_params.category_id = category_id
+        player_params.user_id = user_id
+    player_params.mu = mu
+    player_params.sigma = sigma
+    player_params.save()
 
 ########################################################################################################################
 def score_par_time_race(race):
@@ -464,14 +524,12 @@ def score_par_time_race(race):
 def score_fixed_points_race(race):
     submissions = get_sorted_race_submissions(race.id)
 
+    draw_threshold_seconds = get_draw_threshold_seconds(race.category_id.id)
+
     # Fixed points is designed for 1v1 races only, so we'll just check for a tie
     # and then assign points
     if len(submissions) > 1:
-        # The default cutoff for a tie is within 2 seconds
-        ### ==TODO== ###
-        #   Add tie threshold to DB and make configurable
-        tie_threshold = 2
-        if is_tie(submissions[0].finish_time, submissions, tie_threshold):
+        if is_tie(submissions[0].finish_time, submissions, draw_threshold_seconds):
             submissions[0].points = 1
             submissions[0].save()
             cat_points = get_create_category_points(race.category_id.id, submissions[0].user_id)

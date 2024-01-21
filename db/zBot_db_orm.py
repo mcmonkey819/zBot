@@ -157,17 +157,37 @@ class AsyncRaceCategoryPoints(Model):
         table_name = 'async_race_category_points'
         database = db
 
-class AsyncRaceCategoryPointParams(Model):
-    id                    = IntegerField(primary_key= True)
-    category_id           = ForeignKeyField(AsyncRaceCategory, backref='extra_info_assignments', null=True)
-    trueskill_mu          = FloatField()
-    trueskill_sigma       = FloatField()
-    trueskill_draw_chance = FloatField()
-    fixed_draw_threshold  = IntegerField()
+class AsyncRaceTrueSkillParams(Model):
+    id          = IntegerField(primary_key= True)
+    category_id = ForeignKeyField(AsyncRaceCategory, backref='true_skill_params', null=True)
+    mu          = FloatField()
+    sigma       = FloatField()
+    draw_chance = FloatField()
 
     class Meta:
-        table_name = 'async_race_category_point_params'
+        table_name = 'async_race_true_skill_params'
         database = db
+
+class AsyncRaceTrueSkillRacerParams(Model):
+    id          = IntegerField(primary_key= True)
+    category_id = ForeignKeyField(AsyncRaceCategory, backref='true_skill_params', null=True)
+    user_id     = IntegerField()
+    mu          = FloatField()
+    sigma       = FloatField()
+
+    class Meta:
+        table_name = 'async_race_true_skill_racer_params'
+        database = db
+
+class AsyncRaceCategoryDrawThreshold(Model):
+    id                     = IntegerField(primary_key= True)
+    category_id            = ForeignKeyField(AsyncRaceCategory, backref='draw_threshold', null=True)
+    draw_threshold_seconds = FloatField()
+
+    class Meta:
+        table_name = 'async_race_category_draw_threshold'
+        database = db
+
 
 ####################################################################################################################
 # Deletes all existing tables, then recreates them.
@@ -183,7 +203,9 @@ def drop_add_db_tables():
         AsyncRaceExtraInfo,
         AsyncRaceExtraInfoAssignment,
         AsyncRaceCategoryPoints,
-        AsyncRaceCategoryPointParams])
+        AsyncRaceTrueSkillParams,
+        AsyncRaceTrueSkillRacerParams,
+        AsyncRaceCategoryDrawThreshold])
     add_db_tables()
 
 ####################################################################################################################
@@ -200,12 +222,15 @@ def add_db_tables():
         AsyncRaceExtraInfo,
         AsyncRaceExtraInfoAssignment,
         AsyncRaceCategoryPoints,
-        AsyncRaceCategoryPointParams])
+        AsyncRaceTrueSkillParams,
+        AsyncRaceTrueSkillRacerParams,
+        AsyncRaceCategoryDrawThreshold])
 
 ####################################################################################################################
 # Recreates the indicated table
 def recreate_table(table_name):
     logging.info(f"Attempting to recreate DB Table: {table_name}")
+    result = True
     match table_name:
         case "AsyncRaceServer":
             db.drop_tables([AsyncRaceServer])
@@ -237,8 +262,16 @@ def recreate_table(table_name):
         case "AsyncRaceCategoryPoints":
             db.drop_tables([AsyncRaceCategoryPoints])
             db.create_tables([AsyncRaceCategoryPoints])
-        case "AsyncRaceCategoryPointParams":
-            db.drop_tables([AsyncRaceCategoryPointParams])
-            db.create_tables([AsyncRaceCategoryPointParams])
+        case "AsyncRaceTrueSkillParams":
+            db.drop_tables([AsyncRaceTrueSkillParams])
+            db.create_tables([AsyncRaceTrueSkillParams])
+        case "AsyncRaceTrueSkillRacerParams":
+            db.drop_tables([AsyncRaceTrueSkillRacerParams])
+            db.create_tables([AsyncRaceTrueSkillRacerParams])
+        case "AsyncRaceCategoryDrawThreshold":
+            db.drop_tables([AsyncRaceCategoryDrawThreshold])
+            db.create_tables([AsyncRaceCategoryDrawThreshold])
         case _:
             logging.info(f"Unrecognized table name {table_name}")
+            result = False
+    return result

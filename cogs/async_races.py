@@ -543,6 +543,23 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             await self.cleanup_server_bot_messages(interaction.guild)
             await send_message(interaction, "Done!")
 
+    ####################################################################################################################
+    @async_admin.subcommand(description="For development purposes only, creates/recreates the specified database table")
+    async def recreate_db_table(
+        self,
+        interaction,
+        table_name: str):
+
+        # Only allow this function in test mode for now
+        if self.test_mode:
+            result = recreate_table(table_name)
+            if result:
+                await send_message(interaction, f"Successfully recreated {table_name}")
+            else:
+                await send_message(interaction, f"ERROR: {table_name} not recognized")
+        else:
+            await send_message(interaction, "Command only available in test mode")
+
 ########################################################################################################################
 # ASYNC_RACE
 ########################################################################################################################
