@@ -239,7 +239,7 @@ def get_category_select_list(server_id):
 #####################################################################################################################
 def get_race_select_list(server_id):
     # Get the list of race for this server
-    races = AsyncRace.select().where(AsyncRace.server_id == server_id)
+    races = AsyncRace.select().where(AsyncRace.server_id == server_id).order_by(AsyncRace.create_datetime.desc())
 
     # Populate the SelectOption list with the race information
     select_list = []

@@ -10,11 +10,6 @@ from db.zBot_db_orm import *
 from db.db_util import *
 from ui.ui_util import *
 
-####################################################################################################################
-async def post_race_info_message(race, channel):
-    msg_text, seed_embed = get_race_info_message(race)
-    return await channel.send(msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
-
 ########################################################################################################################
 # Category Moderation
 ########################################################################################################################
@@ -1001,3 +996,34 @@ class zRaceInfoButtonView(nextcord.ui.View):
     @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='🥇 Leaderboard')
     async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         await display_ephemeral_leaderboard(interaction, self.race_id)
+
+#################################################################################################################
+async def pin_race_info(channel_id, race, interaction):
+    # Get the channel
+    server = get_server_from_interaction(interaction)
+    channel = server.get_channel(channel_id)
+
+    if channel is not None:
+        msg = await post_race_info_message(race, channel)
+
+        # Create a new AsyncRaceMessage with the race info message info
+        new_db_msg = AsyncRaceMessage()
+        new_db_msg.server_id = interaction.guild_id
+        new_db_msg.channel_id = channel_id
+        new_db_msg.message_id = msg.id
+        new_db_msg.save()
+
+        # Update the race with the new race info message id
+        old_db_msg_id = race.race_info_message
+        race.race_info_message = new_db_msg.id
+        race.save()
+
+        # Finally delete the old message if it exists
+        await delete_message(server, old_db_msg_id)
+    else:
+        logging.info(f"Could not find channel with id {channel_id}")
+
+####################################################################################################################
+async def post_race_info_message(race, channel):
+    msg_text, seed_embed = get_race_info_message(race)
+    return await channel.send(msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
