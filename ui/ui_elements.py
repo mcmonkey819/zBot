@@ -2,9 +2,16 @@
 import asyncio
 from datetime import datetime, date
 import logging
-from nextcord.ext import commands
+from typing import Optional, Union
+from nextcord.emoji import Emoji
+from nextcord.enums import ButtonStyle
+from nextcord.ext import commands, menus
 import nextcord
 import re
+
+from nextcord.ext.menus.constants import DEFAULT_TIMEOUT
+from nextcord.interactions import Interaction
+from nextcord.partial_emoji import PartialEmoji
 
 from db.zBot_db_orm import *
 from db.db_util import *
@@ -15,10 +22,7 @@ from ui.ui_util import *
 ########################################################################################################################
 # Modal which has fields required to create/edit a category
 class zCategoryAddEditModal(zModal):
-    def __init__(self, category_id=None):
-        # Lookup the category if an ID was provided
-        category = get_category(category_id)
-
+    def __init__(self, category=None):
         # Save the category for later reference in the submit handler
         self.category = category
 
@@ -64,61 +68,9 @@ class zCategoryAddEditModal(zModal):
                     continue
         try:
             self.category.save()
+            await send_message(interaction, f"Saved category {self.category.name}")
         except:
             await send_message(interaction, f"FAILED to save category {self.category.name}")
-
-        # Ask the user if they'd like to associate a role with this category
-        server = get_server_from_interaction(interaction)
-        self.role_select_list = [
-            nextcord.SelectOption(
-                label="None...",
-                value=-1,
-                description="No role will be associated with this category"),
-            nextcord.SelectOption(
-                label="Create New...",
-                value=-2,
-                description="Bot will create a new role to use specific to this category")
-        ]
-        self.role_select_list += get_role_select_list(server)
-        await send_message(
-            interaction,
-            "Select a role to ping on race creation for this category (or None)",
-            view=zSingleSelectView(self.role_select_list, self.on_create_role_select, "Select Role..."))
-
-    ####################################################################################################################
-    async def on_create_role_select(self, role_id, interaction):
-        if role_id > 0:
-            self.category.create_role = role_id
-        elif role_id == -1:
-            self.category.create_role = None
-        elif role_id == -2:
-            # Create new role
-            server = get_server_from_interaction(interaction)
-            create_role = await server.create_role(name=self.category.name+"Racer")
-            if create_role is not None:
-                self.category.create_role = create_role.id
-        self.category.save()
-
-        # Finally ask about a role to be given to users on submission to a race in this category
-        await send_message(
-            interaction,
-            "Select a role to give to racers when they submit to races for this category (or None)",
-            view=zSingleSelectView(self.role_select_list, self.on_submit_role_select, "Select Role..."))
-
-    ####################################################################################################################
-    async def on_submit_role_select(self, role_id, interaction):
-        if role_id > 0:
-            self.category.submit_role = role_id
-        elif role_id == -1:
-            self.category.submit_role = None
-        elif role_id == -2:
-            # Create new role
-            server = get_server_from_interaction(interaction)
-            submit_role = await server.create_role(name=self.category.name+"Done")
-            if submit_role is not None:
-                self.category.submit_role = submit_role.id
-        self.category.save()
-        await send_message(interaction, f"Saved category {self.category.name}")
 
 ########################################################################################################################
 # View which contains server admin buttons
@@ -205,7 +157,8 @@ class zCategoryModView(nextcord.ui.View):
 
     async def on_category_select(self, category_id, interaction):
         # Create and send Edit Category modal
-        await interaction.response.send_modal(zCategoryAddEditModal(category_id))
+        category = get_category(category_id)
+        await interaction.response.send_modal(zCategoryAddEditModal(category))
 
     ####################################################################################################################
     @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='➕ Add Submit Info Type')
@@ -323,7 +276,7 @@ class zExtraInfoTypeAddEditModal(zModal):
                     continue
 
         # Send a Select with options for the variable type
-        vartype_select_view = zSingleSelectView(VarType.SelectOptionList, self.on_vartype_select, "Choose Data Type...")
+        vartype_select_view = zSingleSelectView(VarType.SelectOptionList.copy(), self.on_vartype_select, "Choose Data Type...")
         await send_message(interaction, view=vartype_select_view)
 
     async def on_vartype_select(self, vartype, interaction):
@@ -583,7 +536,7 @@ class zRaceModView(nextcord.ui.View):
     #################################################################################################################
     async def update_race_state(self, interaction):
         # Send race state select
-        select_list = RaceState.SelectOptionList
+        select_list = RaceState.SelectOptionList.copy()
         for s in select_list:
             if s.value == self.race.state:
                 s.default = True
@@ -1027,3 +980,4 @@ async def pin_race_info(channel_id, race, interaction):
 async def post_race_info_message(race, channel):
     msg_text, seed_embed = get_race_info_message(race)
     return await channel.send(msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
+

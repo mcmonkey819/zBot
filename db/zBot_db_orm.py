@@ -63,6 +63,8 @@ class AsyncRaceCategory(Model):
     create_role             = IntegerField(null=True)
     submit_role             = IntegerField(null=True)
     points_type             = IntegerField(null=True)
+    leaderboard_channel     = IntegerField(null=True)
+    leaderboard_message     = IntegerField(null=True) #ForeignKeyField(AsyncRaceMessage, backref='categories', null=True)
 
     class Meta:
         table_name = 'async_race_categories'

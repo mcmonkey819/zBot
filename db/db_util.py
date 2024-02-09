@@ -1,7 +1,6 @@
 from datetime import datetime, date
 import logging
 import nextcord
-import elo
 import trueskill
 
 from db.zBot_db_orm import *
@@ -33,14 +32,14 @@ class RaceState:
 class PointsType:
     NoScoring = 0
     MarioKart = 1
-    Elo       = 2
+    Trueskill = 2
     ParTime   = 3
     Fixed     = 4
 
     SelectOptionList = [
         nextcord.SelectOption(label="No Scoring", value=NoScoring, description="Do not assign points for races in this category"),
         nextcord.SelectOption(label="MarioKart",  value=MarioKart, description="Mario Kart style scoring"),
-        nextcord.SelectOption(label="ELO",        value=Elo,       description="ELO scoring"),
+        nextcord.SelectOption(label="Trueskill",  value=Trueskill, description="Trueskill scoring"),
         nextcord.SelectOption(label="Par Time",   value=ParTime,   description="Scoring based on par time calculated from top finishers"),
         nextcord.SelectOption(label="Fixed",      value=Fixed,     description="3 points for a win, 1 point for a tie or close loss (configurable)"),
     ]
@@ -169,6 +168,24 @@ def get_category_submissions(user_id, category_id):
     cat_submissions = AsyncRaceSubmission.select().join(AsyncRace).where(
         (AsyncRaceSubmission.user_id == user_id) & (AsyncRace.category_id == category_id))
     return cat_submissions
+
+########################################################################################################################
+def get_category_races(category_id):
+    races = AsyncRace.select().where(AsyncRace.category_id == category_id)
+    return races
+
+########################################################################################################################
+def get_category_points(category_id):
+    points = AsyncRaceCategoryPoints.select().where(AsyncRaceCategoryPoints.category_id == category_id)
+    return points
+
+########################################################################################################################
+def get_category_points_by_id(points_id):
+    try:
+        points = AsyncRaceCategoryPoints.select().where(AsyncRaceCategoryPoints.id == points_id).get()
+    except:
+        points = None
+    return points
 
 ########################################################################################################################
 def get_category_trueskill_params(category_id):

@@ -121,7 +121,7 @@ async def get_permitted_channel_select_list(user_id, server):
 
 #####################################################################################################################
 def get_role_select_list(server):
-    select_list = []
+    select_list = [nextcord.SelectOption(label="None..", value=0, description="No Role Desired")]
     for r in server.roles:
         select_list.append(nextcord.SelectOption(label=r.name, value=r.id, description=r.name))
     return select_list
@@ -372,7 +372,9 @@ class zModal(nextcord.ui.Modal):
             self.add_item(v)
 
     async def callback(self, interaction: nextcord.Interaction) -> None:
-        await self.submit_handler(interaction, self)
+        if self.submit_handler is not None:
+            await self.submit_handler(interaction, self)
+        self.stop()
 
 #####################################################################################################################
 # This Select (drop down selection) will display a drop down with the string options provided. This variant will
@@ -413,8 +415,52 @@ class zSingleSelect(nextcord.ui.Select):
 class zSingleSelectView(nextcord.ui.View):
     def __init__(self, select_list: SelectList, submit_handler, placeholder = None):
         super().__init__(timeout=None)
-        self.select = zSingleSelect(select_list, submit_handler, placeholder)
+        self.selected_value = None
+        self.submit_handler = submit_handler
+        self.select = zSingleSelect(select_list, self.save_selected_value, placeholder)
         self.add_item(self.select)
+
+    async def save_selected_value(self, value, interaction):
+        self.interaction = interaction
+        self.selected_value = value
+        if self.submit_handler is not None:
+            await self.submit_handler(value, interaction)
+        self.stop()
+
+    def get_selected_value(self):
+        return self.selected_value
+    
+    def get_interaction(self):
+        return self.interaction
+    
+#####################################################################################################################
+# View which contains a zSingleSelect and confirm/cancel buttons
+class zSingleSelectConfirmView(nextcord.ui.View):
+    def __init__(self, select_list: SelectList, placeholder = None):
+        super().__init__(timeout=None)
+        self.selected_value = None
+        self.interaction = None
+        self.select = zSingleSelect(select_list, self.save_selected_value, placeholder)
+        self.add_item(self.select)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='❌ Cancel', row=2)
+    async def cancel_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        self.selected_value = None
+        self.stop()
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='➡️️ Continue', row=2)
+    async def continue_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        self.interaction = interaction
+        self.stop()
+
+    async def save_selected_value(self, value, interaction):
+        self.selected_value = value
+
+    def get_selected_value(self):
+        return self.selected_value
+    
+    def get_interaction(self):
+        return self.interaction
 
 #####################################################################################################################
 # This Select (drop down selection) will display a drop down with the string options provided. This variant will
@@ -438,8 +484,23 @@ class zMultiSelect(nextcord.ui.Select):
 class zMultiSelectView(nextcord.ui.View):
     def __init__(self, select_list: SelectList, max_values: int, submit_handler, placeholder = None):
         super().__init__(timeout=None)
-        self.category_select = zMultiSelect(select_list, max_values, submit_handler, placeholder)
+        self.selected_value = None
+        self.submit_handler = submit_handler
+        self.category_select = zMultiSelect(select_list, max_values, self.save_selected_value, placeholder)
         self.add_item(self.category_select)
+
+    async def save_selected_value(self, value, interaction):
+        self.interaction = interaction
+        self.selected_value = value
+        if self.submit_handler is not None:
+            await self.submit_handler(value, interaction)
+        self.stop()
+
+    def get_selected_value(self):
+        return self.selected_value
+    
+    def get_interaction(self):
+        return self.interaction
 
 ########################################################################################################################
 # View which contains buttons for continuing or cancelling

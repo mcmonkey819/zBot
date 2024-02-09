@@ -6,10 +6,13 @@ General Stuff
     [X] - Added defer function, it cannot be used when a modal is being sent
     [ ] - Add defer to all relevant locations
 [X] - Database conversion script
+[ ] - Move impl code in UI classes to make testing easier
 [ ] - Convert code block to embed
     [ ] - Detailed message with buttons under the embed
 [ ] - Test on BTT with Forty bonks DB data
 [ ] - Create test plan
+[ ] - Add manual update leaderboard button/action
+[ ] - Recreating the category table with leaderboard message as ForeignKeyField
 
 Race Moderation
 -------------------------------------------------------
@@ -29,6 +32,7 @@ Racer Actions
 BR support
 -------------------------------------------------------
 [X] - Assign Category points on race end
+[ ] - Add button/help to explain the scoring methods
 [ ] - Display Category Leaderboard
 [X] - Function to calculate points for a race
     [X] - NULL

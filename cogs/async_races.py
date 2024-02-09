@@ -6,6 +6,7 @@ import re
 import asyncio
 import config.bot_config as bot_config
 from ui.ui_elements import *
+from ui.menus import *
 
 class AsyncRaces(commands.Cog, name='AsyncRaces'):
     '''Cog which handles commands related to Async Races.'''
@@ -559,6 +560,19 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 await send_message(interaction, f"ERROR: {table_name} not recognized")
         else:
             await send_message(interaction, "Command only available in test mode")
+
+    ####################################################################################################################
+    @async_admin.subcommand(description="Menu test")
+    async def test_menu(
+        self,
+        interaction,
+        type: int = nextcord.SlashOption(required=False, default=0, choices={"Category": 0, "Race": 1}),
+        id: int = 0):
+        
+        if type == 0:
+            await send_category_menu(interaction, 10 if id == 0 else id)
+        elif type == 1:
+            await send_race_menu(interaction, 466 if id == 0 else id)
 
 ########################################################################################################################
 # ASYNC_RACE
