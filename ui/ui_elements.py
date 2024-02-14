@@ -69,6 +69,7 @@ class zCategoryAddEditModal(zModal):
         try:
             self.category.save()
             await send_message(interaction, f"Saved category {self.category.name}")
+            self.stop()
         except:
             await send_message(interaction, f"FAILED to save category {self.category.name}")
 
@@ -399,6 +400,7 @@ class zRaceAddEditModal(zModal):
                 a.save()
 
         await send_message(interaction, "Race Info Saved")
+        self.stop()
 
 ########################################################################################################################
 # Race Mod buttons: Edit Race Info, Edit Category/Role/Leaderboard Channel, Change Race State, Pin Race Info
@@ -973,8 +975,10 @@ async def pin_race_info(channel_id, race, interaction):
 
         # Finally delete the old message if it exists
         await delete_message(server, old_db_msg_id)
+        return True
     else:
         logging.info(f"Could not find channel with id {channel_id}")
+        return False
 
 ####################################################################################################################
 async def post_race_info_message(race, channel):

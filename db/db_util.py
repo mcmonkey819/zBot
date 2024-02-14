@@ -111,6 +111,14 @@ def get_race_submission(user_id, race_id):
     return submission
 
 ########################################################################################################################
+def get_race_submission_by_id(submission_id):
+    try:
+        submission = AsyncRaceSubmission.select().where(AsyncRaceSubmission.id == submission_id).get()
+    except:
+        submission = None
+    return submission
+
+########################################################################################################################
 def get_race_message(message_id):
     try:
         msg = AsyncRaceMessage().select().where(
@@ -136,7 +144,7 @@ def get_assigned_racers(race_id):
 
 ########################################################################################################################
 def get_open_races(server_id):
-    races = AsyncRace.select().where(AsyncRace.server_id == server_id)
+    races = AsyncRace.select().where(AsyncRace.server_id == server_id).order_by(AsyncRace.create_datetime.desc())
     ret_list = []
     for r in races:
         # An open race is a race that does NOT have assignments
@@ -145,10 +153,31 @@ def get_open_races(server_id):
     return ret_list
 
 ########################################################################################################################
-def get_assigned_races(user_id, server_id):
-    return AsyncRace.select().join(AsyncRaceRoster).where(
+def get_assigned_races(user_id, server_id, states=[RaceState.Active, RaceState.Completed]):
+    races = AsyncRace.select().join(AsyncRaceRoster).where(
         (AsyncRaceRoster.user_id == user_id) &
-        (AsyncRace.server_id == server_id))
+        (AsyncRace.server_id == server_id)).order_by(AsyncRace.create_datetime.desc())
+    
+    if RaceState.Inactive not in states:
+        races = list(filter(lambda r: r.state != RaceState.Inactive, races))
+
+    if RaceState.Active not in states:
+        races = list(filter(lambda r: r.state != RaceState.Active, races))
+
+    if RaceState.Completed not in states:
+        races = list(filter(lambda r: r.state != RaceState.Completed, races))
+
+    return races
+
+########################################################################################################################
+def get_completed_races(user_id, server_id):
+    open_races = get_open_races(server_id)
+    open_races = list(filter(lambda r: r.state == RaceState.Completed, open_races))
+    assigned_races = get_assigned_races(user_id, server_id, states=[RaceState.Completed])
+    
+    races = open_races + assigned_races
+    
+    return races
 
 ########################################################################################################################
 def get_create_category_points(category_id, user_id):
@@ -176,7 +205,9 @@ def get_category_races(category_id):
 
 ########################################################################################################################
 def get_category_points(category_id):
-    points = AsyncRaceCategoryPoints.select().where(AsyncRaceCategoryPoints.category_id == category_id)
+    points = AsyncRaceCategoryPoints.select().where(
+        AsyncRaceCategoryPoints.category_id == category_id).order_by(AsyncRaceCategoryPoints.points.desc())
+
     return points
 
 ########################################################################################################################
@@ -243,9 +274,13 @@ def check_category_assignment_exists(info_type_id, category_id):
     return a is not None
 
 #####################################################################################################################
+def get_categories(server_id):
+    return AsyncRaceCategory.select().where(AsyncRaceCategory.server_id == server_id)
+
+#####################################################################################################################
 def get_category_select_list(server_id):
     # Get the list of categories for this server
-    categories = AsyncRaceCategory.select().where(AsyncRaceCategory.server_id == server_id)
+    categories = get_categories(server_id)
 
     # Populate the SelectOption list with the category information
     select_list = []
@@ -254,11 +289,22 @@ def get_category_select_list(server_id):
     return select_list
 
 #####################################################################################################################
-def get_race_select_list(server_id):
-    # Get the list of race for this server
-    races = AsyncRace.select().where(AsyncRace.server_id == server_id).order_by(AsyncRace.create_datetime.desc())
+def get_race_select_list(server_id: int, include_completed: bool=True):
+    # If a list of races wasn't already provided, get the list of races for this server
+    if include_completed:
+        races = AsyncRace.select().where(AsyncRace.server_id == server_id).order_by(AsyncRace.create_datetime.desc())
+    else:
+        # Get the list of races for this server, ignoring completed races
+        races = AsyncRace.select().where(
+            (AsyncRace.server_id == server_id) &
+            (AsyncRace.state != RaceState.Completed)).order_by(AsyncRace.create_datetime.desc())
 
-    # Populate the SelectOption list with the race information
+    # Return the SelectOption list
+    return create_race_select_list(races)
+
+#####################################################################################################################
+def create_race_select_list(races: list):
+    # Populate a SelectOption list with the race information
     select_list = []
     for r in races:
         select_list.append(nextcord.SelectOption(label=f"{r.id} - {r.description[:15]}", value=r.id, description=r.description))

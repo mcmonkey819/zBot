@@ -46,8 +46,6 @@ class AsyncRaceServer(Model):
     mod_role_id             = IntegerField()
     admin_role_id           = IntegerField()
     server_mod_message      = IntegerField(null=True)
-    category_mod_message    = IntegerField(null=True)
-    race_mod_message        = IntegerField(null=True)
     racer_info_message      = IntegerField(null=True)
     announcement_channel_id = IntegerField(null=True)
 
@@ -63,8 +61,7 @@ class AsyncRaceCategory(Model):
     create_role             = IntegerField(null=True)
     submit_role             = IntegerField(null=True)
     points_type             = IntegerField(null=True)
-    leaderboard_channel     = IntegerField(null=True)
-    leaderboard_message     = IntegerField(null=True) #ForeignKeyField(AsyncRaceMessage, backref='categories', null=True)
+    leaderboard_message     = ForeignKeyField(AsyncRaceMessage, backref='categories', null=True)
 
     class Meta:
         table_name = 'async_race_categories'
@@ -79,8 +76,7 @@ class AsyncRace(Model):
     description             = CharField(null=True)
     additional_instructions = CharField(null=True)
     submit_instructions     = CharField(null=True)
-    category_id             = ForeignKeyField(AsyncRaceCategory, backref='races')
-    active                  = BooleanField(default=False)
+    category_id             = ForeignKeyField(AsyncRaceCategory, backref='races', null=True)
     leaderboard_message     = ForeignKeyField(AsyncRaceMessage, backref='races', null=True)
     race_info_message       = ForeignKeyField(AsyncRaceMessage, backref='races', null=True)
     submission_role         = IntegerField(null=True)

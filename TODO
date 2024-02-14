@@ -2,51 +2,31 @@ General Stuff
 -------------------------------------------------------
 [X] - Edit server settings button to change roles and announcements channel
 [X] - Check permissions  for admin/moderator functions/buttons
-[ ] - Add defer logic
-    [X] - Added defer function, it cannot be used when a modal is being sent
-    [ ] - Add defer to all relevant locations
+[X] - Add defer logic
 [X] - Database conversion script
-[ ] - Move impl code in UI classes to make testing easier
-[ ] - Convert code block to embed
-    [ ] - Detailed message with buttons under the embed
+[X] - Convert code block to embed
 [ ] - Test on BTT with Forty bonks DB data
 [ ] - Create test plan
 [ ] - Add manual update leaderboard button/action
-[ ] - Recreating the category table with leaderboard message as ForeignKeyField
-
-Race Moderation
--------------------------------------------------------
-[X] - Option to ping on new race for category
-[X] - If category has a submit_role, clear the role when a new race in that category is made active
-[X] - Handle more than 25 select entries (*SingleSelect only)
-
-Racer Actions
--------------------------------------------------------
-[X] - Add racer_message field to AsyncRaceServer (including posting/cleanup)
-[ ] - Show race stats
-[X] - Display assigned races
-[X] - Show open races  per category
-[X] - Query open races (no one is assigned) rather than query all races
-[X] - Show race details
-
-BR support
--------------------------------------------------------
-[X] - Assign Category points on race end
-[ ] - Add button/help to explain the scoring methods
-[ ] - Display Category Leaderboard
-[X] - Function to calculate points for a race
-    [X] - NULL
-    [X] - MarioKart
-    [X] - Trueskill
-        [X] - Create table to hold TrueSkill environment values for each category
-        [X] - Fill in the rest of the score function
-    [X] - Par time
-    [X] - Fixed
-        [X] - Add tie/close loss threshold info to DB
-        [X] - What to do for races that aren't 1v1? (answer: nothing for now)
-[ ] - Manual points assignment
-[ ] - Modify category points types
-    [ ] - UI to set tie/close loss margins (and mario kart values?)
+[X] - Recreating the category table with leaderboard message as ForeignKeyField
+[ ] - Add error codes and table in the DB to hold the error
+    Should contain: ID, error code, server ID, user ID, timestamp, error message
+[ ] - Add type hints to everything
+[ ] - Add help commands to moderator menu
+[ ] - UI to set tie/close loss margins (and mario kart values?)
+[ ] - Include points as an editable field in moderator edit submissions
+[ ] - Add "Create New..." option to moderator edit submissions
+[ ] - Update footer for moderator and racer info menus
+[ ] - On shutdown, remove leaderboard and pinned race messages (all messages?)
+[ ] - Implment racer info commands
+    [ ] - Stats
+    [ ] - Open races
+    [ ] - Assigned races
+    [ ] - Categories
+    [ ] - View other racer
+    [ ] - Completed races
+[ ] - Fix race leaderboard display (too many columns)
+[?] - let caller filter assigned/open races list rather than filter in place
 
 Manual DB Conversion Steps
 -------------------------------------------------------
@@ -58,33 +38,4 @@ Optional Stuff
 [?] - Hookup required flag for extra info creation
 [?] - Co-op Support
 [?] - Customize thumbnail image per category
-[?] - Check for error condition before modal create
-    [?] - Add "ValidateInitParams" in zModal class to make this easier?
-[?] - If ping on create, create role allow racers to add role for pinging
-    [?] - Use reactions to select/deselect roles
 
-Done
--------------------------------------------------------
-[X] - Check for race submissions before allowing edit of core race info
-[X] - Assign racers
-[X] - Unpin
-[X] - Query about unpin when pinning a race in the same channel
-[X] - Race submission DB tables
-[X] - Race submission form
-    [X] - Test form
-    [X] - Validate time format
-[X] - Multi-page modal
-[X] - Extra Info on submission
-    [X] - Modify Extra Info table, many-to-one style with fields: submission_id, info_type, value
-    [X] - Add ExtraInfoType
-    [X] - Assign extra info items based on server, category defaults
-    [X] - Edit extra info items on race edit
-    [X] - Add extra info fields to submit modal
-        [X] - Need to have multiple modals to handle >4 items
-    [X] - Set default extra info fields for server and category
-[X] - Save/Restore mod and race info messages
-[X] - Forfeit
-[X] - Leaderboard print
-[X] - Add divider at top of race info message
-[X] - Change state back to active bool
-[X] - Message length handling

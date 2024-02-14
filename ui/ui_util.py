@@ -31,10 +31,8 @@ ModalDataList = dict[str, str]
 SelectList = list[nextcord.SelectOption]
 
 class MessageType(Enum):
-    CATEGORY_MOD = 1
-    RACE_MOD     = 2
-    RACER_INFO   = 3
-    SERVER_MOD   = 4
+    RACER_INFO   = 1
+    SERVER_MOD   = 2
 
 ########################################################################################################################
 # UTILITY FUNCTIONS
@@ -175,8 +173,8 @@ def get_place_str(place):
 
     return place_str
 
-#####################################################################################################################
-async def display_ephemeral_leaderboard(interaction, race_id):
+########################################################################################################################
+def get_race_leaderboard_table(interaction, race_id):
     # Get the race submissions for this race, sorted by finish_time
     race_submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id)
 
@@ -217,10 +215,102 @@ async def display_ephemeral_leaderboard(interaction, race_id):
             table_data.append(table_row)
 
     # Tablulate the submission data
-    table_text = tabulate(table_data, headers="firstrow", showindex=places, tablefmt="double_grid")
+    return tabulate(table_data, headers="firstrow", showindex=places, tablefmt="double_grid")
+
+#####################################################################################################################
+async def display_ephemeral_leaderboard(interaction, race_id):
+    # Get the leaderboard table
+    table_text = get_race_leaderboard_table(interaction, race_id)    
 
     # Send the message
     await send_message(interaction, table_text, ephemeral=True, codeblock=True)
+
+#####################################################################################################################
+async def update_race_leaderboard(interaction, race, channel_id):
+    # Remove the old message if it exists
+    if race.leaderboard_message is not None:
+        server = get_server(race.server_id)
+        await delete_message(race.leaderboard_message.id, False)
+    
+    # Get the leaderboard table
+    table_text = get_race_leaderboard_table(interaction, race.id)
+
+    # Post new leaderboard message
+    guild = get_server_from_interaction(interaction)
+    if guild is None:
+        await send_message(interaction, f"**ERROR** fetching server ID {interaction.guild_id} for race leaderboard update. Please notify a bot admin.")
+        return
+    channel = guild.get_channel(channel_id)
+    new_msg = None
+    if channel is not None:
+        msg_text = f"**Leaderboard for `Race #{race.id}`**\n```\n{table_text}\n```"
+        new_msg = await channel.send(msg_text)
+    else:
+        await send_message(interaction, f"**ERROR** fetching channel ID {channel_id} for race leaderboard update. Please notify a bot admin.")
+        return
+
+    # Update the DB with the new message info
+    if new_msg is not None:
+        if race.leaderboard_message is None:
+            race.leaderboard_message = AsyncRaceMessage(server_id=race.server_id, channel_id=channel_id)
+
+        race.leaderboard_message.message_id = new_msg.id
+        race.leaderboard_message.save()
+        await send_message(interaction, f"Race leaderboard updated for `Race #{race.id}`")
+    else:
+        await send_message(interaction, f"**ERROR** on race leaderboard update for `Race #{race.id}`")
+
+########################################################################################################################
+async def update_category_leaderboard(interaction, category, channel_id):
+    # Get the points list, it comes pre-sorted by points high to low
+    points_list = get_category_points(category.id)
+
+    if points_list is None or len(points_list) == 0:
+        await send_message(interaction, f"Could not update category leaderboard. There are no points logged for Category `{category.name}` Typically this means there are no completed races yet.")
+        return
+    
+    # Remove the old message if it exists
+    if category.leaderboard_message is not None:
+        server = get_server(category.server_id)
+        await delete_message(server, category.leaderboard_message.id, False)
+
+    # Post new leaderboard message
+    guild = get_server_from_interaction(interaction)
+    if guild is None:
+        await send_message(interaction, f"**ERROR** fetching server ID {interaction.guild_id} for category leaderboard update. Please notify a bot admin.")
+        return
+    channel = guild.get_channel(channel_id)
+    new_msg = None
+    if channel is not None:
+        # Initialize the table with the labels row
+        table_data = [["Name", "Points"]]
+        places = []
+
+        for i, p in enumerate(points_list):
+            places.append(get_place_str(i+1))
+            # Get the username
+            user = interaction.client.get_user(p.user_id)
+            username = "" if user is None else user.display_name
+            table_data.append([username, p.points])
+        
+        # Tablulate the data
+        table_text = tabulate(table_data, headers="firstrow", showindex=places, tablefmt="double_grid")
+        msg_text = f"**Leaderboard for `{category.name}` Category**\n```\n{table_text}\n```"
+        new_msg = await channel.send(msg_text)
+    else:
+        await send_message(interaction, f"**ERROR** fetching channel ID {db_msg.channel_id} for category leaderboard update. Please notify a bot admin.")
+        return
+
+    # Update the DB with the new message info
+    if new_msg is not None:
+        if category.leaderboard_message is None:
+            category.leaderboard_message = AsyncRaceMessage(server_id=category.server_id, channel_id=channel_id)
+
+        category.leaderboard_message.message_id = new_msg.id
+        category.leaderboard_message.save()
+        await send_message(interaction, f"Category leaderboard updated for `{category.name}`")
+    else:
+        await send_message(interaction, f"**ERROR** on category leaderboard update for `{category.name}`")
 
 ####################################################################################################################
 # This function breaks a response into multiple messages that meet the Discord API character limit
@@ -385,6 +475,7 @@ class zModal(nextcord.ui.Modal):
 # another zSingleSelct with single_select[24:] slice of the list
 class zSingleSelect(nextcord.ui.Select):
     def __init__(self, select_list: SelectList, submit_handler, placeholder):
+        self.timeout = None
         if len(select_list) > 25:
             self.orig_placeholder = placeholder
             self.orig_select_list = select_list
@@ -430,8 +521,10 @@ class zSingleSelectView(nextcord.ui.View):
     def get_selected_value(self):
         return self.selected_value
     
-    def get_interaction(self):
-        return self.interaction
+    async def prompt(self, interaction: nextcord.Interaction, msg: str = ""):
+        await send_message(interaction, "", view=self)
+        await self.wait()
+        return self.get_selected_value()
     
 #####################################################################################################################
 # View which contains a zSingleSelect and confirm/cancel buttons
@@ -459,9 +552,6 @@ class zSingleSelectConfirmView(nextcord.ui.View):
     def get_selected_value(self):
         return self.selected_value
     
-    def get_interaction(self):
-        return self.interaction
-
 #####################################################################################################################
 # This Select (drop down selection) will display a drop down with the string options provided. This variant will
 # allow the user to select up to `max_values` from the list. On completion it will call the provided submit_handler
@@ -499,9 +589,6 @@ class zMultiSelectView(nextcord.ui.View):
     def get_selected_value(self):
         return self.selected_value
     
-    def get_interaction(self):
-        return self.interaction
-
 ########################################################################################################################
 # View which contains buttons for continuing or cancelling
 class zContinueCancelButtonView(nextcord.ui.View):
@@ -569,10 +656,22 @@ class zUserSelect(nextcord.ui.UserSelect):
 #####################################################################################################################
 # View which contains a zUserSelect
 class zUserSelectView(nextcord.ui.View):
-    def __init__(self, submit_handler, placeholder = None):
+    def __init__(self, submit_handler, placeholder = "Select User..."):
         super().__init__(timeout=None)
-        self.user_select = zUserSelect(submit_handler, placeholder)
+        self.submit_handler = submit_handler
+        self.user_select = zUserSelect(self.on_select, placeholder)
         self.add_item(self.user_select)
+
+    async def on_select(self, user, interaction: nextcord.Interaction):
+        self.selected_user = user
+        if self.submit_handler is not None:
+            await self.submit_handler(user, interaction)
+        self.stop()
+
+    async def prompt(self, interaction: nextcord.Interaction, msg: str = ""):
+        await send_message(interaction, msg, view=self)
+        await self.wait()
+        return self.selected_user
 
 ########################################################################################################################
 # This class is used to display a form that has fields matching the provided item list, using multiple
@@ -635,7 +734,7 @@ class zMultiPageModalSender():
             # If there are still fields to send, send a button message for the user to continue or cancel
             await send_message(
                 interaction,
-                "Additional information required",
+                "Continue to next page or cancel?",
                 view=zContinueCancelButtonView(self.send_modal_page, self.cancel_submit))
         else:
             # Otherwise we're done, so call the originally provided submit handler
