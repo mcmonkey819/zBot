@@ -11,21 +11,21 @@ General Stuff
 [X] - Recreating the category table with leaderboard message as ForeignKeyField
 [ ] - Add error codes and table in the DB to hold the error
     Should contain: ID, error code, server ID, user ID, timestamp, error message
-[ ] - Add type hints to everything
 [ ] - Add help commands to moderator menu
 [ ] - UI to set tie/close loss margins (and mario kart values?)
-[ ] - Include points as an editable field in moderator edit submissions
-[ ] - Add "Create New..." option to moderator edit submissions
-[ ] - Update footer for moderator and racer info menus
-[ ] - On shutdown, remove leaderboard and pinned race messages (all messages?)
-[ ] - Implment racer info commands
-    [ ] - Stats
-    [ ] - Open races
-    [ ] - Assigned races
-    [ ] - Categories
-    [ ] - View other racer
-    [ ] - Completed races
-[ ] - Fix race leaderboard display (too many columns)
+[X] - Include points as an editable field in moderator edit submissions
+[X] - Add "Create New..." option to moderator edit submissions
+[X] - Update footer for moderator and racer info menus
+[X] - On shutdown, remove leaderboard and pinned race messages (all messages?)
+[X] - Implement racer info commands
+    [X] - Stats
+    [X] - Open races
+    [X] - Assigned races
+    [X] - Categories
+    [X] - View other racer
+    [X] - Completed races
+[ ] - Fix race leaderboard display (too many columns) (paginate horizontally *and* vertically?)
+[ ] - Add leaderboard button to category list in racer_info, and to race info view?
 [?] - let caller filter assigned/open races list rather than filter in place
 
 Manual DB Conversion Steps

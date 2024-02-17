@@ -103,7 +103,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                             case MessageType.SERVER_MOD:
                                 new_msg = await self.send_server_mod_message(channel)
                             case _:
-                                logging.info(f"Error: unrecognized MessageType: {message_type}")
+                                logging.info(f"**Error** Unrecognized MessageType: {message_type}")
                                 err = True
                         db_msg.message_id = new_msg.id
                         db_msg.save()
@@ -148,6 +148,13 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             if err:
                 race.race_info_message = None
                 race.save()
+
+    ####################################################################################################################
+    def add_message(self, guild_id, message):
+        if guild_id in self.msg_dict:
+            self.msg_dict[guild_id].append(message)
+        else:
+            self.msg_dict[guild_id] = [message]
 
     ####################################################################################################################
     # Called on start up, recreates the messages posted by the bot for race and category moderation
@@ -218,7 +225,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         await interaction.response.defer(ephemeral=True)
         mod_message = await send_moderator_menu(interaction, mod_channel)
         racer_message = await send_racer_menu(interaction, racer_channel)
-        self.msg_dict[interaction.guild_id] = (mod_message, racer_message)
+        self.msg_dict[interaction.guild_id] = [mod_message, racer_message]
         await send_message(interaction, "Done!", ephemeral=True)
 
     ####################################################################################################################
@@ -229,12 +236,16 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         self.log_command(interaction.user, "SHUTDOWN")
 
         await interaction.response.defer(ephemeral=True)
-        (mod_message, racer_message) = self.msg_dict[interaction.guild_id]
-        if mod_message is not None:
-            await mod_message.delete()
 
-        if racer_message is not None:
-            await racer_message.delete()
+        for m in self.msg_dict[interaction.guild_id]:
+            if m is not None:
+                try:
+                    await m.delete()
+                except:
+                    # If the message no longer exists delete() will throw an exception, but we don't care because we
+                    # were just trying to remove it anyway
+                    pass
+        
         await send_message(interaction, "Done!", ephemeral=True)
     
     ####################################################################################################################

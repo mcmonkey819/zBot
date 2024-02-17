@@ -448,7 +448,7 @@ class zRaceModView(nextcord.ui.View):
             self.race = None
 
         if self.race is None:
-            err_msg = "ERROR: Race not found in DB"
+            err_msg = "**ERROR** Race not found in DB"
             logging.info(err_msg)
             await send_message(interaction, err_msg)
             return
@@ -599,7 +599,7 @@ class zRaceModView(nextcord.ui.View):
                         self.complete_race(interaction)
                 case _:
                     logging.info("  Unknown Race State choice")
-                    await send_message(interaction, "ERROR: Unknown race state chosen. Contact bot admin")
+                    await send_message(interaction, "**ERROR** Unknown race state chosen. Contact bot admin")
 
             # Save the selected state
             self.race.state = race_state
@@ -768,9 +768,11 @@ class zRaceModView(nextcord.ui.View):
 #####################################################################################################################
 # Handles a user race submission action
 class zRaceSubmitHandler():
-    def __init__(self, race_id, submission=None):
+    def __init__(self, race_id, submission=None, include_points=False, user_id=None):
         self.race = get_race(race_id)
         self.submission = submission
+        self.include_points = include_points
+        self.user_id = user_id
 
         # Set the title
         if submission is None:
@@ -784,7 +786,7 @@ class zRaceSubmitHandler():
         # Create the modal fields
         self.fields = [
             zField(custom_id=self.finish_time_id,
-                   label="Enter IGT in format `H:MM:SS`",
+                   label="Enter finish time in format `H:MM:SS`",
                    default_value=submission.finish_time if submission is not None else None,
                    required=True),
             zField(custom_id=self.comment_id,
@@ -792,6 +794,15 @@ class zRaceSubmitHandler():
                    default_value=submission.comment if submission is not None else None,
                    required=False),
         ]
+
+        # Include a points field if it was requested and this category supports scoring
+        self.points_id = "points"
+        if include_points and self.race.category_id.points_type != PointsType.NoScoring:
+            self.fields.append(zField(custom_id=self.points_id,
+                                      label="Points",
+                                      default_value=submission.points if submission is not None else None,
+                                      placeholder="Category points for this submission",
+                                      required=False))
 
         # Add any extra info fields
         for a in self.race.extra_info_assignments:
@@ -820,7 +831,7 @@ class zRaceSubmitHandler():
         if self.submission is None:
             self.submission = AsyncRaceSubmission()
             self.submission.race_id = self.race.id
-            self.submission.user_id = interaction.user.id
+            self.submission.user_id = self.user_id if self.user_id is not None else interaction.user.id
             self.submission.submit_datetime = zBot_now()
 
         msg = f"Submission Info:\n"
@@ -832,6 +843,11 @@ class zRaceSubmitHandler():
                     self.submission.save()
                 case self.comment_id:
                     self.submission.comment = v
+                case self.points_id:
+                    try:
+                        self.submission.points = int(v)
+                    except:
+                        await send_message(interaction, "**ERROR** Points must be an integer")
                 case _:
                     self.save_extra_info(self.fields[i], v)
         msg += f"  Race ID: {self.race.id}"
@@ -960,6 +976,7 @@ async def pin_race_info(channel_id, race, interaction):
 
     if channel is not None:
         msg = await post_race_info_message(race, channel)
+        add_message_to_cleanup_list(interaction, msg)
 
         # Create a new AsyncRaceMessage with the race info message info
         new_db_msg = AsyncRaceMessage()

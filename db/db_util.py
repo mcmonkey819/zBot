@@ -254,24 +254,67 @@ def zBot_now():
     return datetime.now().isoformat(timespec='minutes').replace('T', ' ')
 
 #####################################################################################################################
-def check_server_assignment_exists(info_type_id, server_id):
+def get_server_assignment(info_type_id, server_id):
     try:
         a = AsyncRaceExtraInfoAssignment.select().where(
-            (AsyncRaceExtraInfoAssignment.info_type_id == info_type_id) &
-            (AsyncRaceExtraInfoAssignment.server_id == server_id)).get()
+                (AsyncRaceExtraInfoAssignment.info_type_id == info_type_id) &
+                (AsyncRaceExtraInfoAssignment.server_id == server_id)).get()
     except:
         a = None
-    return a is not None
+    return a
 
 #####################################################################################################################
-def check_category_assignment_exists(info_type_id, category_id):
+def get_category_assignment(info_type_id, category_id):
     try:
         a = AsyncRaceExtraInfoAssignment.select().where(
                 (AsyncRaceExtraInfoAssignment.info_type_id == info_type_id) &
                 (AsyncRaceExtraInfoAssignment.category_id == category_id)).get()
     except:
         a = None
+    return a
+
+#####################################################################################################################
+def get_race_assignment(info_type_id, race_id):
+    try:
+        a = AsyncRaceExtraInfoAssignment.select().where(
+                (AsyncRaceExtraInfoAssignment.info_type_id == info_type_id) &
+                (AsyncRaceExtraInfoAssignment.category_id == race_id)).get()
+    except:
+        a = None
+    return a
+
+#####################################################################################################################
+def check_server_assignment_exists(info_type_id, server_id):
+    a = get_server_assignment(info_type_id, server_id)
     return a is not None
+
+#####################################################################################################################
+def check_category_assignment_exists(info_type_id, category_id):
+    a = get_category_assignment(info_type_id, category_id)
+    return a is not None
+
+#####################################################################################################################
+def check_race_assignment_exists(info_type_id, race_id):
+    a = get_race_assignment(info_type_id, race_id)
+    return a is not None
+
+#####################################################################################################################
+def delete_server_assignment(info_type_id, server_id):
+    a = get_server_assignment(info_type_id, server_id)
+    if a is not None:
+        a.delete_instance()
+
+#####################################################################################################################
+def delete_category_assignment(info_type_id, category_id):
+    a = get_category_assignment(info_type_id, category_id)
+    if a is not None:
+        a.delete_instance()
+
+#####################################################################################################################
+def delete_race_assignment(info_type_id, race_id):
+    a = get_race_assignment(info_type_id, race_id)
+    if a is not None:
+        a.delete_instance()
 
 #####################################################################################################################
 def get_categories(server_id):
@@ -369,7 +412,7 @@ def finish_time_sort_key(submission):
 ########################################################################################################################
 # Used to sort submissions by score
 def score_sort_key(submission):
-    return s.score
+    return submission.score
 
 ########################################################################################################################
 def get_sorted_race_submissions(race_id, reverse=False):
@@ -381,6 +424,10 @@ def get_sorted_race_submissions(race_id, reverse=False):
 
     # Return the list, sorted by finish time
     return sorted(submissions, key=finish_time_sort_key, reverse=reverse)
+
+########################################################################################################################
+def get_num_submissions(race_id):
+    return AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id).count()
 
 ########################################################################################################################
 def is_tie(finish_time_a, finish_time_b, tie_threshold_seconds=2):
@@ -610,4 +657,12 @@ def score_fixed_points_race(race):
             cat_points = get_create_category_points(race.category_id.id, submissions[0].user_id)
             cat_points.points += submissions[0].points
             cat_points.save()
+
+########################################################################################################################
+def get_user_place(race_id, user_id):
+    submissions = get_sorted_race_submissions(race_id)
+    for i, s in enumerate(submissions):
+        if s.user_id == user_id:
+            return i+1
+
 

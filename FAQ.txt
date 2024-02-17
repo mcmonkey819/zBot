@@ -4,10 +4,8 @@ FAQ
 
 Race Moderation
 =====================================================================
-Q - Why can't I see the Edit Race Info or Edit Extra Info options for Manage Race?
-A - If there are already submissions to a race then these options are unavailable. In this case a new race should be created with the correct information. Remember to notify the racers who have already submitted so they can resubmit their time (if it's still applicable)
+Q - How can I force an update to the race or category leaderboard?
+A - Choose the option to edit the leaderboard channel and select the same channel
 
-Q - Why is there no option to assign racers for Manage Race?
-A - It is likely that the race is marked as active. Only inactive races with no submissions can be assigned.
 
 
