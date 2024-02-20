@@ -173,10 +173,10 @@ class zRaceListMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
 
         # Add the page buttons if there's more than one page
         if self.source.get_max_pages() > 1:
-            self.add_item(AsyncRaceButton(MenuItem('↩️', self.go_to_first_page, 'first_page', 'First Page', 'Go to the first page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
-            self.add_item(AsyncRaceButton(MenuItem('⬅️', self.go_to_previous_page, 'previous_page', 'Previous Page', 'Go to the previous page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
-            self.add_item(AsyncRaceButton(MenuItem('➡️', self.go_to_next_page, 'next_page', 'Next Page', 'Go to the next page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
-            self.add_item(AsyncRaceButton(MenuItem('↪️', self.go_to_last_page, 'last_page', 'Last Page', 'Go to the last page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
+            self.add_item(AsyncRaceButton(MenuItem(FirstPageEmoji, self.go_to_first_page, 'first_page', 'First Page', 'Go to the first page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
+            self.add_item(AsyncRaceButton(MenuItem(PreviousPageEmoji, self.go_to_previous_page, 'previous_page', 'Previous Page', 'Go to the previous page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
+            self.add_item(AsyncRaceButton(MenuItem(NextPageEmoji, self.go_to_next_page, 'next_page', 'Next Page', 'Go to the next page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
+            self.add_item(AsyncRaceButton(MenuItem(LastPageEmoji, self.go_to_last_page, 'last_page', 'Last Page', 'Go to the last page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
 
     def update_buttons(self, races, emojis=None):
         # Update the race buttons
@@ -226,10 +226,10 @@ class zCategoryListMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
 
         # Add the page buttons if there's more than one page
         if self.source.get_max_pages() > 1:
-            self.add_item(AsyncRaceButton(MenuItem('↩️', self.go_to_first_page, 'first_page', 'First Page', 'Go to the first page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
-            self.add_item(AsyncRaceButton(MenuItem('⬅️', self.go_to_previous_page, 'previous_page', 'Previous Page', 'Go to the previous page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
-            self.add_item(AsyncRaceButton(MenuItem('➡️', self.go_to_next_page, 'next_page', 'Next Page', 'Go to the next page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
-            self.add_item(AsyncRaceButton(MenuItem('↪️', self.go_to_last_page, 'last_page', 'Last Page', 'Go to the last page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
+            self.add_item(AsyncRaceButton(MenuItem(FirstPageEmoji, self.go_to_first_page, 'first_page', 'First Page', 'Go to the first page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
+            self.add_item(AsyncRaceButton(MenuItem(PreviousPageEmoji, self.go_to_previous_page, 'previous_page', 'Previous Page', 'Go to the previous page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
+            self.add_item(AsyncRaceButton(MenuItem(NextPageEmoji, self.go_to_next_page, 'next_page', 'Next Page', 'Go to the next page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
+            self.add_item(AsyncRaceButton(MenuItem(LastPageEmoji, self.go_to_last_page, 'last_page', 'Last Page', 'Go to the last page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
 
     def update_buttons(self, categories, emojis=None):
         # Update the category leaderboard buttons
@@ -253,7 +253,7 @@ class zCategoryListMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
 # Category Menu Functions
 ########################################################################################################################
 async def create_edit_category_command(interaction, payload):
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
     # Get a list of categories
     select_list = get_category_select_list(interaction.guild_id)
     
@@ -297,7 +297,7 @@ async def category_delete(interaction, category):
 
 ########################################################################################################################
 async def category_edit_scoring(interaction, category):
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
 
     select_list = copy.deepcopy(PointsType.SelectOptionList)
     if category.points_type is None:
@@ -316,7 +316,7 @@ async def category_edit_scoring(interaction, category):
 
 ########################################################################################################################
 async def category_edit_submit_role(interaction, category):
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
 
     # Prompt for the desired role
     selected_role = await prompt_for_role(interaction)
@@ -328,7 +328,7 @@ async def category_edit_submit_role(interaction, category):
 
 ########################################################################################################################
 async def category_edit_create_role(interaction, category):
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
 
     # Prompt for the desired role
     selected_role = await prompt_for_role(interaction)
@@ -339,7 +339,7 @@ async def category_edit_create_role(interaction, category):
 
 ########################################################################################################################
 async def category_edit_leaderboard_channel(interaction, category):
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
 
     logging.info(f"category_edit_leaderboard_channel: {category.leaderboard_channel}")
 
@@ -377,7 +377,7 @@ async def category_edit_leaderboard_channel(interaction, category):
 
 ########################################################################################################################
 async def category_edit_points(interaction, category):
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
 
     # Find racers who have submissions for this category
     points_list = get_category_points(category.id)
@@ -447,7 +447,7 @@ async def category_assign_extra_info(interaction, category):
 # Race Menu Functions
 ########################################################################################################################
 async def create_edit_race_command(interaction, payload):
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
     # Get a list of races
     select_list = get_race_select_list(interaction.guild_id)
     
@@ -492,7 +492,7 @@ async def race_edit_core(interaction, race):
 
 ########################################################################################################################
 async def race_delete(interaction, race):
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
 
     # We can only delete a race if it's inactive and has no submissions
     has_submissions = race_has_submissions(race.id)
@@ -580,7 +580,7 @@ async def race_pin(interaction, race):
 
 ########################################################################################################################
 async def race_edit_submit_role(interaction, race):
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
 
     # Prompt for the desired role
     selected_role = await prompt_for_role(interaction)
@@ -591,7 +591,7 @@ async def race_edit_submit_role(interaction, race):
 
 ########################################################################################################################
 async def race_edit_leaderboard_channel(interaction, race):
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
 
     # Prompt for the desired channel
     selected_channel = await prompt_for_channel(interaction)
@@ -678,8 +678,7 @@ async def on_select_user_edit_submission(select_data, interaction):
 
 ########################################################################################################################
 async def create_edit_extra_info(interaction, payload):
-    pass
-    await interaction.response.defer(ephemeral=True, with_message=True)
+    await defer(interaction)
     # Get a list of extra info types
     select_list = get_extra_info_type_select_list(interaction.guild_id)
     
@@ -697,6 +696,15 @@ async def on_select_create_edit_extra_info(extra_info_id, interaction):
     modal = zExtraInfoTypeAddEditModal(extra_info_id)
     await interaction.response.send_modal(modal)
 
+########################################################################################################################
+async def mod_menu_help(interaction, payload):
+    # Create and display the help button menu
+    title = "Racer Moderation Help"
+    description = f"Use the buttons below to view help information for the various racer moderation functions."
+    footer = "For questions or support not covered in the help topics, please contact a bot admin."
+    menu = RaceButtonMenu(None, RaceModerationHelpMenuItems, use_channel=False, title=title, description=description, footer=footer)
+    await menu.start(interaction=interaction, ephemeral=True)
+    
 ########################################################################################################################
 async def race_assign_extra_info(interaction, race):
     # Get a list of extra info types
@@ -726,7 +734,23 @@ async def race_assign_extra_info(interaction, race):
         except:
             await send_message(interaction, "**Error** Failure saving extra info assignment.")
             return
-        await send_message(interaction, f"Extra Info Type `{extra_info_name}` added to race ID `{race.id}`")        
+        await send_message(interaction, f"Extra Info Type `{extra_info_name}` added to race ID `{race.id}`")
+
+########################################################################################################################
+async def show_category_help(interaction, payload):
+    await send_message(interaction, CategoryHelpText)
+
+########################################################################################################################
+async def show_category_scoring_help(interaction, payload):
+    await send_message(interaction, CategoryScoringHelpText)
+
+########################################################################################################################
+async def show_race_help(interaction, payload):
+    await send_message(interaction, RaceHelpText)
+
+########################################################################################################################
+async def show_extra_info_help(interaction, payload):
+    await send_message(interaction, ExtraInfoHelpText)
 
 ########################################################################################################################
 # Racer Info Menu Functions
@@ -802,6 +826,10 @@ async def racer_info_show_completed_races(interaction, payload):
                                         timeout=None)
     
     await race_list_menu.start(interaction=interaction, ephemeral=True)
+
+########################################################################################################################
+async def show_racer_info_help(interaction, payload):
+    await send_message(interaction, RacerInfoHelpText)
 
 ########################################################################################################################
 # Other Menu Functions
@@ -940,9 +968,10 @@ async def show_racer_stats(interaction, user_id):
 # Menu Static Data
 ########################################################################################################################
 ModeratorMenuItems = [
-    MenuItem('🏷️', create_edit_category_command, 'create_edit_category',   'Categories', CreateEditCategoryDescription),
-    MenuItem('🏎️', create_edit_race_command,     'create_edit_race',       'Races',      CreateEditRaceDescription),
-    MenuItem('📋', create_edit_extra_info,       'create_edit_extra_info', 'Extra Info', CreateEditExtraInfoDescription),
+    MenuItem('🏷️', create_edit_category_command, 'create_edit_category',       'Categories',            CreateEditCategoryDescription),
+    MenuItem('🏎️', create_edit_race_command,     'create_edit_race',           'Races',                 CreateEditRaceDescription),
+    MenuItem('📋', create_edit_extra_info,       'create_edit_extra_info',     'Extra Info',            CreateEditExtraInfoDescription),
+    MenuItem('❔', mod_menu_help,                'mod_menu_help',              'Race Moderation Help',  RaceModerationHelpDescription),
 ]
 
 CategoryButtonMenuItems = [
@@ -953,7 +982,7 @@ CategoryButtonMenuItems = [
     MenuItem('🗣️', category_edit_create_role,         'category_edit_create_role',         'Choose Create Ping Role',   CategoryEditCreateRoleDescription),
     MenuItem('🥇', category_edit_leaderboard_channel, 'category_edit_leaderboard_channel', 'Set Leaderboard Channel',   CategorySetLeaderboardChannelDescription),
     MenuItem('🔢', category_edit_points,              'category_edit_points',              'Modify Racer Point Totals', CategoryEditPointsDescription),
-    MenuItem('📋', category_assign_extra_info,        'category_assign_extra_info',        'Assign Submission Value',   CategoryAssignExtrInfoDescription),
+    MenuItem('📋', category_assign_extra_info,        'category_assign_extra_info',        'Assign Submission Value',   CategoryAssignExtraInfoDescription),
 ]
 
 RaceButtonMenuItems = [
@@ -967,6 +996,13 @@ RaceButtonMenuItems = [
     MenuItem('🔧', race_edit_submission,          'race_edit_submission',          'Modify Submission',       RaceEditSubmissionDescription),
 ]
 
+RaceModerationHelpMenuItems = [
+    MenuItem('🏷️', show_category_help, 'show_category_help', 'Category Moderation Help', CategoryHelpDescription),
+    MenuItem('🔢', show_category_scoring_help, 'show_category_scoring_help', 'Category Scoring Help', CategoryScoringHelpDescription),
+    MenuItem('🏎️', show_race_help, 'show_race_help', 'Race Moderation Help', RaceHelpDescription),
+    MenuItem('📋', show_extra_info_help, 'show_extra_info_help', 'Extra Info Help', ExtraInfoHelpDescription),
+]
+
 RacerInfoButtonMenuItems = [
     MenuItem('📈', racer_info_stats,                'racer_info_stats',                'View My Stats',        RacerStatsDescription),
     MenuItem('📖', racer_info_show_open_races,      'racer_info_show_open_races',      'Show Open Races',      RacerOpenRacesDescription),
@@ -974,4 +1010,5 @@ RacerInfoButtonMenuItems = [
     MenuItem('🏷️', racer_info_show_categories,      'racer_info_show_categories',      'Show Categories',      RacerShowCategoriesDescription),
     MenuItem('👀', racer_info_view_other_racer,     'racer_info_view_other_racer',     'View Another Racer',   RacerViewOtherRacerDescription),
     MenuItem('🏁', racer_info_show_completed_races, 'racer_info_show_completed_races', 'Show Completed Races', RacerShowCompletedRacesDescription),
+    MenuItem('❔', show_racer_info_help,            'show_racer_info_help',            'Racer Command Help',   RacerHelpDescription),
 ]

@@ -473,13 +473,14 @@ def score_race(race):
             pass
         case PointsType.MarioKart:
             score_mario_kart_race(race)
-        case PointsType.Elo:
-            pass
+        case PointsType.Trueskill:
+            score_trueskill_race(race)
         case PointsType.ParTime:
-            pass
+            score_par_time_race(race)
         case PointsType.Fixed:
-            pass
+            score_fixed_points_race(race)
         case _:
+            logging.info(f"**ERROR** Unknown scoring type for race {race.id}")
             pass
 
 ########################################################################################################################
@@ -524,14 +525,14 @@ def score_mario_kart_race(race):
             points_idx = last_points_idx
 
         # Lookup the point value to assign
-        if idx > len(mk_points_lookup):
+        if i > len(mk_points_lookup):
             points = 0
         else:
-            points = mk_points_lookup[idx]
+            points = mk_points_lookup[i]
 
         s.points = points
         s.save()
-        last_points_idx = idx
+        last_points_idx = i
 
         # Now update the category totals for the racer
         cat_points = get_create_category_points(race.category_id.id, s.user_id)
@@ -607,7 +608,7 @@ def score_par_time_race(race):
     # For each submission
     for s in submissions:
         # Score is calculated as (2 - (time_in_seconds / par_time)) * 100
-        s.points = (2 - (finish_time_to_seconds(s.finish_time) / par_time_seconds)) * 100
+        s.points = (2 - (par_time_seconds / finish_time_to_seconds(s.finish_time))) * 100
         s.save()
 
         # Category points is the average of all scores, dropping the bottom score if there

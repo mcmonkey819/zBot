@@ -76,7 +76,7 @@ class AsyncRace(Model):
     description             = CharField(null=True)
     additional_instructions = CharField(null=True)
     submit_instructions     = CharField(null=True)
-    category_id             = ForeignKeyField(AsyncRaceCategory, backref='races', null=True)
+    category_id             = ForeignKeyField(AsyncRaceCategory, backref='races')
     leaderboard_message     = ForeignKeyField(AsyncRaceMessage, backref='races', null=True)
     race_info_message       = ForeignKeyField(AsyncRaceMessage, backref='races', null=True)
     submission_role         = IntegerField(null=True)

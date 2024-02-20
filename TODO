@@ -7,11 +7,15 @@ General Stuff
 [X] - Convert code block to embed
 [ ] - Test on BTT with Forty bonks DB data
 [ ] - Create test plan
-[ ] - Add manual update leaderboard button/action
+[X] - Cleanup unused code
 [X] - Recreating the category table with leaderboard message as ForeignKeyField
 [ ] - Add error codes and table in the DB to hold the error
     Should contain: ID, error code, server ID, user ID, timestamp, error message
 [ ] - Add help commands to moderator menu
+    [X] - Category basics
+    [X] - Category scoring types
+    [ ] - FAQ
+    [X] - Race states, extra info, assigning racers, submit/create roles
 [ ] - UI to set tie/close loss margins (and mario kart values?)
 [X] - Include points as an editable field in moderator edit submissions
 [X] - Add "Create New..." option to moderator edit submissions
@@ -25,8 +29,12 @@ General Stuff
     [X] - View other racer
     [X] - Completed races
 [ ] - Fix race leaderboard display (too many columns) (paginate horizontally *and* vertically?)
-[ ] - Add leaderboard button to category list in racer_info, and to race info view?
+[X] - Add leaderboard button to category list in racer_info, and to race info view?
 [?] - let caller filter assigned/open races list rather than filter in place
+[ ] - Show win/loss record in a 1v1 category
+[ ] - Option to ping assigned racers on race activation (per race, or for an entire category for tournament round setup)
+[ ] - Pin leaderboard messages
+[ ] - Category leaderboard options: most recent race or points
 
 Manual DB Conversion Steps
 -------------------------------------------------------
@@ -35,7 +43,7 @@ Manual DB Conversion Steps
 
 Optional Stuff
 -------------------------------------------------------
-[?] - Hookup required flag for extra info creation
+[?] - Hookup required flag for extra info assignment
 [?] - Co-op Support
 [?] - Customize thumbnail image per category
 

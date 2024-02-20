@@ -7,12 +7,11 @@ import math
 import nextcord
 import re
 from tabulate import tabulate
+tabulate.PRESERVE_WHITESPACE = True
 import validators
 
 from db.zBot_db_orm import *
 from db.db_util import *
-
-tabulate.PRESERVE_WHITESPACE = True
 
 ########################################################################################################################
 # UTILITY TYPES
@@ -29,10 +28,6 @@ FieldList = list[zField]
 FieldDict = dict[str, nextcord.ui.TextInput]
 ModalDataList = dict[str, str]
 SelectList = list[nextcord.SelectOption]
-
-class MessageType(Enum):
-    RACER_INFO   = 1
-    SERVER_MOD   = 2
 
 ########################################################################################################################
 # UTILITY FUNCTIONS
@@ -74,7 +69,6 @@ async def check_user_is_mod(interaction):
     if is_mod == False:
         await send_message(interaction, f"Only Race Moderators have permission for this function")
     return is_mod
-
 
 ########################################################################################################################
 # Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes message and optionally deletes or
@@ -451,26 +445,6 @@ async def unpin_race(race_id, interaction):
         race.save()
     await send_message(interaction, f"Unpinned race ID {race_id}")
 
-#################################################################################################################
-def get_race_list_table(races, server_id):
-    labels = ["ID", "Category", "Race Description", "# Submissions"]
-
-    categories = AsyncRaceCategory.select().where(AsyncRaceCategory.server_id == server_id)
-    if len(categories) == 0:
-        logging.info(f"Error in get_race_list_table: no categories found for server ID {server_id}")
-        return "An error occurred, please contact a bot admin"
-
-    category_name_lookup = {}
-    for c in categories:
-        category_name_lookup[c.id] = c.name
-
-    table_data = [labels]
-    for r in races:
-        num_submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == r.id).count()
-        table_data.append([str(r.id), category_name_lookup[r.category_id.id], r.description, num_submissions])
-
-    return tabulate(table_data, headers="firstrow", tablefmt="double_grid")
-
 ########################################################################################################################
 def get_race_embed_field_value(race, user_id=None):
     category_name = race.category_id.name
@@ -582,32 +556,6 @@ class zSingleSelectView(nextcord.ui.View):
         return self.get_selected_value()
     
 #####################################################################################################################
-# View which contains a zSingleSelect and confirm/cancel buttons
-class zSingleSelectConfirmView(nextcord.ui.View):
-    def __init__(self, select_list: SelectList, placeholder = None):
-        super().__init__(timeout=None)
-        self.selected_value = None
-        self.interaction = None
-        self.select = zSingleSelect(select_list, self.save_selected_value, placeholder)
-        self.add_item(self.select)
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='❌ Cancel', row=2)
-    async def cancel_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        self.selected_value = None
-        self.stop()
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='➡️️ Continue', row=2)
-    async def continue_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        self.interaction = interaction
-        self.stop()
-
-    async def save_selected_value(self, value, interaction):
-        self.selected_value = value
-
-    def get_selected_value(self):
-        return self.selected_value
-    
-#####################################################################################################################
 # This Select (drop down selection) will display a drop down with the string options provided. This variant will
 # allow the user to select up to `max_values` from the list. On completion it will call the provided submit_handler
 # function, passing a list of the values chosen and the interaction object.
@@ -659,43 +607,6 @@ class zContinueCancelButtonView(nextcord.ui.View):
     @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='➡️️ Continue')
     async def continue_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
         await self.continue_func(interaction)
-
-########################################################################################################################
-# View which contains buttons for a yes or no question
-class zYesNoCancelButtonView(nextcord.ui.View):
-    def __init__(self, yes_func, no_func, cancel_func):
-        super().__init__(timeout=None)
-        self.yes_func = yes_func
-        self.no_func = no_func
-        self.cancel_func = cancel_func
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='❌ Cancel')
-    async def cancel_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await self.cancel_func(interaction)
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='👎🏾 No')
-    async def no_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await self.no_func(interaction)
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='👍🏾 Yes')
-    async def yes_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await self.yes_func(interaction)
-
-########################################################################################################################
-# View which contains buttons for yes, no or cancel
-class zYesNoButtonView(nextcord.ui.View):
-    def __init__(self, yes_func, no_func):
-        super().__init__(timeout=None)
-        self.yes_func = yes_func
-        self.no_func = no_func
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='👎🏾 No')
-    async def no_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await self.no_func(interaction)
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='👍🏾 Yes')
-    async def yes_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await self.yes_func(interaction)
 
 #####################################################################################################################
 # This Select (drop down selection) will display a drop down with the string options provided. This variant will
