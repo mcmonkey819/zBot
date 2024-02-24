@@ -1,49 +1,45 @@
 General Stuff
 -------------------------------------------------------
-[X] - Edit server settings button to change roles and announcements channel
-[X] - Check permissions  for admin/moderator functions/buttons
-[X] - Add defer logic
-[X] - Database conversion script
-[X] - Convert code block to embed
-[ ] - Test on BTT with Forty bonks DB data
+
+[X] - Fix race leaderboard display (too many columns) (paginate horizontally *and* vertically?)
+[X] - Pin leaderboard messages
+[X] - Category leaderboard options: most recent race or points
+[X] - Paginate all leaderboards
+    [X] - Rework as a paginated embed with fields. Field contains place + emoji as label and time + name as value. Pressing button displays the formatted submission details (also a paginated embed)
+    [X] - Update ephemeral leaderboards to use embed functions
+[ ] - Add support for misc configuration with a message that contains reactions. Message should be edited when reactions are added/removed
+    [ ] - Category: leaderboard type, ping all assigned races, 
+    [ ] - Pin leaderboard message, ping on race creation
+    [ ] - Extra info required flag
+[ ] - Check for dead code
 [ ] - Create test plan
-[X] - Cleanup unused code
-[X] - Recreating the category table with leaderboard message as ForeignKeyField
-[ ] - Add error codes and table in the DB to hold the error
-    Should contain: ID, error code, server ID, user ID, timestamp, error message
-[ ] - Add help commands to moderator menu
-    [X] - Category basics
-    [X] - Category scoring types
-    [ ] - FAQ
-    [X] - Race states, extra info, assigning racers, submit/create roles
-[ ] - UI to set tie/close loss margins (and mario kart values?)
-[X] - Include points as an editable field in moderator edit submissions
-[X] - Add "Create New..." option to moderator edit submissions
-[X] - Update footer for moderator and racer info menus
-[X] - On shutdown, remove leaderboard and pinned race messages (all messages?)
-[X] - Implement racer info commands
-    [X] - Stats
-    [X] - Open races
-    [X] - Assigned races
-    [X] - Categories
-    [X] - View other racer
-    [X] - Completed races
-[ ] - Fix race leaderboard display (too many columns) (paginate horizontally *and* vertically?)
-[X] - Add leaderboard button to category list in racer_info, and to race info view?
-[?] - let caller filter assigned/open races list rather than filter in place
-[ ] - Show win/loss record in a 1v1 category
-[ ] - Option to ping assigned racers on race activation (per race, or for an entire category for tournament round setup)
-[ ] - Pin leaderboard messages
-[ ] - Category leaderboard options: most recent race or points
+[ ] - Test on BTT with Forty bonks DB data
+    [ ] - Wipe DB
+    [ ] - Port 40 Bonks data
+[ ] - Write demo script
+    [ ] - Moderator
+    [ ] - Racer
+[ ] - Record demos
+    [ ] - Moderator
+    [ ] - Racer
+[X] - Leaderboards can have multiple messages in DB
 
 Manual DB Conversion Steps
 -------------------------------------------------------
 [ ] - Add create/submit roles for weekly and BWS categories
 [X] - Duplicate 40 bonks data in test server for more testing
 
-Optional Stuff
+Future Work
 -------------------------------------------------------
-[?] - Hookup required flag for extra info assignment
-[?] - Co-op Support
-[?] - Customize thumbnail image per category
+[ ] - Unpin/Unset leaderboard messages
+[ ] - Create New... option for create and submit roles
+[ ] - Option to ping assigned racers on race activation (per race, or for an entire category for tournament round setup)
+[ ] - Add error codes and table in the DB to hold the error
+    Should contain: ID, error code, server ID, user ID, timestamp, error message
+[ ] - UI to set tie/close loss margins (and mario kart values?)
+[ ] - Show list of common races when viewing other racer
+[ ] - let caller of functions filter assigned/open races list rather than filter in place in db_util
+[ ] - Hookup required flag for extra info assignment
+[ ] - Co-op Support
+[ ] - Customize thumbnail image per category
 

@@ -13,6 +13,8 @@ import validators
 from db.zBot_db_orm import *
 from db.db_util import *
 
+global_async_race_cog = None
+
 ########################################################################################################################
 # UTILITY TYPES
 ########################################################################################################################
@@ -71,12 +73,20 @@ async def check_user_is_mod(interaction):
     return is_mod
 
 ########################################################################################################################
+def save_message(server_id, channel_id, message_id):
+    msg = AsyncRaceMessage(server_id=server_id, channel_id=channel_id, message_id=message_id)
+    try:
+        msg.save()
+    except:
+        logging.info(f"**ERROR** Failed to save cleanup message for server {server_id}, channel {channel_id}, message {message_id}")
+
+########################################################################################################################
 # Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes message and optionally deletes or
 # zeroes the DB entry
-async def delete_message(server, async_race_msg_id, zero_db = False):
+async def delete_message(server, async_race_msg_id):
     async_race_msg = get_race_message(async_race_msg_id)
 
-    if async_race_msg is not None:
+    if async_race_msg is not None and server is not None:
         if async_race_msg.message_id is not None:
             channel = server.get_channel(async_race_msg.channel_id)
             try:
@@ -84,10 +94,6 @@ async def delete_message(server, async_race_msg_id, zero_db = False):
                 await msg.delete()
             except:
                 logging.info(f"Failed to find message with message ID {async_race_msg.message_id}")
-        if zero_db:
-            async_race_msg.message_id = 0
-            async_race_msg.save()
-        else:
             async_race_msg.delete_instance()
 
 #####################################################################################################################
@@ -219,42 +225,6 @@ async def display_ephemeral_leaderboard(interaction, race_id):
     # Send the message
     await send_message(interaction, table_text, ephemeral=True, codeblock=True)
 
-#####################################################################################################################
-async def update_race_leaderboard(interaction, race, channel_id):
-    # Remove the old message if it exists
-    if race.leaderboard_message is not None:
-        server = get_server(race.server_id)
-        await delete_message(race.leaderboard_message.id, False)
-    
-    # Get the leaderboard table
-    table_text = get_race_leaderboard_table(interaction, race.id)
-
-    # Post new leaderboard message
-    guild = get_server_from_interaction(interaction)
-    if guild is None:
-        await send_message(interaction, f"**ERROR** fetching server ID {interaction.guild_id} for race leaderboard update. Please notify a bot admin.")
-        return
-    channel = guild.get_channel(channel_id)
-    new_msg = None
-    if channel is not None:
-        msg_text = f"**Leaderboard for `Race #{race.id}`**\n```\n{table_text}\n```"
-        new_msg = await channel.send(msg_text)
-        add_message_to_cleanup_list(interaction, new_msg)
-    else:
-        await send_message(interaction, f"**ERROR** fetching channel ID {channel_id} for race leaderboard update. Please notify a bot admin.")
-        return
-
-    # Update the DB with the new message info
-    if new_msg is not None:
-        if race.leaderboard_message is None:
-            race.leaderboard_message = AsyncRaceMessage(server_id=race.server_id, channel_id=channel_id)
-
-        race.leaderboard_message.message_id = new_msg.id
-        race.leaderboard_message.save()
-        await send_message(interaction, f"Race leaderboard updated for `Race #{race.id}`")
-    else:
-        await send_message(interaction, f"**ERROR** on race leaderboard update for `Race #{race.id}`")
-
 ########################################################################################################################
 def get_category_leaderboard_table(interaction, points_list, category):
     # Initialize the table with the labels row
@@ -270,61 +240,8 @@ def get_category_leaderboard_table(interaction, points_list, category):
     
     # Tablulate the data
     table_text = tabulate(table_data, headers="firstrow", showindex=places, tablefmt="double_grid")
-    msg_text = f"**Leaderboard for `{category.name}` Category**\n```\n{table_text}\n```"
+    msg_text = f"**Leaderboard for `{category.name}` Category**\n```\n{table_text}\n [uses {PointsType.points_type_str(category.points_type)} scoring]```"
     return msg_text
-
-########################################################################################################################
-async def update_category_leaderboard(interaction, category, channel_id):
-    # Get the points list, it comes pre-sorted by points high to low
-    points_list = get_category_points(category.id)
-
-    if points_list is None or len(points_list) == 0:
-        await send_message(interaction, f"Could not update category leaderboard. There are no points logged for Category `{category.name}` Typically this means there are no completed races yet.")
-        return
-    
-    # Remove the old message if it exists
-    if category.leaderboard_message is not None:
-        server = get_server(category.server_id)
-        await delete_message(server, category.leaderboard_message.id, False)
-
-    guild = get_server_from_interaction(interaction)
-    if guild is None:
-        await send_message(interaction, f"**ERROR** fetching server ID {interaction.guild_id} for category leaderboard update. Please notify a bot admin.")
-        return
-    
-    # Post new leaderboard message
-    channel = guild.get_channel(channel_id)
-    new_msg = None
-    if channel is not None:
-        msg_text = get_category_leaderboard_table(interaction, points_list, category)
-        new_msg = await channel.send(msg_text)
-        add_message_to_cleanup_list(interaction, new_msg)
-    else:
-        await send_message(interaction, f"**ERROR** fetching channel ID {channel_id} for category leaderboard update. Please notify a bot admin.")
-        return
-
-    # Update the DB with the new message info
-    if new_msg is not None:
-        if category.leaderboard_message is None:
-            category.leaderboard_message = AsyncRaceMessage(server_id=category.server_id, channel_id=channel_id)
-
-        category.leaderboard_message.message_id = new_msg.id
-        category.leaderboard_message.save()
-        await send_message(interaction, f"Category leaderboard updated for `{category.name}`")
-    else:
-        await send_message(interaction, f"**ERROR** on category leaderboard update for `{category.name}`")
-
-########################################################################################################################
-async def display_ephemeral_category_leaderboard(interaction, category_id):
-    # Get the points list, it comes pre-sorted by points high to low
-    points_list = get_category_points(category_id)
-    category = get_category(category_id)
-
-    if points_list is None or len(points_list) == 0:
-        await send_message(interaction, f"There are no points for Category `{category.name}` Typically this means there are no completed races yet.")
-        return
-    
-    await send_message(interaction, get_category_leaderboard_table(interaction, points_list, category))
 
 ####################################################################################################################
 # This function breaks a response into multiple messages that meet the Discord API character limit
@@ -435,14 +352,12 @@ async def send_message(interaction, msg="", ephemeral=True, codeblock=False, vie
 #################################################################################################################
 async def unpin_race(race_id, interaction):
     # Get the pin message from the DB
-    race = get_race(race_id)
-    if race is not None:
-        await delete_message(get_server_from_interaction(interaction), race.race_info_message)
-        db_msg = get_race_message(race.race_info_message)
-        if db_msg is not None:
-            db_msg.delete_instance()
-        race.race_info_message_id = None
-        race.save()
+    msg_list = get_messages_by_race_id(race_id, message_type=RaceMessageType.RaceInfo)
+    if msg_list is not None:
+        for m in msg_list:
+            if m.message_id is not None:
+                await delete_message(interaction.guild, m.id)
+
     await send_message(interaction, f"Unpinned race ID {race_id}")
 
 ########################################################################################################################
@@ -466,10 +381,53 @@ def get_async_race_cog(interaction):
     return async_race_cog
 
 ########################################################################################################################
-def add_message_to_cleanup_list(interaction, message):
-    async_race_cog = get_async_race_cog(interaction)
-    if async_race_cog is not None:
-        async_race_cog.add_message(interaction.guild_id, message)
+async def get_race_leaderboard_embed(title, body_text, submissions, current_page, per_page, bot_client, emojis):
+    embed = nextcord.Embed(color=0x5865F2, title=title, description=body_text)
+        
+    for i, s in enumerate(submissions):
+        place_num = (current_page * per_page) + i + 1
+        user = await bot_client.fetch_user(s.user_id)
+        user_name = f"{s.user_id}" if user is None else user.display_name
+        embed.add_field(name=f"{get_place_str(place_num)} - {emojis[i]}", value=f"{s.finish_time} - {user_name}", inline=False)
+
+    return embed
+
+########################################################################################################################
+async def get_category_leaderboard_embed(title, body_text, points_list, current_page, per_page, bot_client):
+    embed = nextcord.Embed(color=0x5865F2, title=title, description=body_text)
+        
+    for i, p in enumerate(points_list):
+        place_num = (current_page * per_page) + i + 1
+        user = await bot_client.fetch_user(p.user_id)
+        user_name = f"{p.user_id}" if user is None else user.display_name
+        embed.add_field(name=f"{get_place_str(place_num)} - {p.points}", value=user_name, inline=False)
+
+    return embed
+
+########################################################################################################################
+def get_race_leaderboard_description(race_id):
+    description = f"Race `{race_id}`"
+    race = get_race(race_id)
+    if race is not None:
+        description += f" created on {race.create_datetime}\nCategory: `{race.category_id.name}`\n\n{race.description}"
+    return description
+
+########################################################################################################################
+def get_category_leaderboard_title(category_id):
+    category = get_category(category_id)
+    if category is None:
+        return f"Leaderboard for Category ID `{category_id}`"
+    else:   
+        return f"Leaderboard for Category `{category.name}`"
+
+########################################################################################################################
+def get_category_leaderboard_description(category_id):
+    category = get_category(category_id)
+    if category is None:
+        description =  f"Category `{category_id}`"
+    else:
+        description = f"Category `{category.name}`\nScoring Type: {PointsType.points_type_str(category.points_type)}\n\n{category.description}"
+    return description
 
 ########################################################################################################################
 # BASE CLASSES

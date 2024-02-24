@@ -8,6 +8,30 @@ PreviousPageEmoji = '⬆️'
 ScrollRightEmoji = '➡️'
 ScrollLeftEmoji = '⬅️'
 
+AnimalEmojiList = [
+    "🐱", "🐵", "🦄", "🐼",
+    "🐲", "🐷", "🐭", "🐰",
+    "🐮", "🐺", "🦊", "🦝",
+    "🐸", "🦁", "🐹", "🐻",
+    "🐻‍❄️", "🐨", "🫎", "🐯"
+]
+
+FoodEmojiList = [
+    "🍔", "🍟", "🍕", "🌭",
+    "🍿", "🍩", "🍪", "🍫",
+    "🍰", "🧁", "🍦", "🍨",
+    "🍧", "🍭", "🍮", "🍯",
+    "🍬", "🥧", "🍝", "🍜"
+]
+
+ObjectEmojiList = [
+    "🎷", "🎸", "🎹", "🎺",
+    "🧪", "🔬", "🔭", "📡",
+    "🔨", "🪚", "🪛", "🪜",
+    "🪝", "🪞", "🪟", "🪠",
+    "🪡", "🪢", "🪣", "🪤"
+]
+
 CreateEditCategoryDescription = 'Create a new category or modify an existing category.'
 CreateEditRaceDescription = 'Create a new race or modify an existing race.'
 CreateEditExtraInfoDescription = 'Create a new submission value or modify an existing one.'
@@ -119,10 +143,29 @@ Extra info fields can be created by race moderators. They will contain a name, d
 Once an extra info field has been created, it can be assigned to a category, an individual race or the entire server. When assigned to a category, all races in that category will have the extra info field assigned on creation. Similarly, when assigned to the server the extra info field will be assigned on creation of all races in the server. When assigned to an individual race it only applies to that race. Extra info fields can be unassigned from any of the above using the assign command and selecting the already assigned field.
 """
 
-RaceModerationFaqHelpText = """
-Coming soon...
+RacerInfoHelpText = """
+This help command gives an overview of racing with the bot and available commands for racers.
+
+**Categories**
+Races are created by `Race Moderators` and each race is assigned a category. Categories can be used in a number of different ways to share history and keep track of scoring. For a run down of available categories you should ask a race moderator for this server. 
+
+Categories can optionally be assigned a scoring system, which will award points or update a rating for each completed race in the category. Examples of available scoring types are "MarioKart" style where points are awarded based on placement (e.g. 1st place gets 25 points, 2nd place gets 21 points, etc), "Par Time" scoring which uses the top 3-5 times submitted to calculate a "par" time which is compared against your finish time to calculate a score, and "Trueskill" which is an ELO like rating system where your rating is updated with every completed race. 
+
+Using the `Show Categories` command will display a list of available categories and buttons to display the current leaderboard for each category.
+
+**Race Types**
+All races are either "Open" or "Assigned". An open race is available to anyone to race and submit times. An assigned race is an async race created for specific racers, typically used for tournament asyncs where there are specific matchups or a specific list of people signed up. Using the `Open Races` command will display a list of currently available open races and the `Assigned Races` command will show races that you have been explicitly assigned to. 
+
+The `Completed Races` command will show races which have finishes. These races will not accept new submissions, but the leaderboard can be displayed and the race info displayed for offline racing.
+
+**Racer Stats**
+The other available commands allow you to view some stats about your racing history in this server, or view the stats of other racers.
 """
 
-RacerInfoHelpText = """
-Coming soon...
-"""
+SubmissionDetailsHelpText = "Shows all of the information about the chosen submission, including the finish time, comment and any extra info fields that were captured."
+
+def get_race_leaderboard_title(race_id):
+    return f"Leaderboard for Race ID `{race_id}`"
+
+def get_category_no_points_message(name):
+    return f"There are no points for Category `{name}` Typically this means there are no completed races yet."

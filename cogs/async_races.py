@@ -15,6 +15,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         self.bot = bot
         self.test_mode = False
         self.msg_dict = {}
+        global_async_race_cog = self
 
     def set_test_mode(self):
         self.test_mode = True
@@ -32,13 +33,6 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         except:
             server = None
         return server
-
-    ####################################################################################################################
-    def add_message(self, guild_id, message):
-        if guild_id in self.msg_dict:
-            self.msg_dict[guild_id].append(message)
-        else:
-            self.msg_dict[guild_id] = [message]
 
 ########################################################################################################################
 # EVENTS
@@ -80,8 +74,11 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         await interaction.response.defer(ephemeral=True)
         mod_message = await send_moderator_menu(interaction, mod_channel)
+        save_message(interaction.guild_id, mod_channel.id, mod_message.id)
+        
         racer_message = await send_racer_menu(interaction, racer_channel)
-        self.msg_dict[interaction.guild_id] = [mod_message, racer_message]
+        save_message(interaction.guild_id, racer_channel.id, racer_message.id)
+        
         await send_message(interaction, "Done!", ephemeral=True)
 
     ####################################################################################################################
@@ -93,14 +90,9 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         await interaction.response.defer(ephemeral=True)
 
-        for m in self.msg_dict[interaction.guild_id]:
-            if m is not None:
-                try:
-                    await m.delete()
-                except:
-                    # If the message no longer exists delete() will throw an exception, but we don't care because we
-                    # were just trying to remove it anyway
-                    pass
+        message_list = get_server_messages(interaction.guild_id)
+        for m in message_list:
+            await delete_message(get_server_from_interaction(interaction), m.id)
         
         await send_message(interaction, "Done!", ephemeral=True)
     

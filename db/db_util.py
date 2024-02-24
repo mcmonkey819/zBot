@@ -44,10 +44,23 @@ class PointsType:
         nextcord.SelectOption(label="Fixed",      value=Fixed,     description="3 points for a win, 1 point for a tie or close loss (configurable)"),
     ]
 
+    def points_type_str(points_type: int):
+        if points_type >= 0 and points_type < len(PointsType.SelectOptionList):
+            return PointsType.SelectOptionList[points_type].label
+        else:
+            return "Unknown"
+
+class RaceLeaderboardType:
+    Points = 0
+    RecentRace = 1
+
+class RaceMessageType:
+    Leaderboard  = 0
+    RaceInfo     = 1
+    Announcement = 2
+
 ForfeitFinishTime = "23:59:59"
 
-########################################################################################################################
-# DB Getters
 #####################################################################################################################
 def get_server(server_id):
     server = None
@@ -180,6 +193,13 @@ def get_completed_races(user_id, server_id):
     return races
 
 ########################################################################################################################
+def get_completed_races_by_category(user_id, server_id, category_id):
+    races = get_category_races(category_id)
+    races = list(filter(lambda r: r.state == RaceState.Completed, races))
+    
+    return races
+
+########################################################################################################################
 def get_create_category_points(category_id, user_id):
     try:
         cat_points_row = AsyncRaceCategoryPoints.select().where(
@@ -200,7 +220,7 @@ def get_category_submissions(user_id, category_id):
 
 ########################################################################################################################
 def get_category_races(category_id):
-    races = AsyncRace.select().where(AsyncRace.category_id == category_id)
+    races = AsyncRace.select().where(AsyncRace.category_id == category_id).order_by(AsyncRace.create_datetime.desc())
     return races
 
 ########################################################################################################################
@@ -640,7 +660,7 @@ def score_fixed_points_race(race):
     # Fixed points is designed for 1v1 races only, so we'll just check for a tie
     # and then assign points
     if len(submissions) > 1:
-        if is_tie(submissions[0].finish_time, submissions, draw_threshold_seconds):
+        if is_tie(submissions[0].finish_time, submissions[1].finish_time, draw_threshold_seconds):
             submissions[0].points = 1
             submissions[0].save()
             cat_points = get_create_category_points(race.category_id.id, submissions[0].user_id)
@@ -666,4 +686,63 @@ def get_user_place(race_id, user_id):
         if s.user_id == user_id:
             return i+1
 
+########################################################################################################################
+def is_race_one_v_one(race_id):
+    race = get_race(race_id)
+    ret = False
+    if race is not None and race.state == RaceState.Completed:
+        if get_num_submissions(race_id) == 2:
+            ret = True
+    return ret
 
+########################################################################################################################
+def get_one_v_one_record(user_id, server_id, *, opponent_id=None, category_id=None):
+    wins = 0
+    losses = 0
+    ties = 0
+    categories = []
+    if category_id is not None:
+        categories.append(get_category(category_id))
+    else:
+        categories = get_categories(server_id)
+
+    for c in categories:
+        # Get the races for this category that the user submitted to
+        user_submissions = get_category_submissions(user_id, c.id)
+        for s in user_submissions:
+            # If comparing against a specific opponent, skip if the opponent didn't submit
+            if opponent_id is not None and get_race_submission(opponent_id, s.race_id) is None:
+                continue
+
+            # Only count 1v1 races
+            if is_race_one_v_one(s.race_id):
+                submissions = get_sorted_race_submissions(s.race_id)
+                draw_threshold_seconds = get_draw_threshold_seconds(c.id)
+                if is_tie(submissions[0].finish_time, submissions[1].finish_time, draw_threshold_seconds):
+                    ties += 1
+                elif submissions[0].user_id == user_id:
+                    wins += 1
+                elif submissions[1].user_id == user_id:
+                    losses += 1
+                else:
+                    logging.info(f"**ERROR** Something went wrong in get_one_v_one_record")
+    return wins, losses, ties
+                
+########################################################################################################################
+def is_value_empty(value):
+    if value is None or value == "":
+        return True
+    return False
+
+########################################################################################################################
+def get_server_messages(server_id):
+    return AsyncRaceMessage.select().where(AsyncRaceMessage.server_id == server_id)
+
+########################################################################################################################
+def get_messages_by_race_id(race_id, message_type=RaceMessageType.Leaderboard):
+    return AsyncRaceMessage.select().where(
+        (AsyncRaceMessage.race_id == race_id) & (AsyncRaceMessage.message_type == message_type))
+
+########################################################################################################################
+def get_messages_by_category_id(category_id):
+    return AsyncRaceMessage.select().where(AsyncRaceMessage.category_id == category_id)

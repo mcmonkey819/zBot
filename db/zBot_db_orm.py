@@ -30,23 +30,11 @@ def game_time_is_valid(self, time_str):
                valid_time_str = True
         return valid_time_str
 
-class AsyncRaceMessage(Model):
-    id                      = IntegerField(primary_key= True)
-    server_id               = IntegerField()
-    channel_id              = IntegerField()
-    message_id              = IntegerField(null=True)
-
-    class Meta:
-        table_name = 'async_race_messages'
-        database = db
-
 class AsyncRaceServer(Model):
     id                      = IntegerField(primary_key=True)
     name                    = CharField()
     mod_role_id             = IntegerField()
     admin_role_id           = IntegerField()
-    server_mod_message      = IntegerField(null=True)
-    racer_info_message      = IntegerField(null=True)
     announcement_channel_id = IntegerField(null=True)
 
     class Meta:
@@ -60,8 +48,9 @@ class AsyncRaceCategory(Model):
     description             = CharField()
     create_role             = IntegerField(null=True)
     submit_role             = IntegerField(null=True)
-    points_type             = IntegerField(null=True)
-    leaderboard_message     = ForeignKeyField(AsyncRaceMessage, backref='categories', null=True)
+    points_type             = IntegerField(default=0)
+    leaderboard_type        = IntegerField(null=True, default=0)
+    active                  = BooleanField(default=False)
 
     class Meta:
         table_name = 'async_race_categories'
@@ -77,8 +66,6 @@ class AsyncRace(Model):
     additional_instructions = CharField(null=True)
     submit_instructions     = CharField(null=True)
     category_id             = ForeignKeyField(AsyncRaceCategory, backref='races')
-    leaderboard_message     = ForeignKeyField(AsyncRaceMessage, backref='races', null=True)
-    race_info_message       = ForeignKeyField(AsyncRaceMessage, backref='races', null=True)
     submission_role         = IntegerField(null=True)
     state                   = IntegerField()
 
@@ -109,7 +96,19 @@ class AsyncRaceSubmission(Model):
         table_name = 'async_submissions'
         database = db
 
-AsyncRaceExtraInfoServerAny = 0
+class AsyncRaceMessage(Model):
+    id                      = IntegerField(primary_key= True)
+    server_id               = IntegerField()
+    channel_id              = IntegerField()
+    message_id              = IntegerField(null=True)
+    race_id                 = ForeignKeyField(AsyncRace, backref='messages', null=True)
+    category_id             = ForeignKeyField(AsyncRaceCategory, backref='messages', null=True)
+    message_type            = IntegerField(default=0)
+
+    class Meta:
+        table_name = 'async_race_messages'
+        database = db
+
 class AsyncRaceExtraInfoType(Model):
     id                      = IntegerField(primary_key= True)
     # If server_id is None, info type can be used anywhere
