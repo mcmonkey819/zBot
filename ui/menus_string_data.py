@@ -8,6 +8,27 @@ PreviousPageEmoji = '⬆️'
 ScrollRightEmoji = '➡️'
 ScrollLeftEmoji = '⬅️'
 
+LeaderboardEmoji = '🥇'
+EditEmoji = '✏️'
+DeleteEmoji = '🗑️'
+CategoryEmoji = '🏷️'
+RaceEmoji = '🏎️'
+ExtraInfoEmoji = '📋'
+HelpEmoji = '❔'
+EditScoreEmoji = '📝'
+SubmitRoleEmoji = '👤'
+CreateRoleEmoji = '🗣️'
+EditPointsEmoji = '🔢'
+ToggleEmoji = '☑'
+ChangeStateEmoji = '🚦'
+PinEmoji = '📌'
+AssignEmoji = '🫵🏽'
+EditSubmissionEmoji = '🔧'
+OpenRacesEmoji = '📖'
+CompletedRacesEmoji = '🏁'
+StatsEmoji = '📊'
+ViewOtherEmoji = '👀'
+
 AnimalEmojiList = [
     "🐱", "🐵", "🦄", "🐼",
     "🐲", "🐷", "🐭", "🐰",
@@ -45,6 +66,7 @@ CategoryEditCreateRoleDescription = 'Allows you to select a role to be pinged on
 CategorySetLeaderboardChannelDescription = 'Allows you to select a channel to display the points leaderboard for this category. The leaderboard will be updated when races are completed. Choosing the "None" option will result in no leaderboard being displayed.'
 CategoryEditPointsDescription = 'Allows you to manually modify the points of racers in this category. This is useful for manually awarding bonus points or correcting errors.'
 CategoryAssignExtraInfoDescription = 'Allows you to assign a specific submission value to all races in this category. Already assigned values are marked with a ✅, choosing an already assigned value will unassign it from this category.'
+CategoryMiscToggleDescription = 'Allows configuration of various miscellaneous category data such as leaderboard type, category visibility, required extra info, etc'
 
 RaceEditDescription = 'Allows you to edit the core info about the race, such as the seed, hash, description and instructions.'
 RaceDeleteDescription = 'Deletes the race. This will only succeed if the race is inactive and there are no submissions for the race.'
@@ -54,6 +76,7 @@ RaceEditSubmitRoleDescription = 'Allows you to choose the role that is assigned 
 RaceEditLeaderboardChannelDescription = 'Allows you to select a channel to display the leaderboard for this race. The leaderboard will be updated when times are submitted. Choosing the "None" option will result in no leaderboard being displayed.'
 RaceAssignRacerDescription = 'Allows you to assign specific racers to this race. See the "Race Assignment" command under the Race Moderation Info embed to learn more about race assignments.'
 RaceEditSubmissionDescription = 'Allows you to modify a submission to this race. This is useful for correcting errors or fixing scoring errors.'
+RaceMiscToggleDescription = 'Allows configuration of various miscellaneous race data such as force removing the leaderboard and specifying which extra info fields are required.'
 
 CategoryHelpDescription = 'Displays information about creating and managing categories.'
 CategoryScoringHelpDescription = 'Displays information about the available scoring types for categories.'
@@ -162,6 +185,15 @@ The `Completed Races` command will show races which have finishes. These races w
 The other available commands allow you to view some stats about your racing history in this server, or view the stats of other racers.
 """
 
+ToggleMiscDescription = """
+Use the buttons below to toggle the miscelaneous settings. Some of the buttons perform a one-time action which will be described below. For fields below that toggle a value, the field name will describe the field and the text will show the current value.
+    For Example:
+    **🐱 - Extra Info: Collection Rate**
+      Required
+      
+    This indicates that the button with the 🐱 emoji will toggle the `Collection Rate` extra info required field, and it is currently required.
+"""
+
 SubmissionDetailsHelpText = "Shows all of the information about the chosen submission, including the finish time, comment and any extra info fields that were captured."
 
 def get_race_leaderboard_title(race_id):
@@ -169,3 +201,9 @@ def get_race_leaderboard_title(race_id):
 
 def get_category_no_points_message(name):
     return f"There are no points for Category `{name}` Typically this means there are no completed races yet."
+
+toggle_leaderboard_id = "toggle_leaderboard"
+toggle_category_active_id = "toggle_category_active"
+category_ping_assigned_id = "category_ping_assigned"
+remove_category_leaderboard_id = "remove_category_leaderboard"
+remove_race_leaderboard_id = "remove_race_leaderboard"

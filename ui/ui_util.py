@@ -240,7 +240,7 @@ def get_category_leaderboard_table(interaction, points_list, category):
     
     # Tablulate the data
     table_text = tabulate(table_data, headers="firstrow", showindex=places, tablefmt="double_grid")
-    msg_text = f"**Leaderboard for `{category.name}` Category**\n```\n{table_text}\n [uses {PointsType.points_type_str(category.points_type)} scoring]```"
+    msg_text = f"**Leaderboard for `{category.name}` Category**\n```\n{table_text}\n [uses {PointsType.to_str(category.points_type)} scoring]```"
     return msg_text
 
 ####################################################################################################################
@@ -426,8 +426,29 @@ def get_category_leaderboard_description(category_id):
     if category is None:
         description =  f"Category `{category_id}`"
     else:
-        description = f"Category `{category.name}`\nScoring Type: {PointsType.points_type_str(category.points_type)}\n\n{category.description}"
+        description = f"Category `{category.name}`\nScoring Type: {PointsType.to_str(category.points_type)}\n\n{category.description}"
     return description
+
+########################################################################################################################
+def copy_embed(embed):
+    new_embed = nextcord.Embed(
+        title=embed.title,
+        description=embed.description,
+        color=embed.color
+    )
+    
+    if embed.author is not None:
+        new_embed.set_author(name=embed.author.name, icon_url=embed.author.icon_url, url=embed.author.url)
+    if embed.footer is not None:
+        new_embed.set_footer(text=embed.footer.text, icon_url=embed.footer.icon_url)
+    if embed.image is not None:
+        new_embed.set_image(url=embed.image.url)
+    if embed.thumbnail is not None:
+        new_embed.set_thumbnail(url=embed.thumbnail.url)
+    if embed.url is not None:
+        new_embed.url = embed.url
+
+    return new_embed
 
 ########################################################################################################################
 # BASE CLASSES

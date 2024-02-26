@@ -7,10 +7,9 @@ General Stuff
 [X] - Paginate all leaderboards
     [X] - Rework as a paginated embed with fields. Field contains place + emoji as label and time + name as value. Pressing button displays the formatted submission details (also a paginated embed)
     [X] - Update ephemeral leaderboards to use embed functions
-[ ] - Add support for misc configuration with a message that contains reactions. Message should be edited when reactions are added/removed
-    [ ] - Category: leaderboard type, ping all assigned races, 
-    [ ] - Pin leaderboard message, ping on race creation
-    [ ] - Extra info required flag
+[X] - Add support for misc configuration with a message that contains reactions. Message should be edited when reactions are added/removed
+    [X] - Category: leaderboard type, ping all assigned races, remove channel leaderboard, ping on creation, active/inactive, required extra info
+    [X] - Race: remove channel leaderboard, required extra info
 [ ] - Check for dead code
 [ ] - Create test plan
 [ ] - Test on BTT with Forty bonks DB data

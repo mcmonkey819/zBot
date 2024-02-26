@@ -24,7 +24,7 @@ from ui.menus_string_data import *
 from ui.ui_elements import *
 
 ########################################################################################################################
-# Menu Classes
+# Menu POD Classes
 ########################################################################################################################
 class MenuItem():
     def __init__(self, label:nextcord.Emoji, func, custom_id, short_description, help_text, include_interaction=True) -> None:
@@ -46,6 +46,21 @@ class EmbedField():
         self.name = name
         self.value = value
         self.inline = inline
+
+class ToggleField():
+    def __init__(self, 
+                 payload,
+                 toggle_func,
+                 embed_field: EmbedField,
+                 button_style: nextcord.ButtonStyle,
+                 custom_id: str,
+                 emoji: nextcord.Emoji | nextcord.PartialEmoji) -> None:
+        self.toggle_func = toggle_func
+        self.payload = payload
+        self.embed_field = embed_field
+        self.button_style = button_style
+        self.custom_id = custom_id
+        self.emoji = emoji
 
 ########################################################################################################################
 class zButton(nextcord.ui.Button):
@@ -71,6 +86,30 @@ class zButton(nextcord.ui.Button):
 
     async def callback(self, interaction: Interaction) -> None:
         return await self.menu_item.func(interaction, self.payload)
+    
+class zToggleButton(nextcord.ui.Button):
+    def __init__(self,
+                 payload,
+                 toggle_field: ToggleField,
+                 *,
+                 label : str = None,
+                 style: ButtonStyle = ButtonStyle.primary,
+                 disabled: bool = False,
+                 url: str | None = None,
+                 emoji: str | Emoji | PartialEmoji | None = None,
+                 row: int | None = None) -> None:
+        self.toggle_field = toggle_field
+        self.payload = payload
+        super().__init__(style=style,
+                         label=label,
+                         disabled=disabled,
+                         custom_id=toggle_field.custom_id,
+                         url=url,
+                         emoji=emoji,
+                         row=row)
+
+    async def callback(self, interaction: Interaction) -> None:
+        return await self.toggle_field.toggle_func(interaction, self.payload)
 
 ########################################################################################################################
 class zButtonMenu(menus.ButtonMenu):
@@ -118,6 +157,11 @@ class zButtonMenu(menus.ButtonMenu):
             await send_message(self.interaction, "", view=self, embed=self.embed)
             return await self.interaction.original_message()
 
+    async def send_updated_message(self, embed):
+        # Send the updated message
+        self.embed = embed
+        await self.message.edit(embed=self.embed, view=self)
+
 ########################################################################################################################
 class zConfirmMenu(menus.ButtonMenu):
     def __init__(self, msg: str):
@@ -142,6 +186,52 @@ class zConfirmMenu(menus.ButtonMenu):
     async def prompt(self, interaction: nextcord.Interaction):
         await menus.Menu.start(self, interaction, wait=True)
         return self.result
+    
+########################################################################################################################
+class zToggleButtonMenu(menus.ButtonMenu):
+    def __init__(self, 
+                 toggle_fields: list[ToggleField],
+                 *,
+                 use_channel: bool = False,
+                 title: str = "",
+                 description: str = "",
+                 footer: str = None,
+                 color: int = 0x5865F2,
+                 embed=None) -> None:
+
+        self.toggle_fields = toggle_fields
+        self.use_channel = use_channel
+        self.title = title
+        self.description = description
+        self.footer = footer
+        self.color = color
+        self.embed = embed
+
+        super().__init__(timeout=None)
+
+        for i in self.toggle_fields:
+            self.add_item(zToggleButton(payload=(self, i), toggle_field=i, style=i.button_style, emoji=i.emoji))
+    
+    async def send_initial_message(self, ctx, channel):
+        if self.embed is None:
+            # Send embed message with `self` as the view
+            self.embed = nextcord.Embed(title=self.title, description=self.description, color=self.color)
+            if self.footer is not None:
+                self.embed.set_footer(text=self.footer)
+
+            for i in self.toggle_fields:
+                self.embed.add_field(name=i.embed_field.name, value=i.embed_field.value, inline=i.embed_field.inline)
+        
+        if self.use_channel:
+            return await channel.send("", view=self, embed=self.embed)
+        else:
+            await send_message(self.interaction, "", view=self, embed=self.embed)
+            return await self.interaction.original_message()
+
+    async def send_updated_message(self, embed):
+        # Send the updated message
+        self.embed = embed
+        await self.message.edit(embed=self.embed, view=self)
     
 ########################################################################################################################
 class zRaceListPageSource(menus.ListPageSource):
@@ -515,6 +605,86 @@ async def category_assign_extra_info(interaction, category):
         await send_message(interaction, f"Extra Info Type `{extra_info_name}` added to category `{category.name}`")
 
 ########################################################################################################################
+async def category_misc_toggles(interaction, category):
+    # Build the list of toggle fields
+    toggle_list = []
+    toggle_list.append(get_ping_assigned_field(category))
+    toggle_list.append(get_remove_category_leaderboard_field(category))
+    toggle_list.append(get_leaderboard_type_toggle_field(category))
+    toggle_list.append(get_category_active_toggle_field(category))
+
+    # Get extra info assignments for this category
+    extra_infos = get_category_extra_info_assignments(category.id)
+    for i, a in enumerate(extra_infos):
+        toggle_list.append(get_extra_info_toggle_field(a, i))
+
+    # Create and start the menu
+    menu = zToggleButtonMenu(toggle_fields=toggle_list,
+                             title="Category Misc Configuration",
+                             description=ToggleMiscDescription)
+    await menu.start(interaction=interaction)
+
+########################################################################################################################
+def get_leaderboard_type_toggle_field(category):
+    return ToggleField(
+        toggle_func=toggle_category_leaderboard_type,
+        payload=category,
+        button_style=get_leaderboard_type_button_style(category.leaderboard_type),
+        custom_id=toggle_leaderboard_id,
+        emoji=LeaderboardEmoji,
+        embed_field=EmbedField(name=f"{LeaderboardEmoji} - Leaderboard Type",
+                               value=RaceLeaderboardType.to_str(category.leaderboard_type),
+                               inline=False))
+
+########################################################################################################################
+def get_category_active_toggle_field(category):
+    return ToggleField(
+        toggle_func=toggle_category_active,
+        payload=category,
+        button_style=active_field_button_style(category.leaderboard_type),
+        custom_id=toggle_category_active_id,
+        emoji=ChangeStateEmoji,
+        embed_field=EmbedField(name=f"{ChangeStateEmoji} - Category Visibility",
+                               value=active_field_to_str(category.active),
+                               inline=False))
+
+########################################################################################################################
+def get_ping_assigned_field(category):
+    return ToggleField(
+        toggle_func=category_ping_assigned_racers,
+        payload=category,
+        button_style=nextcord.ButtonStyle.blurple,
+        custom_id=category_ping_assigned_id,
+        emoji=AssignEmoji,
+        embed_field=EmbedField(name=f"{AssignEmoji} - Ping Assigned",
+                               value="Button will post a message pinging all assigned racers to active races in this category.",
+                               inline=False))
+
+########################################################################################################################
+def get_remove_category_leaderboard_field(category):
+    return ToggleField(
+        toggle_func=category_remove_channel_leaderboard,
+        payload=category,
+        button_style=nextcord.ButtonStyle.blurple,
+        custom_id=remove_category_leaderboard_id,
+        emoji=DeleteEmoji,
+        embed_field=EmbedField(name=f"{DeleteEmoji} - Remove Leaderboard",
+                               value="Button will remove any leaderboard channel assignment and delete leaderboard messages.",
+                               inline=False))
+
+########################################################################################################################
+def get_extra_info_toggle_field(assignment, emoji_index):
+    return ToggleField(
+        toggle_func=toggle_required_extra_info,
+        payload=assignment,
+        button_style=required_field_button_style(assignment.required),
+        custom_id=f"extra_info_toggle_{assignment.info_type_id.name}",
+        emoji=AnimalEmojiList[emoji_index],
+        embed_field=EmbedField(name=f"{AnimalEmojiList[emoji_index]} - Submit Info: {assignment.info_type_id.name}",
+                               value=required_field_to_str(assignment.required),
+                               inline=False))
+
+########################################################################################################################
 # Race Menu Functions
 ########################################################################################################################
 async def create_edit_race_command(interaction, payload):
@@ -727,6 +897,36 @@ async def on_select_user_edit_submission(select_data, interaction):
     pass
 
 ########################################################################################################################
+async def race_misc_toggles(interaction, race):
+    # Build the list of toggle fields
+    toggle_list = []
+    toggle_list.append(get_remove_race_leaderboard_field(race))
+    
+    # Get extra info assignments for this category
+    extra_infos = get_race_extra_info_assignments(race.id)
+    for i, a in enumerate(extra_infos):
+        toggle_list.append(get_extra_info_toggle_field(a, i))
+
+    # Create and start the menu
+    menu = zToggleButtonMenu(toggle_fields=toggle_list,
+                             title="Race Misc Configuration",
+                             description=ToggleMiscDescription)
+    await menu.start(interaction=interaction)
+
+########################################################################################################################
+def get_remove_race_leaderboard_field(race):
+    return ToggleField(
+        toggle_func=race_remove_channel_leaderboard,
+        payload=race,
+        button_style=nextcord.ButtonStyle.blurple,
+        custom_id=remove_race_leaderboard_id,
+        emoji=DeleteEmoji,
+        embed_field=EmbedField(name=f"{DeleteEmoji} - Remove Leaderboard",
+                               value="Button will remove any leaderboard channel assignment and delete leaderboard messages.",
+                               inline=False))
+        
+
+########################################################################################################################
 async def create_edit_extra_info(interaction, payload):
     await defer(interaction)
     # Get a list of extra info types
@@ -924,7 +1124,7 @@ async def send_race_menu(interaction, race_id):
     title = f"Race Management for Race ID {race.id}"
     description = f"Use the buttons below to manage Race ID {race.id} category.\n Description: `{race.description}`"
     footer = "For more information about race management, use the commands in the Race Management Info embed"
-    menu = zButtonMenu(race, zButtonMenuItems, use_channel=False, title=title, description=description)
+    menu = zButtonMenu(race, RaceButtonMenuItems, use_channel=False, title=title, description=description)
     await menu.start(interaction=interaction, ephemeral=True)
 
 ########################################################################################################################
@@ -1184,52 +1384,215 @@ async def show_category_leaderboard(interaction, category_id):
     
     menu = menus.ButtonMenuPages(source=zCategoryPointsLeaderboardPageSource(points_list, interaction.client, per_page=8))
     await menu.start(interaction=interaction, ephemeral=True)
+
+########################################################################################################################
+def get_leaderboard_type_button_style(leaderboard_type) -> nextcord.ButtonStyle:
+    if leaderboard_type == RaceLeaderboardType.RecentRace:
+        return nextcord.ButtonStyle.green
+    else:
+        return nextcord.ButtonStyle.blurple
     
+########################################################################################################################
+def required_field_button_style(required) -> nextcord.ButtonStyle:
+    return nextcord.ButtonStyle.red if required else nextcord.ButtonStyle.grey
+
+########################################################################################################################
+def required_field_to_str(required) -> str:
+    return "Required" if required else "Optional"
+
+########################################################################################################################
+def active_field_button_style(active) -> nextcord.ButtonStyle:
+    return nextcord.ButtonStyle.blurple if active else nextcord.ButtonStyle.grey
+
+########################################################################################################################
+def active_field_to_str(active) -> str:
+    return "Active" if active else "Inactive"
+
+########################################################################################################################
+async def toggle_category_leaderboard_type(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+    
+    # ToggleField payload is the category
+    category = toggle_field.payload
+    
+    # Update the database based on the current value
+    if category.leaderboard_type == RaceLeaderboardType.RecentRace:
+        category.leaderboard_type = RaceLeaderboardType.Points
+    else:
+        category.leaderboard_type = RaceLeaderboardType.RecentRace
+    category.save()
+
+    # Then update the button style
+    toggle_field.button_style = get_leaderboard_type_button_style(category.leaderboard_type)
+
+    # Then update the embed field value
+    toggle_field.embed_field.value = RaceLeaderboardType.to_str(category.leaderboard_type)
+    logging.info(f"Category {category.name} leaderboard type toggled to {toggle_field.embed_field.value}")
+
+    # Finally update the menu
+    await update_menu_embed_field(menu, toggle_field)
+
+########################################################################################################################
+async def category_ping_assigned_racers(interaction, payload):
+    # The button payload is the ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+
+    # ToggleField payload is the category
+    category = toggle_field.payload
+
+    # Get a list of active race assignments in this category
+    assignments = get_active_category_assignments(category.id)
+
+    msg = ""
+    for a in assignments:
+        user = await interaction.client.fetch_user(a.user_id)
+        msg += f"{user.mention} "
+    
+    msg += f" You have been assigned to a new {category.name} race. Good luck!"
+    await interaction.channel.send(msg)
+
+########################################################################################################################
+async def category_remove_channel_leaderboard(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+
+    # ToggleField payload is the category
+    category = toggle_field.payload
+
+    # Find any existing leaderboard messages and remove them
+    leaderboard_msg_list = get_messages_by_category_id(category.id)
+    for m in leaderboard_msg_list:
+        if m.message_id is not None:
+            await delete_message(get_server_from_interaction(interaction), m.id)
+
+    await send_message(interaction, f"Leaderboard channel removed for category {category.name}")
+
+########################################################################################################################
+async def race_remove_channel_leaderboard(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+
+    # ToggleField payload is the race
+    race = toggle_field.payload
+
+    # Find any existing leaderboard messages and remove them
+    leaderboard_msg_list = get_messages_by_race_id(race.id)
+    for m in leaderboard_msg_list:
+        if m.message_id is not None:
+            await delete_message(get_server_from_interaction(interaction), m.id)
+
+    await send_message(interaction, f"Leaderboard channel removed for race {race.id}")
+
+########################################################################################################################
+async def toggle_required_extra_info(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+
+    # ToggleField payload is the extra info assignment
+    assignment = toggle_field.payload
+
+    assignment.required = not assignment.required
+    assignment.save()
+
+    # Then update the button style
+    toggle_field.button_style = required_field_button_style(assignment.required)
+
+    # Then update the embed field value
+    toggle_field.embed_field.value = required_field_to_str(assignment.required)
+
+    # Finally update the menu
+    await update_menu_embed_field(menu, toggle_field)
+
+########################################################################################################################
+async def toggle_category_active(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+    
+    # ToggleField payload is the category
+    category = toggle_field.payload
+
+    category.active = not category.active
+    category.save()
+
+    # Then update the button style
+    toggle_field.button_style = active_field_button_style(category.active)
+
+    # Then update the embed field value
+    toggle_field.embed_field.value = active_field_to_str(category.active)
+
+    # Finally update the menu
+    await update_menu_embed_field(menu, toggle_field)
+
+########################################################################################################################
+async def update_menu_embed_field(menu, toggle_field: ToggleField):
+    # Create a new embed copying the base data from the existing one
+    embed = copy_embed(menu.embed)
+
+    # Update the field and button style
+    for i, f in enumerate(menu.embed.fields):
+        if menu.toggle_fields[i].custom_id == toggle_field.custom_id:
+            embed.add_field(name=toggle_field.embed_field.name, value=toggle_field.embed_field.value, inline=toggle_field.embed_field.inline)
+            menu.children[i].style = toggle_field.button_style
+        else:
+            embed.add_field(name=f.name, value=f.value, inline=f.inline)
+   
+    # Tell the menu to update the message
+    await menu.send_updated_message(embed)
+
 ########################################################################################################################
 # Menu Static Data
 ########################################################################################################################
 ModeratorMenuItems = [
-    MenuItem('🏷️', create_edit_category_command, 'create_edit_category',       'Categories',            CreateEditCategoryDescription),
-    MenuItem('🏎️', create_edit_race_command,     'create_edit_race',           'Races',                 CreateEditRaceDescription),
-    MenuItem('📋', create_edit_extra_info,       'create_edit_extra_info',     'Extra Info',            CreateEditExtraInfoDescription),
-    MenuItem('❔', mod_menu_help,                'mod_menu_help',              'Race Moderation Help',  RaceModerationHelpDescription),
+    MenuItem(CategoryEmoji , create_edit_category_command, 'create_edit_category'  , 'Categories'          , CreateEditCategoryDescription),
+    MenuItem(RaceEmoji     , create_edit_race_command    , 'create_edit_race'      , 'Races'               , CreateEditRaceDescription),
+    MenuItem(ExtraInfoEmoji, create_edit_extra_info      , 'create_edit_extra_info', 'Extra Info'          , CreateEditExtraInfoDescription),
+    MenuItem(HelpEmoji     , mod_menu_help               , 'mod_menu_help'         , 'Race Moderation Help', RaceModerationHelpDescription),
 ]
 
 CategoryButtonMenuItems = [
-    MenuItem('✏️', category_edit_description,         'category_edit_description',         'Edit Description',          CategoryEditDescription),
-    MenuItem('🗑️', category_delete,                   'category_delete',                   'Delete Category',           CategoryDeleteDescription),
-    MenuItem('📝', category_edit_scoring,             'category_edit_scoring',             'Edit Scoring Method',       CategoryEditScoringDescription),
-    MenuItem('👤', category_edit_submit_role,         'category_edit_submit_role',         'Choose Submit Role',        CategoryEditSubmitRoleDescription),
-    MenuItem('🗣️', category_edit_create_role,         'category_edit_create_role',         'Choose Create Ping Role',   CategoryEditCreateRoleDescription),
-    MenuItem('🥇', category_edit_leaderboard_channel, 'category_edit_leaderboard_channel', 'Set Leaderboard Channel',   CategorySetLeaderboardChannelDescription),
-    MenuItem('🔢', category_edit_points,              'category_edit_points',              'Modify Racer Point Totals', CategoryEditPointsDescription),
-    MenuItem('📋', category_assign_extra_info,        'category_assign_extra_info',        'Assign Submission Value',   CategoryAssignExtraInfoDescription),
+    MenuItem(EditEmoji       , category_edit_description        , 'category_edit_description'        , 'Edit Description'         , CategoryEditDescription),
+    MenuItem(DeleteEmoji     , category_delete                  , 'category_delete'                  , 'Delete Category'          , CategoryDeleteDescription),
+    MenuItem(EditScoreEmoji  , category_edit_scoring            , 'category_edit_scoring'            , 'Edit Scoring Method'      , CategoryEditScoringDescription),
+    MenuItem(SubmitRoleEmoji , category_edit_submit_role        , 'category_edit_submit_role'        , 'Choose Submit Role'       , CategoryEditSubmitRoleDescription),
+    MenuItem(CreateRoleEmoji , category_edit_create_role        , 'category_edit_create_role'        , 'Choose Create Ping Role'  , CategoryEditCreateRoleDescription),
+    MenuItem(LeaderboardEmoji, category_edit_leaderboard_channel, 'category_edit_leaderboard_channel', 'Set Leaderboard Channel'  , CategorySetLeaderboardChannelDescription),
+    MenuItem(EditPointsEmoji , category_edit_points             , 'category_edit_points'             , 'Modify Racer Point Totals', CategoryEditPointsDescription),
+    MenuItem(ExtraInfoEmoji  , category_assign_extra_info       , 'category_assign_extra_info'       , 'Assign Submission Value'  , CategoryAssignExtraInfoDescription),
+    MenuItem(ToggleEmoji     , category_misc_toggles            , 'category_misc_toggles'            , 'Misc Category Config'     , CategoryMiscToggleDescription),
 ]
 
-zButtonMenuItems = [
-    MenuItem('✏️', race_edit_core,                'race_edit_core',                'Edit Race',               RaceEditDescription),
-    MenuItem('🗑️', race_delete,                   'race_delete',                   'Delete Race',             RaceDeleteDescription),
-    MenuItem('🚦', race_change_state,             'race_change_state',             'Change Race State',       RaceChangeStateDescription),
-    MenuItem('📌', race_pin,                      'race_pin',                      'Pin Race Info',           RacePinDescription),
-    MenuItem('👤', race_edit_submit_role,         'race_edit_submit_role',         'Choose Submit Role',      RaceEditSubmitRoleDescription),
-    MenuItem('🥇', race_edit_leaderboard_channel, 'race_edit_leaderboard_channel', 'Set Leaderboard Channel', RaceEditLeaderboardChannelDescription),
-    MenuItem('🫵🏽', race_assign_racer,             'race_assign_racer',             'Assign Racers',           RaceAssignRacerDescription),
-    MenuItem('🔧', race_edit_submission,          'race_edit_submission',          'Modify Submission',       RaceEditSubmissionDescription),
+RaceButtonMenuItems = [
+    MenuItem(EditEmoji          , race_edit_core               , 'race_edit_core'               , 'Edit Race'              , RaceEditDescription),
+    MenuItem(DeleteEmoji        , race_delete                  , 'race_delete'                  , 'Delete Race'            , RaceDeleteDescription),
+    MenuItem(ChangeStateEmoji   , race_change_state            , 'race_change_state'            , 'Change Race State'      , RaceChangeStateDescription),
+    MenuItem(PinEmoji           , race_pin                     , 'race_pin'                     , 'Pin Race Info'          , RacePinDescription),
+    MenuItem(SubmitRoleEmoji    , race_edit_submit_role        , 'race_edit_submit_role'        , 'Choose Submit Role'     , RaceEditSubmitRoleDescription),
+    MenuItem(LeaderboardEmoji   , race_edit_leaderboard_channel, 'race_edit_leaderboard_channel', 'Set Leaderboard Channel', RaceEditLeaderboardChannelDescription),
+    MenuItem(AssignEmoji        , race_assign_racer            , 'race_assign_racer'            , 'Assign Racers'          , RaceAssignRacerDescription),
+    MenuItem(EditSubmissionEmoji, race_edit_submission         , 'race_edit_submission'         , 'Modify Submission'      , RaceEditSubmissionDescription),
+    MenuItem(ToggleEmoji        , race_misc_toggles            , 'race_misc_toggles'            , 'Misc Race Config'       , RaceMiscToggleDescription),
 ]
 
 RaceModerationHelpMenuItems = [
-    MenuItem('🏷️', show_category_help, 'show_category_help', 'Category Moderation Help', CategoryHelpDescription),
-    MenuItem('🔢', show_category_scoring_help, 'show_category_scoring_help', 'Category Scoring Help', CategoryScoringHelpDescription),
-    MenuItem('🏎️', show_race_help, 'show_race_help', 'Race Moderation Help', RaceHelpDescription),
-    MenuItem('📋', show_extra_info_help, 'show_extra_info_help', 'Extra Info Help', ExtraInfoHelpDescription),
+    MenuItem(CategoryEmoji  , show_category_help        , 'show_category_help'        , 'Category Moderation Help', CategoryHelpDescription),
+    MenuItem(EditPointsEmoji, show_category_scoring_help, 'show_category_scoring_help', 'Category Scoring Help'   , CategoryScoringHelpDescription),
+    MenuItem(RaceEmoji      , show_race_help            , 'show_race_help'            , 'Race Moderation Help'    , RaceHelpDescription),
+    MenuItem(ExtraInfoEmoji , show_extra_info_help      , 'show_extra_info_help'      , 'Extra Info Help'         , ExtraInfoHelpDescription),
 ]
 
 RacerInfoButtonMenuItems = [
-    MenuItem('📖', racer_info_show_open_races,      'racer_info_show_open_races',      'Show Open Races',      RacerOpenRacesDescription),
-    MenuItem('🫵🏽', racer_info_show_assigned_races,  'racer_info_show_assigned_races',  'Show Assigned Races',  RacerAssignedRacesDescription),
-    MenuItem('🏁', racer_info_show_completed_races, 'racer_info_show_completed_races', 'Show Completed Races', RacerShowCompletedRacesDescription),
-    MenuItem('🏷️', racer_info_show_categories,      'racer_info_show_categories',      'Show Categories',      RacerShowCategoriesDescription),
-    MenuItem('📈', racer_info_stats,                'racer_info_stats',                'View My Stats',        RacerStatsDescription),
-    MenuItem('👀', racer_info_view_other_racer,     'racer_info_view_other_racer',     'View Another Racer',   RacerViewOtherRacerDescription),
-    MenuItem('❔', show_racer_info_help,            'show_racer_info_help',            'Racer Command Help',   RacerHelpDescription),
+    MenuItem(OpenRacesEmoji     , racer_info_show_open_races     , 'racer_info_show_open_races'     , 'Show Open Races'     , RacerOpenRacesDescription),
+    MenuItem(AssignEmoji        , racer_info_show_assigned_races , 'racer_info_show_assigned_races' , 'Show Assigned Races' , RacerAssignedRacesDescription),
+    MenuItem(CompletedRacesEmoji, racer_info_show_completed_races, 'racer_info_show_completed_races', 'Show Completed Races', RacerShowCompletedRacesDescription),
+    MenuItem(CategoryEmoji      , racer_info_show_categories     , 'racer_info_show_categories'     , 'Show Categories'     , RacerShowCategoriesDescription),
+    MenuItem(StatsEmoji         , racer_info_stats               , 'racer_info_stats'               , 'View My Stats'       , RacerStatsDescription),
+    MenuItem(ViewOtherEmoji     , racer_info_view_other_racer    , 'racer_info_view_other_racer'    , 'View Another Racer'  , RacerViewOtherRacerDescription),
+    MenuItem(HelpEmoji          , show_racer_info_help           , 'show_racer_info_help'           , 'Racer Command Help'  , RacerHelpDescription),
 ]

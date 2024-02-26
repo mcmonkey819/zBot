@@ -44,7 +44,7 @@ class PointsType:
         nextcord.SelectOption(label="Fixed",      value=Fixed,     description="3 points for a win, 1 point for a tie or close loss (configurable)"),
     ]
 
-    def points_type_str(points_type: int):
+    def to_str(points_type: int):
         if points_type >= 0 and points_type < len(PointsType.SelectOptionList):
             return PointsType.SelectOptionList[points_type].label
         else:
@@ -53,6 +53,14 @@ class PointsType:
 class RaceLeaderboardType:
     Points = 0
     RecentRace = 1
+
+    def to_str(leaderboard_type: int):
+        if leaderboard_type == RaceLeaderboardType.Points:
+            return "Points"
+        elif leaderboard_type == RaceLeaderboardType.RecentRace:
+            return "Most Recent Race"
+        else:
+            return "Unknown Leaderboard Type"
 
 class RaceMessageType:
     Leaderboard  = 0
@@ -224,6 +232,12 @@ def get_category_races(category_id):
     return races
 
 ########################################################################################################################
+def get_active_category_assignments(category_id):
+    assignments = AsyncRaceRoster.select().join(AsyncRace).where(
+        (AsyncRace.category_id == category_id) & (AsyncRace.state == RaceState.Active))
+    return assignments
+
+########################################################################################################################
 def get_category_points(category_id):
     points = AsyncRaceCategoryPoints.select().where(
         AsyncRaceCategoryPoints.category_id == category_id).order_by(AsyncRaceCategoryPoints.points.desc())
@@ -302,6 +316,18 @@ def get_race_assignment(info_type_id, race_id):
     except:
         a = None
     return a
+
+#####################################################################################################################
+def get_category_extra_info_assignments(category_id):
+    assignments = AsyncRaceExtraInfoAssignment.select().where(
+        AsyncRaceExtraInfoAssignment.category_id == category_id)
+    return assignments
+
+#####################################################################################################################
+def get_race_extra_info_assignments(race_id):
+    assignments = AsyncRaceExtraInfoAssignment.select().where(
+        AsyncRaceExtraInfoAssignment.race_id == race_id)
+    return assignments
 
 #####################################################################################################################
 def check_server_assignment_exists(info_type_id, server_id):
