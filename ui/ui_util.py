@@ -13,8 +13,6 @@ import validators
 from db.zBot_db_orm import *
 from db.db_util import *
 
-global_async_race_cog = None
-
 ########################################################################################################################
 # UTILITY TYPES
 ########################################################################################################################
@@ -28,7 +26,6 @@ class zField():
 
 FieldList = list[zField]
 FieldDict = dict[str, nextcord.ui.TextInput]
-ModalDataList = dict[str, str]
 SelectList = list[nextcord.SelectOption]
 
 ########################################################################################################################
@@ -225,24 +222,6 @@ async def display_ephemeral_leaderboard(interaction, race_id):
     # Send the message
     await send_message(interaction, table_text, ephemeral=True, codeblock=True)
 
-########################################################################################################################
-def get_category_leaderboard_table(interaction, points_list, category):
-    # Initialize the table with the labels row
-    table_data = [["Name", "Points"]]
-    places = []
-
-    for i, p in enumerate(points_list):
-        places.append(get_place_str(i+1))
-        # Get the username
-        user = interaction.client.get_user(p.user_id)
-        username = "" if user is None else user.display_name
-        table_data.append([username, p.points])
-    
-    # Tablulate the data
-    table_text = tabulate(table_data, headers="firstrow", showindex=places, tablefmt="double_grid")
-    msg_text = f"**Leaderboard for `{category.name}` Category**\n```\n{table_text}\n [uses {PointsType.to_str(category.points_type)} scoring]```"
-    return msg_text
-
 ####################################################################################################################
 # This function breaks a response into multiple messages that meet the Discord API character limit
 def buildResponseMessageList(message):
@@ -349,17 +328,6 @@ async def send_message(interaction, msg="", ephemeral=True, codeblock=False, vie
             await interaction.send(m, ephemeral=ephemeral)
 
 
-#################################################################################################################
-async def unpin_race(race_id, interaction):
-    # Get the pin message from the DB
-    msg_list = get_messages_by_race_id(race_id, message_type=RaceMessageType.RaceInfo)
-    if msg_list is not None:
-        for m in msg_list:
-            if m.message_id is not None:
-                await delete_message(interaction.guild, m.id)
-
-    await send_message(interaction, f"Unpinned race ID {race_id}")
-
 ########################################################################################################################
 def get_race_embed_field_value(race, user_id=None):
     category_name = race.category_id.name
@@ -373,12 +341,6 @@ def get_race_embed_field_value(race, user_id=None):
         field_value += f"**Description:**\n{race.description}"
 
     return field_value
-
-########################################################################################################################
-def get_async_race_cog(interaction):
-    bot = getattr(interaction, "client", interaction._state._get_client())
-    async_race_cog = bot.get_cog("AsyncRaces")
-    return async_race_cog
 
 ########################################################################################################################
 async def get_race_leaderboard_embed(title, body_text, submissions, current_page, per_page, bot_client, emojis):
@@ -625,7 +587,7 @@ class zUserSelectView(nextcord.ui.View):
 ########################################################################################################################
 # This class is used to display a form that has fields matching the provided item list, using multiple
 # modal pages if needed. The final set of data values will be sent to the provided `submit_handler` function
-# as a ModalDataList using the same keys used in the original FieldList.
+# as a list using the same order used in the original FieldList.
 class zMultiPageModalSender():
     def __init__(self):
         pass

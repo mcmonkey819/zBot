@@ -65,7 +65,6 @@ class RaceLeaderboardType:
 class RaceMessageType:
     Leaderboard  = 0
     RaceInfo     = 1
-    Announcement = 2
 
 ForfeitFinishTime = "23:59:59"
 
@@ -330,11 +329,6 @@ def get_race_extra_info_assignments(race_id):
     return assignments
 
 #####################################################################################################################
-def check_server_assignment_exists(info_type_id, server_id):
-    a = get_server_assignment(info_type_id, server_id)
-    return a is not None
-
-#####################################################################################################################
 def check_category_assignment_exists(info_type_id, category_id):
     a = get_category_assignment(info_type_id, category_id)
     return a is not None
@@ -343,12 +337,6 @@ def check_category_assignment_exists(info_type_id, category_id):
 def check_race_assignment_exists(info_type_id, race_id):
     a = get_race_assignment(info_type_id, race_id)
     return a is not None
-
-#####################################################################################################################
-def delete_server_assignment(info_type_id, server_id):
-    a = get_server_assignment(info_type_id, server_id)
-    if a is not None:
-        a.delete_instance()
 
 #####################################################################################################################
 def delete_category_assignment(info_type_id, category_id):
@@ -456,11 +444,6 @@ def finish_time_sort_key(submission):
     return time_in_seconds
 
 ########################################################################################################################
-# Used to sort submissions by score
-def score_sort_key(submission):
-    return submission.score
-
-########################################################################################################################
 def get_sorted_race_submissions(race_id, reverse=False):
     # Get all of the submissions for this race
     submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id)
@@ -504,6 +487,8 @@ def calculate_par_time(submissions):
         total_seconds += finish_time_to_seconds(s.finish_time)
     par_time = float(total_seconds / times_to_average)
 
+    return par_time
+
 ########################################################################################################################
 def get_draw_threshold_seconds(category_id):
     # The default cutoff for a tie is within 2 seconds if there is not one  specified by the category
@@ -528,13 +513,6 @@ def score_race(race):
         case _:
             logging.info(f"**ERROR** Unknown scoring type for race {race.id}")
             pass
-
-########################################################################################################################
-def delete_race_points(race):
-    submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race.id)
-    for s in submissions:
-        s.points = None
-        s.save()
 
 ########################################################################################################################
 def score_mario_kart_race(race):
@@ -574,7 +552,7 @@ def score_mario_kart_race(race):
         if i > len(mk_points_lookup):
             points = 0
         else:
-            points = mk_points_lookup[i]
+            points = mk_points_lookup[points_idx]
 
         s.points = points
         s.save()
@@ -594,7 +572,7 @@ def score_trueskill_race(race):
     # Get this category's trueskill params from DB
     trueskill_params = get_category_trueskill_params(race.category_id.id)
     if trueskill_params is not None:
-        env = Trueskill(mu=trueskill_params.mu,
+        env = trueskill.Trueskill(mu=trueskill_params.mu,
                         sigma=trueskill_params.sigma,
                         draw_probability=trueskill_params.draw_chance)
 

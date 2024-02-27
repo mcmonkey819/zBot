@@ -10,7 +10,15 @@ General Stuff
 [X] - Add support for misc configuration with a message that contains reactions. Message should be edited when reactions are added/removed
     [X] - Category: leaderboard type, ping all assigned races, remove channel leaderboard, ping on creation, active/inactive, required extra info
     [X] - Race: remove channel leaderboard, required extra info
-[ ] - Check for dead code
+[X] - Check for dead code (made easier thanks to `vulture` python package)
+[ ] - Call score_race on race completion
+[ ] - Post assigned racer ping in server announcement channel instead of interaction channel (or remove annoucement channel)
+[ ] - Uncalled functions (that should prob be called?)
+    [ ] - race_assign_extra_info
+    [ ] - show_race_leaderboard
+[ ] - Button to get submission fields for all racers last N races
+[ ] - Category leaderboard minimum races
+
 [ ] - Create test plan
 [ ] - Test on BTT with Forty bonks DB data
     [ ] - Wipe DB
@@ -30,6 +38,7 @@ Manual DB Conversion Steps
 
 Future Work
 -------------------------------------------------------
+[ ] - Racetime data import
 [ ] - Unpin/Unset leaderboard messages
 [ ] - Create New... option for create and submit roles
 [ ] - Option to ping assigned racers on race activation (per race, or for an entire category for tournament round setup)

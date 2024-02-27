@@ -1,9 +1,9 @@
 from nextcord.ext import commands
 from db.zBot_db_orm import *
+import asyncio
 import nextcord
 import logging
 import re
-import asyncio
 import config.bot_config as bot_config
 from ui.ui_elements import *
 from ui.menus import *
@@ -14,8 +14,6 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     def __init__(self, bot):
         self.bot = bot
         self.test_mode = False
-        self.msg_dict = {}
-        global_async_race_cog = self
 
     def set_test_mode(self):
         self.test_mode = True

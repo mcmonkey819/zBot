@@ -840,8 +840,7 @@ async def race_assign_racer(interaction, race):
     user = await zUserSelectView(None).prompt(interaction)
     
     # Create a race assignment for this user
-    assignment = AsyncRaceRoster(race_id=race.id, user_id=user.id)
-    assignment.save()
+    assign_racer(user_id=user.id, race_id=race.id)
 
     await send_message(interaction, f"User {user.display_name} assigned")
 ########################################################################################################################

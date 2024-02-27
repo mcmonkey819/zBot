@@ -5,8 +5,6 @@ FirstPageEmoji = '⤴️'
 LastPageEmoji = '⤵️'
 NextPageEmoji = '⬇️'
 PreviousPageEmoji = '⬆️'
-ScrollRightEmoji = '➡️'
-ScrollLeftEmoji = '⬅️'
 
 LeaderboardEmoji = '🥇'
 EditEmoji = '✏️'
