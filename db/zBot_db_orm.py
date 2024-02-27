@@ -35,7 +35,6 @@ class AsyncRaceServer(Model):
     name                    = CharField()
     mod_role_id             = IntegerField()
     admin_role_id           = IntegerField()
-    announcement_channel_id = IntegerField(null=True)
 
     class Meta:
         table_name = 'async_race_servers'
@@ -64,7 +63,6 @@ class AsyncRace(Model):
     hash                    = CharField(null=True)
     description             = CharField(null=True)
     additional_instructions = CharField(null=True)
-    submit_instructions     = CharField(null=True)
     category_id             = ForeignKeyField(AsyncRaceCategory, backref='races')
     submission_role         = IntegerField(null=True)
     state                   = IntegerField()
@@ -173,7 +171,7 @@ class AsyncRaceTrueSkillRacerParams(Model):
     sigma       = FloatField()
 
     class Meta:
-        table_name = 'async_race_true_skill_racer_params'
+        table_name = 'async_race_true_skill_params'
         database = db
 
 class AsyncRaceCategoryDrawThreshold(Model):

@@ -4,9 +4,10 @@ from peewee import *
 forty_bonks_server_id = 485284146063736832
 forty_bonks_tourney_server_id = 828666862798635049
 gmp_server_id = 473911155924926490
+bot_testing_things_server_id = 853060981528723468
 
 # Note uncomment vod_link when switching from forty-bonks
-arb_server_id = gmp_server_id
+arb_server_id = forty_bonks_server_id
 
 arb_db_path = "asyncRaceBotConversion/testDbUtil.db"
 if arb_server_id == forty_bonks_server_id:
@@ -59,7 +60,7 @@ class ArbAsyncSubmission(Model):
     collection_rate = IntegerField()
     next_mode = CharField(null=True)
     comment = CharField(null=True)
-    vod_link = CharField(null=True)
+    #vod_link = CharField(null=True)
 
     class Meta:
         table_name = 'async_submissions'

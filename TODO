@@ -15,9 +15,11 @@ General Stuff
 [ ] - Post assigned racer ping in server announcement channel instead of interaction channel (or remove annoucement channel)
 [ ] - Uncalled functions (that should prob be called?)
     [ ] - race_assign_extra_info
-    [ ] - show_race_leaderboard
 [ ] - Button to get submission fields for all racers last N races
 [ ] - Category leaderboard minimum races
+[ ] - Update category leaderboard on race completion if type == RecentRace
+[ ] - Race Info Button view - leaderboard button shows old table type
+[ ] - Update button menus to remove unused buttons (rather than disable and change label to `--`)
 
 [ ] - Create test plan
 [ ] - Test on BTT with Forty bonks DB data

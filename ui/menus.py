@@ -250,7 +250,7 @@ class zRaceListPageSource(menus.ListPageSource):
         self.title = title
         self.body_text = body_text
         self.user_id = user_id
-        self.race_emojis = AnimalEmojiList
+        self.race_emojis = EmojiList
 
         super().__init__(entries=races_list, per_page=per_page)
 
@@ -309,10 +309,10 @@ class zRaceListMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     
 ########################################################################################################################
 class zCategoryListPageSource(menus.ListPageSource):
-    def __init__(self, category_list, server_id, per_page: int=8) -> None:
+    def __init__(self, category_list, server_id, per_page: int=10) -> None:
         self.server_id = server_id
         super().__init__(entries=category_list, per_page=per_page)
-        self.category_emojis = FoodEmojiList
+        self.category_emojis = EmojiList
     
     def format_page(self, menu, categories):
         random.shuffle(self.category_emojis)
@@ -361,19 +361,19 @@ class zCategoryListMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     
 ########################################################################################################################
 class zRaceLeaderboardPageSource(menus.ListPageSource):
-    def __init__(self, submission_list, server_id, bot_client, *, per_page: int=8, title=None, body_text=None) -> None:
+    def __init__(self, submission_list, server_id, bot_client, *, per_page: int=10, title=None, body_text=None) -> None:
         self.server_id = server_id
         self.bot_client = bot_client
         self.title = title
         self.body_text = body_text
-        self.place_emojis = ObjectEmojiList
+        self.place_emojis = EmojiList
 
         super().__init__(entries=submission_list, per_page=per_page)
 
     async def format_page(self, menu, submissions):
         random.shuffle(self.place_emojis)
         menu.update_buttons(submissions, self.place_emojis)
-        return await get_race_leaderboard_embed(self.title, self.body_text, submissions, menu.current_page, menu.per_page, self.bot_client, self.place_emojis)
+        return await get_race_leaderboard_embed(self.title, self.body_text, submissions, menu.current_page, self.per_page, self.bot_client, self.place_emojis)
 
 class zRaceLeaderboardMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     def __init__(self, source: zRaceLeaderboardPageSource, *, style=ButtonStyle.secondary, timeout=None) -> None:
@@ -411,12 +411,13 @@ class zRaceLeaderboardMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     async def send_initial_message(self, ctx, channel):
         submissions = await self.source.get_page(0)
         
-        await send_message(self.interaction, None, view=self, embed=self.source.format_page(self, submissions))
+        embed = await self.source.format_page(self, submissions)
+        await send_message(self.interaction, None, view=self, embed=embed)
         return await self.interaction.original_message()
 
 ########################################################################################################################
 class zCategoryPointsLeaderboardPageSource(menus.ListPageSource):
-    def __init__(self, points_list, bot_client, per_page: int=8, title=None, body_text=None) -> None:
+    def __init__(self, points_list, bot_client, per_page: int=10, title=None, body_text=None) -> None:
         self.title = title
         self.body_text = body_text
         super().__init__(entries=points_list, per_page=per_page)
@@ -428,6 +429,33 @@ class zCategoryPointsLeaderboardPageSource(menus.ListPageSource):
                                                     menu.current_page,
                                                     self.per_page,
                                                     self.bot_client)
+
+########################################################################################################################
+# View which contains race info buttons
+class zRaceInfoButtonView(nextcord.ui.View):
+    def __init__(self, race_id):
+        super().__init__(timeout=None)
+        self.race_id = race_id
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='⏱️ Submit/Edit Time')
+    async def submit_time_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Lookup if the user has a submission for this race already
+        submission = get_race_submission(interaction.user.id, self.race_id)
+        submit_handler = zRaceSubmitHandler(self.race_id, submission)
+        await submit_handler.send_submit_modal(interaction)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='🏳️ Forfeit Race')
+    async def forfeit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Check if the user has already submitted a time for this race
+        if get_race_submission(interaction.user.id, self.race_id) is not None:
+            await send_message(interaction, "Time already submitted for this race, use `Submit/Edit` button to edit")
+            return
+        else:
+            forfeit_race(interaction.user.id, self.race_id)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='🥇 Leaderboard')
+    async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await show_race_leaderboard(interaction, self.race_id)
 
 ########################################################################################################################
 # Category Menu Functions
@@ -470,7 +498,12 @@ async def category_delete(interaction, category):
         # If there are races in created in this category, warn the user that the category cannot be deleted
         await send_message(interaction, f"Category {category.name} cannot be deleted because there are races created for it.")
     else:
-        # Otherwise delete the category
+        # Otherwise we can delete the category, start with any extra info assignments
+        extra_info_assignments = get_category_extra_info_assignments(category.id)
+        for a in extra_info_assignments:
+            a.delete_instance()
+
+        # Then delete the actual category
         name = category.name
         category.delete_instance()
         await send_message(interaction, f"Category {category.name} has been deleted.")
@@ -679,8 +712,8 @@ def get_extra_info_toggle_field(assignment, emoji_index):
         payload=assignment,
         button_style=required_field_button_style(assignment.required),
         custom_id=f"extra_info_toggle_{assignment.info_type_id.name}",
-        emoji=AnimalEmojiList[emoji_index],
-        embed_field=EmbedField(name=f"{AnimalEmojiList[emoji_index]} - Submit Info: {assignment.info_type_id.name}",
+        emoji=EmojiList[emoji_index],
+        embed_field=EmbedField(name=f"{EmojiList[emoji_index]} - Submit Info: {assignment.info_type_id.name}",
                                value=required_field_to_str(assignment.required),
                                inline=False))
 
@@ -745,6 +778,12 @@ async def race_delete(interaction, race):
         await send_message(interaction, "Cannot delete this race because it is not inactive.")
         return
     
+    # First delete any extra info assignments
+    extra_info_assignments = get_race_extra_info_assignments(race.id)
+    for a in extra_info_assignments:
+        a.delete_instance()
+    
+    # Then delete the race
     race_id = race.id
     race.delete_instance()
     await send_message(interaction, "Race ID {race_id} has been deleted.")
@@ -1013,7 +1052,7 @@ async def racer_info_show_open_races(interaction, payload):
     races = get_open_races(interaction.guild_id)
 
     # Display it as a paginated list
-    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id, per_page=4, use_inline_fields=True),
+    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id, use_inline_fields=True),
                                         style=ButtonStyle.secondary,
                                         timeout=None)
     
@@ -1030,7 +1069,7 @@ async def racer_info_show_assigned_races(interaction, payload):
         return
     
     # Display it as a paginated list
-    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id, per_page=4),
+    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id),
                                         style=ButtonStyle.secondary,
                                         timeout=None)
     
@@ -1045,7 +1084,7 @@ async def racer_info_show_categories(interaction, payload):
         return
     
     # Display it as a paginated list
-    category_list_menu = zCategoryListMenuPages(source=zCategoryListPageSource(categories, interaction.guild_id, per_page=8),
+    category_list_menu = zCategoryListMenuPages(source=zCategoryListPageSource(categories, interaction.guild_id),
                                                 style=ButtonStyle.secondary,
                                                 timeout=None)
     
@@ -1070,7 +1109,7 @@ async def racer_info_show_completed_races(interaction, payload):
         return
     
     # Display it as a paginated list
-    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id, per_page=4),
+    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id),
                                         style=ButtonStyle.secondary,
                                         timeout=None)
     
@@ -1109,7 +1148,7 @@ async def send_category_menu(interaction, category_id):
         return
 
     title = f"`{category.name}` Category Management"
-    description = f"Use the buttons below to manage the `{category.name}` category.\n `{category.name}` Description: `{category.description}`"
+    description = f"Use the buttons below to manage the `{category.name}` category.\nDescription: `{category.description}`"
     menu = zButtonMenu(category, CategoryButtonMenuItems, use_channel=False, title=title, description=description)
     await menu.start(interaction=interaction, ephemeral=True)
 
@@ -1121,7 +1160,7 @@ async def send_race_menu(interaction, race_id):
         return
 
     title = f"Race Management for Race ID {race.id}"
-    description = f"Use the buttons below to manage Race ID {race.id} category.\n Description: `{race.description}`"
+    description = f"Use the buttons below to manage Race ID {race.id} category.\nDescription:\n`{race.description}`"
     footer = "For more information about race management, use the commands in the Race Management Info embed"
     menu = zButtonMenu(race, RaceButtonMenuItems, use_channel=False, title=title, description=description)
     await menu.start(interaction=interaction, ephemeral=True)
@@ -1189,13 +1228,18 @@ async def show_submission_details(interaction, submission_id):
     
     # Get extra info types assigned to this race
     extra_info_assignments = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.race_id == race_id)
+    logging.info("--: Getting Extra Info Assignments")
     for a in extra_info_assignments:
         # Lookup the extra infos for this submission and add them to the table
         info = get_extra_info(s, a.info_type_id)
         if info is not None:
             info_type = get_extra_info_type(a.info_type_id)
             if not is_value_empty(info.data):
-                embed.add_field(name=info_type.name, value=str(info.data), inline=False)
+                embed.add_field(name=info_type.name, value=info.data, inline=False)
+            else:
+                logging.info("--: Data was empty")
+        else:
+            logging.info("--: Info was null")
 
     await send_message(interaction, embed=embed)
 
@@ -1256,25 +1300,26 @@ async def show_racer_stats(interaction, user_id):
         EmbedField("---------------------------------", "**Recent Races**")]
     
     # Display the core stats and recent races as a paginated list
-    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id, per_page=4, use_inline_fields=False, static_embed_fields=static_embed_fields, title=user_name, user_id=user_id),
+    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id, use_inline_fields=False, static_embed_fields=static_embed_fields, title=user_name, user_id=user_id),
                                         style=ButtonStyle.secondary,
                                         timeout=None)
     
     await race_list_menu.start(interaction=interaction, ephemeral=True)
 
 ########################################################################################################################
-async def show_race_leaderboard(race_id, interaction):
+async def show_race_leaderboard(interaction, race_id):
     submissions = get_sorted_race_submissions(race_id)
     race = get_race(race_id)
     menu = zRaceLeaderboardMenuPages(source=zRaceLeaderboardPageSource(submissions, 
                                                                        interaction.guild_id,
-                                                                       per_page=10,
+                                                                       interaction.client,
                                                                        title=get_race_leaderboard_title(race_id),
                                                                        body_text=get_race_leaderboard_description(race_id)))
     await menu.start(interaction=interaction, ephemeral=True)
 
 ########################################################################################################################
-async def post_channel_race_leaderboard(interaction, channel, race_id, per_page, bot_client, emojis):
+async def post_channel_race_leaderboard(interaction, channel, race_id, bot_client, emojis):
+    per_page=10
     submissions = get_sorted_race_submissions(race_id)
     num_pages = math.ceil(len(submissions) / per_page)
     race_id = submissions[0].race_id
@@ -1320,7 +1365,7 @@ async def race_edit_leaderboard_channel(interaction, race):
     message_id = None
     if found_existing:
         # post the leaderboard to the new channel will save the message ID(s) to the DB
-        await post_channel_race_leaderboard(interaction, selected_channel, race.id, 8, interaction.client, AnimalEmojiList)
+        await post_channel_race_leaderboard(interaction, selected_channel, race.id, interaction.client, EmojiList)
     else:
         # If there's no existing leaderboard message (because the race hasn't started yet), we just save the channel and race ID
         msg = AsyncRaceMessage(server_id=race.server_id, channel_id=selected_channel, message_id=message_id, race_id=race.id)
@@ -1345,7 +1390,7 @@ async def post_channel_category_leaderboard(interaction, channel, category_id, p
         if len(races) == 0:
             await send_message(interaction, f"No completed races yet for category {category.name}")
         else:    
-            await post_channel_race_leaderboard(interaction, channel, races[0].id, per_page, bot_client, AnimalEmojiList)
+            await post_channel_race_leaderboard(interaction, channel, races[0].id, bot_client, EmojiList)
     else:
         embed_list = await get_category_leaderboard_embed_list(category_id, per_page, bot_client)
         #if embed_list is None or len(embed_list) == 0:
@@ -1381,7 +1426,7 @@ async def show_category_leaderboard(interaction, category_id):
         await send_message(interaction, get_category_no_points_message(category.name))
         return
     
-    menu = menus.ButtonMenuPages(source=zCategoryPointsLeaderboardPageSource(points_list, interaction.client, per_page=8))
+    menu = menus.ButtonMenuPages(source=zCategoryPointsLeaderboardPageSource(points_list, interaction.client))
     await menu.start(interaction=interaction, ephemeral=True)
 
 ########################################################################################################################
@@ -1401,7 +1446,7 @@ def required_field_to_str(required) -> str:
 
 ########################################################################################################################
 def active_field_button_style(active) -> nextcord.ButtonStyle:
-    return nextcord.ButtonStyle.blurple if active else nextcord.ButtonStyle.grey
+    return nextcord.ButtonStyle.green if active else nextcord.ButtonStyle.grey
 
 ########################################################################################################################
 def active_field_to_str(active) -> str:

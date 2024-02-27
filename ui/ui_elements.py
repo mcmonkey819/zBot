@@ -356,33 +356,6 @@ class zRaceSubmitHandler():
         info.data = value
         info.save()
 
-########################################################################################################################
-# View which contains race info buttons
-class zRaceInfoButtonView(nextcord.ui.View):
-    def __init__(self, race_id):
-        super().__init__(timeout=None)
-        self.race_id = race_id
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='⏱️ Submit/Edit Time')
-    async def submit_time_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Lookup if the user has a submission for this race already
-        submission = get_race_submission(interaction.user.id, self.race_id)
-        submit_handler = zRaceSubmitHandler(self.race_id, submission)
-        await submit_handler.send_submit_modal(interaction)
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='🏳️ Forfeit Race')
-    async def forfeit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Check if the user has already submitted a time for this race
-        if get_race_submission(interaction.user.id, self.race_id) is not None:
-            await send_message(interaction, "Time already submitted for this race, use `Submit/Edit` button to edit")
-            return
-        else:
-            forfeit_race(interaction.user.id, self.race_id)
-
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='🥇 Leaderboard')
-    async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await display_ephemeral_leaderboard(interaction, self.race_id)
-
 #################################################################################################################
 async def pin_race_info(channel_id, race, interaction):
     # Get the channel

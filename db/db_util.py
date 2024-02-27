@@ -200,7 +200,7 @@ def get_completed_races(user_id, server_id):
     return races
 
 ########################################################################################################################
-def get_completed_races_by_category(user_id, server_id, category_id):
+def get_completed_races_by_category(category_id):
     races = get_category_races(category_id)
     races = list(filter(lambda r: r.state == RaceState.Completed, races))
     
