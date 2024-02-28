@@ -229,14 +229,7 @@ class zRaceAddEditModal(zModal):
         self.race.save()
 
         if race_is_new:
-            # Create default extra info assignments based on server and category
-            server_infos = AsyncRaceExtraInfoAssignment.select().where(
-                AsyncRaceExtraInfoAssignment.server_id == self.server_id)
-            for s in server_infos:
-                a = AsyncRaceExtraInfoAssignment()
-                a.info_type_id = s.info_type_id
-                a.race_id = self.race.id
-                a.save()
+            # Create default extra info assignments based on category
             cat_infos = AsyncRaceExtraInfoAssignment.select().where(
                 AsyncRaceExtraInfoAssignment.category_id == self.category_id)
             for c in cat_infos:

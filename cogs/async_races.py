@@ -73,11 +73,11 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         await interaction.response.defer(ephemeral=True)
         mod_message = await send_moderator_menu(interaction, mod_channel)
         await mod_message.pin()
-        save_message(interaction.guild_id, mod_channel.id, mod_message.id)
+        save_message(interaction.guild_id, mod_channel.id, mod_message.id, message_type=RaceMessageType.Menu)
         
         racer_message = await send_racer_menu(interaction, racer_channel)
         await racer_message.pin()
-        save_message(interaction.guild_id, racer_channel.id, racer_message.id)
+        save_message(interaction.guild_id, racer_channel.id, racer_message.id, message_type=RaceMessageType.Menu)
         
         await send_message(interaction, "Done!", ephemeral=True)
 

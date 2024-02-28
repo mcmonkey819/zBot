@@ -70,8 +70,13 @@ async def check_user_is_mod(interaction):
     return is_mod
 
 ########################################################################################################################
-def save_message(server_id, channel_id, message_id):
-    msg = AsyncRaceMessage(server_id=server_id, channel_id=channel_id, message_id=message_id)
+def save_message(server_id, channel_id, message_id, *, message_type=RaceMessageType.Leaderboard, category_id=None, race_id=None):
+    msg = AsyncRaceMessage(server_id=server_id,
+                           channel_id=channel_id,
+                           message_id=message_id,
+                           message_type=message_type,
+                           category_id=category_id,
+                           race_id=race_id)
     try:
         msg.save()
     except:

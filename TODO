@@ -11,14 +11,13 @@ General Stuff
     [X] - Category: leaderboard type, ping all assigned races, remove channel leaderboard, ping on creation, active/inactive, required extra info
     [X] - Race: remove channel leaderboard, required extra info
 [X] - Check for dead code (made easier thanks to `vulture` python package)
-[ ] - Call score_race on race completion
-[ ] - Post assigned racer ping in server announcement channel instead of interaction channel (or remove annoucement channel)
-[ ] - Uncalled functions (that should prob be called?)
-    [ ] - race_assign_extra_info
-[ ] - Button to get submission fields for all racers last N races
-[ ] - Category leaderboard minimum races
-[ ] - Update category leaderboard on race completion if type == RecentRace
-[ ] - Race Info Button view - leaderboard button shows old table type
+[X] - Call score_race on race completion
+[X] - Post assigned racer ping in server announcement channel instead of interaction channel (or remove annoucement channel)
+[X] - Uncalled functions (that should prob be called?)
+    [X] - race_assign_extra_info
+[ ] - command/button to get submission fields for all racers last N races
+[X] - Update category leaderboard on race completion if type == RecentRace
+[X] - Race Info Button view - leaderboard button shows old table type
 [ ] - Update button menus to remove unused buttons (rather than disable and change label to `--`)
 
 [ ] - Create test plan
@@ -41,6 +40,7 @@ Manual DB Conversion Steps
 Future Work
 -------------------------------------------------------
 [ ] - Racetime data import
+[ ] - Category leaderboard minimum races
 [ ] - Unpin/Unset leaderboard messages
 [ ] - Create New... option for create and submit roles
 [ ] - Option to ping assigned racers on race activation (per race, or for an entire category for tournament round setup)

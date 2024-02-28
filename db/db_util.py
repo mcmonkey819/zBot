@@ -65,6 +65,7 @@ class RaceLeaderboardType:
 class RaceMessageType:
     Leaderboard  = 0
     RaceInfo     = 1
+    Menu         = 2
 
 ForfeitFinishTime = "23:59:59"
 
@@ -750,3 +751,4 @@ def get_messages_by_race_id(race_id, message_type=RaceMessageType.Leaderboard):
 ########################################################################################################################
 def get_messages_by_category_id(category_id):
     return AsyncRaceMessage.select().where(AsyncRaceMessage.category_id == category_id)
+

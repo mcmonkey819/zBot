@@ -250,12 +250,11 @@ class zRaceListPageSource(menus.ListPageSource):
         self.title = title
         self.body_text = body_text
         self.user_id = user_id
-        self.race_emojis = EmojiList
+        self.race_emojis = get_emoji_list()
 
         super().__init__(entries=races_list, per_page=per_page)
 
     def format_page(self, menu, races):
-        random.shuffle(self.race_emojis)
         menu.update_buttons(races, self.race_emojis)
 
         embed = nextcord.Embed(color=0x5865F2, title=self.title, description=self.body_text)
@@ -312,10 +311,9 @@ class zCategoryListPageSource(menus.ListPageSource):
     def __init__(self, category_list, server_id, per_page: int=10) -> None:
         self.server_id = server_id
         super().__init__(entries=category_list, per_page=per_page)
-        self.category_emojis = EmojiList
+        self.category_emojis = get_emoji_list()
     
     def format_page(self, menu, categories):
-        random.shuffle(self.category_emojis)
         menu.update_buttons(categories, self.category_emojis)
 
         table_data = [["ID", "Category Name", "Description"]]
@@ -366,12 +364,11 @@ class zRaceLeaderboardPageSource(menus.ListPageSource):
         self.bot_client = bot_client
         self.title = title
         self.body_text = body_text
-        self.place_emojis = EmojiList
+        self.place_emojis = get_emoji_list()
 
         super().__init__(entries=submission_list, per_page=per_page)
 
     async def format_page(self, menu, submissions):
-        random.shuffle(self.place_emojis)
         menu.update_buttons(submissions, self.place_emojis)
         return await get_race_leaderboard_embed(self.title, self.body_text, submissions, menu.current_page, self.per_page, self.bot_client, self.place_emojis)
 
@@ -564,7 +561,7 @@ async def category_edit_leaderboard_channel(interaction, category):
     # Post an updated leaderboard in the new leaderboard channel
     channel = interaction.guild.get_channel(selected_channel)
     if channel is not None:
-        await post_channel_category_leaderboard(interaction, channel, category.id, 8, interaction.client)
+        await post_channel_category_leaderboard(interaction, channel, category.id, interaction.client)
         await send_message(interaction, "Category Leaderboard Updated")
     else:
         await send_message(interaction, "**ERROR** Could not fetch selected channel. Please contact a bot admin.")
@@ -648,8 +645,8 @@ async def category_misc_toggles(interaction, category):
 
     # Get extra info assignments for this category
     extra_infos = get_category_extra_info_assignments(category.id)
-    for i, a in enumerate(extra_infos):
-        toggle_list.append(get_extra_info_toggle_field(a, i))
+    for a in extra_infos:
+        toggle_list.append(get_extra_info_toggle_field(a))
 
     # Create and start the menu
     menu = zToggleButtonMenu(toggle_fields=toggle_list,
@@ -706,14 +703,15 @@ def get_remove_category_leaderboard_field(category):
                                inline=False))
 
 ########################################################################################################################
-def get_extra_info_toggle_field(assignment, emoji_index):
+def get_extra_info_toggle_field(assignment):
+    emoji = get_random_emoji()
     return ToggleField(
         toggle_func=toggle_required_extra_info,
         payload=assignment,
         button_style=required_field_button_style(assignment.required),
         custom_id=f"extra_info_toggle_{assignment.info_type_id.name}",
-        emoji=EmojiList[emoji_index],
-        embed_field=EmbedField(name=f"{EmojiList[emoji_index]} - Submit Info: {assignment.info_type_id.name}",
+        emoji=emoji,
+        embed_field=EmbedField(name=f"{emoji} - Submit Info: {assignment.info_type_id.name}",
                                value=required_field_to_str(assignment.required),
                                inline=False))
 
@@ -834,6 +832,15 @@ async def race_change_state(interaction, race):
     # Now that all checks are done, save the new race state
     race.state = new_state
     race.save()
+    
+    if new_state == RaceState.Completed:
+        # If the new state is completed, score the race
+        score_race(race)
+
+        # Then update the category and/or race leaderboards
+        await update_category_leaderboard(interaction, race)
+        await update_race_leaderboard(interaction, race)
+    
     await send_message(interaction, f"Race {race.id} state changed to {new_state}")
 
 ########################################################################################################################
@@ -942,8 +949,8 @@ async def race_misc_toggles(interaction, race):
     
     # Get extra info assignments for this category
     extra_infos = get_race_extra_info_assignments(race.id)
-    for i, a in enumerate(extra_infos):
-        toggle_list.append(get_extra_info_toggle_field(a, i))
+    for a in extra_infos:
+        toggle_list.append(get_extra_info_toggle_field(a))
 
     # Create and start the menu
     menu = zToggleButtonMenu(toggle_fields=toggle_list,
@@ -1318,7 +1325,7 @@ async def show_race_leaderboard(interaction, race_id):
     await menu.start(interaction=interaction, ephemeral=True)
 
 ########################################################################################################################
-async def post_channel_race_leaderboard(interaction, channel, race_id, bot_client, emojis):
+async def post_channel_race_leaderboard(interaction, channel, race_id, bot_client, emojis, save_as_category_message=False):
     per_page=10
     submissions = get_sorted_race_submissions(race_id)
     num_pages = math.ceil(len(submissions) / per_page)
@@ -1342,7 +1349,11 @@ async def post_channel_race_leaderboard(interaction, channel, race_id, bot_clien
     for menu in menu_list:
         await menu.start(interaction=interaction, channel=channel)
         await menu.message.pin()
-        save_message(interaction.guild_id, channel.id, menu.message.id)
+        if save_as_category_message:
+            race = get_race(race_id)
+            save_message(interaction.guild_id, channel.id, menu.message.id, category_id=race.category_id.id)
+        else:
+            save_message(interaction.guild_id, channel.id, menu.message.id, race_id=race_id)
 
 ########################################################################################################################
 async def race_edit_leaderboard_channel(interaction, race):
@@ -1365,7 +1376,7 @@ async def race_edit_leaderboard_channel(interaction, race):
     message_id = None
     if found_existing:
         # post the leaderboard to the new channel will save the message ID(s) to the DB
-        await post_channel_race_leaderboard(interaction, selected_channel, race.id, interaction.client, EmojiList)
+        await post_channel_race_leaderboard(interaction, selected_channel, race.id, interaction.client, get_emoji_list())
     else:
         # If there's no existing leaderboard message (because the race hasn't started yet), we just save the channel and race ID
         msg = AsyncRaceMessage(server_id=race.server_id, channel_id=selected_channel, message_id=message_id, race_id=race.id)
@@ -1378,7 +1389,8 @@ async def race_edit_leaderboard_channel(interaction, race):
     await send_message(interaction, "Category Leaderboard Channel Saved")
 
 ########################################################################################################################
-async def post_channel_category_leaderboard(interaction, channel, category_id, per_page, bot_client):
+async def post_channel_category_leaderboard(interaction, channel, category_id, bot_client):
+    per_page = 8
     category = get_category(category_id)
     if category is None:
         await send_message(interaction, f"**ERROR** Fetching category with ID {category_id}. Please contact a bot admin.")
@@ -1390,7 +1402,7 @@ async def post_channel_category_leaderboard(interaction, channel, category_id, p
         if len(races) == 0:
             await send_message(interaction, f"No completed races yet for category {category.name}")
         else:    
-            await post_channel_race_leaderboard(interaction, channel, races[0].id, bot_client, EmojiList)
+            await post_channel_race_leaderboard(interaction, channel, races[0].id, bot_client, get_emoji_list())
     else:
         embed_list = await get_category_leaderboard_embed_list(category_id, per_page, bot_client)
         #if embed_list is None or len(embed_list) == 0:
@@ -1589,6 +1601,52 @@ async def update_menu_embed_field(menu, toggle_field: ToggleField):
    
     # Tell the menu to update the message
     await menu.send_updated_message(embed)
+
+########################################################################################################################
+async def update_category_leaderboard(interaction, race):
+    # Check if there are any category leaderboard messages
+    msgs = get_messages_by_category_id(race.category_id.id)
+    msgs = list(filter(lambda x: x.message_type is RaceMessageType.Leaderboard, msgs))
+
+    if msgs is None or len(msgs) == 0:
+        return
+    
+    # Extract the channel_id from the message and fetch the channel
+    channel = await interaction.guild.get_channel(msgs[0].channel_id)
+
+    # Delete the existing messages
+    for m in msgs:
+        await delete_message(interaction.guild, m.message_id)
+
+    # Post the updated leaderboard to the channel
+    post_channel_category_leaderboard(interaction, channel, race.category_id.id, interaction.client)
+
+########################################################################################################################
+async def update_race_leaderboard(interaction, race):
+    # Check if there are any category leaderboard messages
+    msgs = get_messages_by_race_id(race.id)
+    msgs = list(filter(lambda x: x.message_type is RaceMessageType.Leaderboard, msgs))
+
+    if msgs is None or len(msgs) == 0:
+        return
+    
+    # Extract the channel_id from the message and fetch the channel
+    channel = await interaction.guild.get_channel(msgs[0].channel_id)
+
+    # Delete the existing messages
+    for m in msgs:
+        await delete_message(interaction.guild, m.message_id)
+
+    # Post the updated leaderboard to the channel
+    post_channel_race_leaderboard(interaction, channel, race.id, interaction.client, get_emoji_list())
+
+########################################################################################################################
+def get_emoji_list():
+    return random.shuffle(copy(EmojiList))
+
+########################################################################################################################
+def get_random_emoji():
+    return random.choice(EmojiList)
 
 ########################################################################################################################
 # Menu Static Data
