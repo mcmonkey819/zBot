@@ -184,7 +184,7 @@ class zConfirmMenu(menus.ButtonMenu):
         self.stop()
 
     async def prompt(self, interaction: nextcord.Interaction):
-        await menus.Menu.start(self, interaction, wait=True)
+        await menus.Menu.start(self, interaction=interaction, wait=True)
         return self.result
     
 ########################################################################################################################
@@ -833,7 +833,10 @@ async def race_change_state(interaction, race):
     race.state = new_state
     race.save()
     
-    if new_state == RaceState.Completed:
+    if new_state == RaceState.Active:
+        # If the new state is active handle sending the race announcement message
+        await send_race_announcement(interaction, race)
+    elif new_state == RaceState.Completed:
         # If the new state is completed, score the race
         score_race(race)
 
@@ -841,7 +844,7 @@ async def race_change_state(interaction, race):
         await update_category_leaderboard(interaction, race)
         await update_race_leaderboard(interaction, race)
     
-    await send_message(interaction, f"Race {race.id} state changed to {new_state}")
+    await send_message(interaction, f"Race {race.id} state changed to {RaceState.to_str(new_state)}")
 
 ########################################################################################################################
 async def race_pin(interaction, race):
@@ -1193,11 +1196,11 @@ async def prompt_for_role(interaction):
     return None if selected_role == 0 else selected_role
 
 ########################################################################################################################
-async def prompt_for_channel(interaction):
+async def prompt_for_channel(interaction, placeholder="Choose Channel..."):
     server = get_server_from_interaction(interaction)
     channel_list = await get_permitted_channel_select_list(interaction.client.user.id, server)
     
-    selected_channel = await zSingleSelectView(channel_list, None, "Choose Channel...").prompt(interaction)
+    selected_channel = await zSingleSelectView(channel_list, None, placeholder).prompt(interaction)
     
     return None if selected_channel == 0 else selected_channel
 
@@ -1641,6 +1644,32 @@ async def update_race_leaderboard(interaction, race):
     post_channel_race_leaderboard(interaction, channel, race.id, interaction.client, get_emoji_list())
 
 ########################################################################################################################
+async def send_race_announcement(interaction, race):
+    if race.category_id.create_role is not None:
+        # Verify we have a valid role saved
+        role = interaction.guild.get_role(race.category_id.create_role)
+        if role is None:
+            await send_message(interaction, f"**ERROR** Could not fetch stored category create role")
+            return
+        
+        # Construct the default announcement message
+        msg_text = f"Hey {role.mention}! A new {race.category_id.name} race has been created. Check it out and submit your time. GLHF!"
+
+        # Ask the user if they want to make changes
+        edit_confirm = await zConfirmMenu(f"The following message will be sent to {role.mention}:\n\n{msg_text}\n\Would you like to edit the message?").prompt(interaction)
+
+        # If so, prompt the user for the desired message
+        if edit_confirm:
+            msg_text = await prompt_for_value(interaction, "Enter New Message (blank to cancel sending)", "Announcement Message", msg_text)
+
+        # Prompt the user for the desired channel
+        channel = await prompt_for_channel(interaction, "Choose Announcement Channel...")
+
+        # Finally post the message to the channel and save it to the DB
+        msg = await channel.send(msg_text)
+        save_message(interaction.guild_id, channel.id, msg.id, message_type=RaceMessageType.Announcement, category_id=race.category_id.id)
+
+########################################################################################################################
 def get_emoji_list():
     return random.shuffle(copy(EmojiList))
 
@@ -1671,15 +1700,16 @@ CategoryButtonMenuItems = [
 ]
 
 RaceButtonMenuItems = [
-    MenuItem(EditEmoji          , race_edit_core               , 'race_edit_core'               , 'Edit Race'              , RaceEditDescription),
-    MenuItem(DeleteEmoji        , race_delete                  , 'race_delete'                  , 'Delete Race'            , RaceDeleteDescription),
-    MenuItem(ChangeStateEmoji   , race_change_state            , 'race_change_state'            , 'Change Race State'      , RaceChangeStateDescription),
-    MenuItem(PinEmoji           , race_pin                     , 'race_pin'                     , 'Pin Race Info'          , RacePinDescription),
-    MenuItem(SubmitRoleEmoji    , race_edit_submit_role        , 'race_edit_submit_role'        , 'Choose Submit Role'     , RaceEditSubmitRoleDescription),
-    MenuItem(LeaderboardEmoji   , race_edit_leaderboard_channel, 'race_edit_leaderboard_channel', 'Set Leaderboard Channel', RaceEditLeaderboardChannelDescription),
-    MenuItem(AssignEmoji        , race_assign_racer            , 'race_assign_racer'            , 'Assign Racers'          , RaceAssignRacerDescription),
-    MenuItem(EditSubmissionEmoji, race_edit_submission         , 'race_edit_submission'         , 'Modify Submission'      , RaceEditSubmissionDescription),
-    MenuItem(ToggleEmoji        , race_misc_toggles            , 'race_misc_toggles'            , 'Misc Race Config'       , RaceMiscToggleDescription),
+    MenuItem(EditEmoji          , race_edit_core               , 'race_edit_core'               , 'Edit Race'                , RaceEditDescription),
+    MenuItem(DeleteEmoji        , race_delete                  , 'race_delete'                  , 'Delete Race'              , RaceDeleteDescription),
+    MenuItem(ChangeStateEmoji   , race_change_state            , 'race_change_state'            , 'Change Race State'        , RaceChangeStateDescription),
+    MenuItem(PinEmoji           , race_pin                     , 'race_pin'                     , 'Pin Race Info'            , RacePinDescription),
+    MenuItem(SubmitRoleEmoji    , race_edit_submit_role        , 'race_edit_submit_role'        , 'Choose Submit Role'       , RaceEditSubmitRoleDescription),
+    MenuItem(LeaderboardEmoji   , race_edit_leaderboard_channel, 'race_edit_leaderboard_channel', 'Set Leaderboard Channel'  , RaceEditLeaderboardChannelDescription),
+    MenuItem(ExtraInfoEmoji     , race_assign_extra_info       , 'race_assign_extra_info'       , 'Assign Submission Values' , RaceAssignExtraInfoDescription),
+    MenuItem(AssignEmoji        , race_assign_racer            , 'race_assign_racer'            , 'Assign Racers'            , RaceAssignRacerDescription),
+    MenuItem(EditSubmissionEmoji, race_edit_submission         , 'race_edit_submission'         , 'Modify Submission'        , RaceEditSubmissionDescription),
+    MenuItem(ToggleEmoji        , race_misc_toggles            , 'race_misc_toggles'            , 'Misc Race Config'         , RaceMiscToggleDescription),
 ]
 
 RaceModerationHelpMenuItems = [

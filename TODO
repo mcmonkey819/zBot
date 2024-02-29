@@ -1,36 +1,18 @@
 General Stuff
 -------------------------------------------------------
-
-[X] - Fix race leaderboard display (too many columns) (paginate horizontally *and* vertically?)
-[X] - Pin leaderboard messages
-[X] - Category leaderboard options: most recent race or points
-[X] - Paginate all leaderboards
-    [X] - Rework as a paginated embed with fields. Field contains place + emoji as label and time + name as value. Pressing button displays the formatted submission details (also a paginated embed)
-    [X] - Update ephemeral leaderboards to use embed functions
-[X] - Add support for misc configuration with a message that contains reactions. Message should be edited when reactions are added/removed
-    [X] - Category: leaderboard type, ping all assigned races, remove channel leaderboard, ping on creation, active/inactive, required extra info
-    [X] - Race: remove channel leaderboard, required extra info
-[X] - Check for dead code (made easier thanks to `vulture` python package)
-[X] - Call score_race on race completion
-[X] - Post assigned racer ping in server announcement channel instead of interaction channel (or remove annoucement channel)
-[X] - Uncalled functions (that should prob be called?)
-    [X] - race_assign_extra_info
-[ ] - command/button to get submission fields for all racers last N races
-[X] - Update category leaderboard on race completion if type == RecentRace
-[X] - Race Info Button view - leaderboard button shows old table type
-[ ] - Update button menus to remove unused buttons (rather than disable and change label to `--`)
-
 [ ] - Create test plan
+
 [ ] - Test on BTT with Forty bonks DB data
-    [ ] - Wipe DB
-    [ ] - Port 40 Bonks data
+    [X] - Wipe DB
+    [X] - Port 40 Bonks data
+
 [ ] - Write demo script
     [ ] - Moderator
     [ ] - Racer
+
 [ ] - Record demos
     [ ] - Moderator
     [ ] - Racer
-[X] - Leaderboards can have multiple messages in DB
 
 Manual DB Conversion Steps
 -------------------------------------------------------
@@ -39,6 +21,7 @@ Manual DB Conversion Steps
 
 Future Work
 -------------------------------------------------------
+[ ] - Update button menus to remove unused buttons (rather than disable and change label to `--`)
 [ ] - Racetime data import
 [ ] - Category leaderboard minimum races
 [ ] - Unpin/Unset leaderboard messages

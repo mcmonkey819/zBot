@@ -75,7 +75,7 @@ RaceEditSubmitRoleDescription = 'Allows you to choose the role that is assigned 
 RaceEditLeaderboardChannelDescription = 'Allows you to select a channel to display the leaderboard for this race. The leaderboard will be updated when times are submitted. Choosing the "None" option will result in no leaderboard being displayed.'
 RaceAssignExtraInfoDescription = 'Allows you to assign a specific submission value to this race. Already assigned values are marked with a ✅, choosing an already assigned value will unassign it from this race.'
 RaceAssignRacerDescription = 'Allows you to assign specific racers to this race. See the "Race Assignment" command under the Race Moderation Info embed to learn more about race assignments.'
-RaceEditSubmissionDescription = 'Allows you to modify a submission to this race. This is useful for correcting errors or fixing scoring errors.'
+RaceEditSubmissionDescription = 'Allows you to modify a submission to this race. This is useful for correcting errors, fixing scoring errors or submitting on behalf of someone else.'
 RaceMiscToggleDescription = 'Allows configuration of various miscellaneous race data such as force removing the leaderboard and specifying which extra info fields are required.'
 
 CategoryHelpDescription = 'Displays information about creating and managing categories.'

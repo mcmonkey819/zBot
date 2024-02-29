@@ -29,6 +29,16 @@ class RaceState:
         nextcord.SelectOption(label="Completed", value=Completed, description="Close the race to further submissions (and calculate score, if applicable)"),
     ]
 
+    def to_str(state: int):
+        if state == RaceState.Inactive:
+            return "Inactive"
+        elif state == RaceState.Active:
+            return "Active"
+        elif state == RaceState.Completed:
+            return "Completed"
+        else:
+            return "Unknown State"
+
 class PointsType:
     NoScoring = 0
     MarioKart = 1
@@ -66,6 +76,7 @@ class RaceMessageType:
     Leaderboard  = 0
     RaceInfo     = 1
     Menu         = 2
+    Announcement = 3
 
 ForfeitFinishTime = "23:59:59"
 
