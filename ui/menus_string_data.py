@@ -26,6 +26,9 @@ OpenRacesEmoji = '📖'
 CompletedRacesEmoji = '🏁'
 StatsEmoji = '📊'
 ViewOtherEmoji = '👀'
+ForfeitEmoji = '🏳️'
+TimeEmoji = '⏱️'
+ThumbnailEmoji = '🖼️'
 
 EmojiList = [
     "🐱", "🐵", "🦄", "🐼",
@@ -65,6 +68,7 @@ CategoryEditCreateRoleDescription = 'Allows you to select a role to be pinged on
 CategorySetLeaderboardChannelDescription = 'Allows you to select a channel to display the points leaderboard for this category. The leaderboard will be updated when races are completed. Choosing the "None" option will result in no leaderboard being displayed.'
 CategoryEditPointsDescription = 'Allows you to manually modify the points of racers in this category. This is useful for manually awarding bonus points or correcting errors.'
 CategoryAssignExtraInfoDescription = 'Allows you to assign a specific submission value to all races in this category. Already assigned values are marked with a ✅, choosing an already assigned value will unassign it from this category.'
+CategorySetThumbnailDescription = 'Sets the thumbnail for the category. The thumbnail is used when displaying race info for races in the category. The thumbnail should be a URL to an image (http or https only), or leave blank to remove the thumbnail.'
 CategoryMiscToggleDescription = 'Allows configuration of various miscellaneous category data such as leaderboard type, category visibility, required extra info, etc'
 
 RaceEditDescription = 'Allows you to edit the core info about the race, such as the seed, hash, description and instructions.'
@@ -204,6 +208,8 @@ def get_category_no_points_message(name):
 
 toggle_leaderboard_id = "toggle_leaderboard"
 toggle_category_active_id = "toggle_category_active"
+toggle_category_pin_recent_id = "toggle_category_pin_recent"
+toggle_category_allow_completed_submit_id = "toggle_category_allow_completed_submit"
 category_ping_assigned_id = "category_ping_assigned"
 remove_category_leaderboard_id = "remove_category_leaderboard"
 remove_race_leaderboard_id = "remove_race_leaderboard"

@@ -5,6 +5,7 @@ from enum import Enum
 import logging
 import math
 import nextcord
+from nextcord.partial_emoji import PartialEmoji
 import re
 from tabulate import tabulate
 tabulate.PRESERVE_WHITESPACE = True
@@ -279,33 +280,31 @@ def buildResponseMessageList(message):
 
 #####################################################################################################################
 def get_race_info_message(race):
-    race_info_msg_text = "> \n"
-    race_info_msg_text += f"> Use the buttons below for Race ID {race.id}\n"
-    race_info_msg_text += f"> Created On: {race.create_datetime}\n"
-    race_info_msg_text += "> \n"
-    race_info_msg_text += f"> {race.description}\n"
+    
+    title = f"{race.description}"
+    description = f"Use the buttons below for Race ID {race.id}\n  *Created On:* {race.create_datetime}"
     if race.additional_instructions is not None:
-        race_info_msg_text += f"> {race.additional_instructions}\n"
-    race_info_msg_text += "> \n"
-    race_info_msg_text +=  f">        {race.seed}\n"
-    race_info_msg_text += "> \n"
-    if race.hash is not None and race.hash != "":
-        race_info_msg_text += f"> Hash: **{race.hash}**\n"
-
-    # Check the seed to see if it contains a link that we can embed
-    seed_embed = None
+        description += f"\n\n{race.additional_instructions}"
+    
     seed_parts = race.seed.split()
     seed_url = None
     for p in seed_parts:
         if validators.url(p) == True:
             seed_url = p
             break
-    if seed_url is not None:
-        seed_embed = nextcord.Embed(title="{}".format(race.description), url=seed_url, color=nextcord.Colour.random())
-        # Add generic, creative commons licensed download thumbnail
-        seed_embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/1/1e/Download-Icon.png")
 
-    return race_info_msg_text, seed_embed
+    seed_embed = nextcord.Embed(title=title, description=description, url=seed_url, color=nextcord.Colour.random())
+    if race.category_id.thumbnail_url is not None:
+        try:
+            seed_embed.set_thumbnail(url=race.category_id.thumbnail_url)
+        except:
+            logging.info(f"**ERROR** Failed to set thumbnail for category {race.category_id.name}")                       
+
+    seed_embed.add_field(name="Seed", value=race.seed, inline=False)
+    if race.hash is not None and race.hash != "":
+        seed_embed.add_field(name="Hash", value=race.hash, inline=False)
+    
+    return seed_embed
 
 #####################################################################################################################
 async def defer(interaction):
@@ -349,7 +348,7 @@ def get_race_embed_field_value(race, user_id=None):
 
 ########################################################################################################################
 async def get_race_leaderboard_embed(title, body_text, submissions, current_page, per_page, bot_client, emojis):
-    embed = nextcord.Embed(color=0x5865F2, title=title, description=body_text)
+    embed = nextcord.Embed(color=nextcord.Colour.random(), title=title, description=body_text)
         
     for i, s in enumerate(submissions):
         place_num = (current_page * per_page) + i + 1
@@ -361,7 +360,7 @@ async def get_race_leaderboard_embed(title, body_text, submissions, current_page
 
 ########################################################################################################################
 async def get_category_leaderboard_embed(title, body_text, points_list, current_page, per_page, bot_client):
-    embed = nextcord.Embed(color=0x5865F2, title=title, description=body_text)
+    embed = nextcord.Embed(color=nextcord.Colour.random(), title=title, description=body_text)
         
     for i, p in enumerate(points_list):
         place_num = (current_page * per_page) + i + 1
@@ -416,6 +415,28 @@ def copy_embed(embed):
         new_embed.url = embed.url
 
     return new_embed
+
+########################################################################################################################
+async def get_user_from_interaction(interaction, user_id):
+    # First try to fetch from the guild
+    user = await interaction.guild.fetch_member(user_id)
+    if user is None:
+        # If that fails, try to fetch from the client
+        user = await interaction.client.fetch_user(user_id)
+    return user
+
+########################################################################################################################
+def can_view_race_leaderboard(race_id, user_id):
+    # The user can view the leaderboard if the race is completed or if they have already submitted a time
+    race = get_race(race_id)
+    can_view = False
+    if race is not None and race.state == RaceState.Completed:
+        can_view = True
+    
+    if get_race_submission(user_id, race_id) is not None:
+        can_view = True
+
+    return can_view
 
 ########################################################################################################################
 # BASE CLASSES
@@ -659,3 +680,22 @@ class zMultiPageModalSender():
     ####################################################################################################################
     async def cancel_submit(self, interaction):
         await self.submit_handler(interaction, None)
+
+########################################################################################################################
+# View which contains buttons for yes and no. This is different from the zConfirmButtonView in that it calls a
+# provided function with the interaction which has not been responded to. This is mostly to work around the limitation
+# of send_modal not working for an interaction that's already been responded to or acknowledged 
+# (zConfirmView will do the latter automatically)
+class zYesNoButtonView(nextcord.ui.View):
+    def __init__(self, func, payload=None):
+        super().__init__(timeout=None)
+        self.func = func
+        self.payload = payload
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str('✅'))
+    async def yes_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await self.func(interaction, True, self.payload)
+    
+    @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str('❌'))
+    async def no_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await self.func(interaction, False, self.payload)

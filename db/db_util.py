@@ -10,12 +10,14 @@ class VarType:
     Str      = 2
     GameTime = 3
     DateTime = 4
+    Float    = 5
 
     SelectOptionList = [
         nextcord.SelectOption(label="Integer",             value=Int,      description="Integer Value"),
         nextcord.SelectOption(label="String",              value=Str,      description="String text up to 255 characters in length"),
         nextcord.SelectOption(label="Game Time (H:MM:SS)", value=GameTime, description="Game time expressed in 'H:MM:SS' format"),
         nextcord.SelectOption(label="Date/Time",           value=DateTime, description="Date & Time string, typically something like 'YYYY-MM-DD HH:MM:SS'"),
+        nextcord.SelectOption(label="Float",               value=Float,    description="Floating point number (e.g. 3.14)"),
 ]
 
 class RaceState:
@@ -79,6 +81,7 @@ class RaceMessageType:
     Announcement = 3
 
 ForfeitFinishTime = "23:59:59"
+ForfeitFinishTimeSeconds = (3600 * 23) + (60 * 59) + 59
 
 #####################################################################################################################
 def get_server(server_id):
@@ -170,6 +173,13 @@ def get_race_assignment(user_id, race_id):
     return a
 
 ########################################################################################################################
+def get_category_race_info_messages(race):
+    return AsyncRaceMessage.select().where(
+        (AsyncRaceMessage.category_id == race.category_id.id) &
+        (AsyncRaceMessage.race_id == race.id) &
+        (AsyncRaceMessage.message_type == RaceMessageType.RaceInfo))
+
+########################################################################################################################
 def get_assigned_racers(race_id):
     racers = AsyncRaceRoster.select().where(AsyncRaceRoster.race_id == race_id)
     return racers
@@ -182,6 +192,22 @@ def get_open_races(server_id):
         # An open race is a race that does NOT have assignments
         if AsyncRaceRoster.select().where(AsyncRaceRoster.race_id == r.id).count() == 0:
             ret_list.append(r)
+    
+    # Filter out inactive races
+    ret_list = list(filter(lambda r: r.state != RaceState.Inactive, ret_list))
+    return ret_list
+
+########################################################################################################################
+def get_available_open_races(server_id):
+    # Start with all open races
+    races = get_open_races(server_id)
+
+    # Filter out completed races if the category does not allow submissions after a race is completed
+    ret_list = []
+    for r in races:
+        if r.category_id.allow_submissions_after_completed or r.state != RaceState.Completed:
+            ret_list.append(r)
+    
     return ret_list
 
 ########################################################################################################################
@@ -434,16 +460,69 @@ def assign_racer(user_id, race_id):
         assignment.save()
 
 ########################################################################################################################
+def datetime_is_valid(datetime_str):
+    date_time_format = "%Y-%m-%d %H:%M:%S"
+    date_only_format = "%Y-%m-%d"
+    time_only_format = "%H:%M:%S"
+
+    # We'll try to parse the string as a date/time, date only, and time only
+    success = True
+    try:
+        datetime.strptime(datetime_str, date_time_format)
+        return True
+    except:
+        success = False
+
+    try:
+        datetime.strptime(datetime_str, date_only_format)
+        return True
+    except:
+        success = False
+
+    try:
+        datetime.strptime(datetime_str, time_only_format)
+        return True
+    except:
+        success = False
+
+    return success
+        
+    
+########################################################################################################################
+def game_time_is_valid(time_str):
+    valid_time_str = False
+    parts = time_str.split(':')
+    # Hours can be left off for short seeds
+    if len(parts) >= 2 and len(parts) <= 3:
+        hours = 0
+        minutes = -1
+        seconds = -1
+        try:
+            seconds = int(parts[-1])
+            minutes = int(parts[-2])
+            hours = 0
+            if len(parts) == 3:
+                hours = int(parts[0])
+        except ValueError:
+            valid_time_str = False
+        if hours >= 0 and hours <= 24 and minutes >= 0 and minutes <= 59 and seconds >= 0 and seconds <= 59:
+            valid_time_str = True
+    return valid_time_str
+
+########################################################################################################################
 def finish_time_to_seconds(finish_time_str):
-    parts = finish_time_str.split(':')
-    hours = 0
-    if len(parts) == 3:
-        hours = int(parts[0])
-        mins = int(parts[1])
-        seconds = int(parts[2])
-    else:
-        mins = int(parts[0])
-        seconds = int(parts[1])
+    try:
+        parts = finish_time_str.split(':')
+        hours = 0
+        if len(parts) == 3:
+            hours = int(parts[0])
+            mins = int(parts[1])
+            seconds = int(parts[2])
+        else:
+            mins = int(parts[0])
+            seconds = int(parts[1])
+    except:
+        return ForfeitFinishTimeSeconds
     return (3600 * hours) + (60 * mins) + seconds
 
 ########################################################################################################################

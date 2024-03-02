@@ -1,6 +1,18 @@
 General Stuff
 -------------------------------------------------------
-[ ] - Create test plan
+[X] - Category field to pin most recent race
+[X] - Customize thumbnail image per category
+[X] - Rework get_race_info_message to only return embed
+[X] - Race Info View - move button text to embed fields to match style of other menus
+[X] - Yes/No view - Match style of zConfirmView
+[X] - Fix category display from racer list categories
+[X] - Change category list view to have the button show category stats
+    [X] - Include category leaderboard button for categories with scoring
+    [X] - Include button to show completed category races
+[X] - Add category toggle to allow submission after completion (only available for certain scoring types)
+[X] - Hook up required field for submit modal
+[X] - Fix missing permissions for add/remove role
+[ ] - update_race_leaderboard doesn't remove old channel leaderboard message
 
 [ ] - Test on BTT with Forty bonks DB data
     [X] - Wipe DB
@@ -34,5 +46,5 @@ Future Work
 [ ] - let caller of functions filter assigned/open races list rather than filter in place in db_util
 [ ] - Hookup required flag for extra info assignment
 [ ] - Co-op Support
-[ ] - Customize thumbnail image per category
+
 

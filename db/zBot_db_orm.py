@@ -8,28 +8,6 @@ if bot_config.TEST_MODE:
     db_path = bot_config.TEST_DB
 db = SqliteDatabase(db_path)
 
-#####################################################################################################################
-# Checks a race submission time string, returns True if it is properly formatted as H:MM:SS, False otherwise
-def game_time_is_valid(self, time_str):
-        valid_time_str = False
-        parts = time_str.split(':')
-        # Hours can be left off for short seeds
-        if len(parts) >= 2 and len(parts) <= 3:
-            hours = 0
-            minutes = -1
-            seconds = -1
-            try:
-                seconds = int(parts[-1])
-                minutes = int(parts[-2])
-                hours = 0
-                if len(parts) == 3:
-                    hours = int(parts[0])
-            except ValueError:
-                valid_time_str = False
-            if hours >= 0 and hours <= 24 and minutes >= 0 and minutes <= 59 and seconds >= 0 and seconds <= 59:
-               valid_time_str = True
-        return valid_time_str
-
 class AsyncRaceServer(Model):
     id                      = IntegerField(primary_key=True)
     name                    = CharField()
@@ -50,6 +28,9 @@ class AsyncRaceCategory(Model):
     points_type             = IntegerField(default=0)
     leaderboard_type        = IntegerField(null=True, default=0)
     active                  = BooleanField(default=False)
+    thumbnail_url           = CharField(null=True)
+    pin_recent_race         = BooleanField(default=False)
+    allow_completed_submit  = BooleanField(default=False)
 
     class Meta:
         table_name = 'async_race_categories'

@@ -255,9 +255,10 @@ class zRaceListPageSource(menus.ListPageSource):
         super().__init__(entries=races_list, per_page=per_page)
 
     def format_page(self, menu, races):
+        random.shuffle(self.race_emojis)
         menu.update_buttons(races, self.race_emojis)
 
-        embed = nextcord.Embed(color=0x5865F2, title=self.title, description=self.body_text)
+        embed = nextcord.Embed(color=nextcord.Colour.random(), title=self.title, description=self.body_text)
         
         for f in self.static_embed_fields:
             embed.add_field(name=f.name, value=f.value, inline=f.inline)
@@ -275,11 +276,13 @@ class zRaceListMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
         # Disable buttons that are unavailable
         self._disable_unavailable_buttons()
 
+        self.disabled_buttons = []
         self.race_buttons = []
         for i in range(0, source.per_page):
             button = zButton(MenuItem(None, show_race_details, f"race_button_{i}", "Race Info", "View race info for labelled race ID"), 0, label="[RaceID]")
             self.race_buttons.append(button)
             self.add_item(button)
+            self.disabled_buttons.append(None)
 
         # Add the page buttons if there's more than one page
         if self.source.get_max_pages() > 1:
@@ -289,17 +292,23 @@ class zRaceListMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
             self.add_item(zButton(MenuItem(LastPageEmoji, self.go_to_last_page, 'last_page', 'Last Page', 'Go to the last page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
 
     def update_buttons(self, races, emojis=None):
+        # Update the button list based on how many races we need to display
+        for i in range(0, self.source.per_page):
+            if i >= len(races):
+                self.disabled_buttons[i] = self.race_buttons[i]
+                self.race_buttons[i] = None
+                self.remove_item(self.disabled_buttons[i])
+            elif self.race_buttons[i] is None:
+                self.race_buttons[i] = self.disabled_buttons[i]
+                self.disabled_buttons[i] = None
+                self.add_item(self.race_buttons[i])
+        
         # Update the race buttons
         for i,r in enumerate(races):
             self.race_buttons[i].label = emojis[i] if emojis is not None else f"{r.id}"
             self.race_buttons[i].payload = r.id
             self.race_buttons[i].disabled = False
 
-        if len(races) < self.source.per_page:
-            for i in range(self.source.per_page - (self.source.per_page - len(races)), self.source.per_page):
-                self.race_buttons[i].label = "--"
-                self.race_buttons[i].disabled = True
-        
     async def send_initial_message(self, ctx, channel):
         races = await self.source.get_page(0)
         
@@ -314,23 +323,27 @@ class zCategoryListPageSource(menus.ListPageSource):
         self.category_emojis = get_emoji_list()
     
     def format_page(self, menu, categories):
+        random.shuffle(self.category_emojis)
         menu.update_buttons(categories, self.category_emojis)
 
-        table_data = [["ID", "Category Name", "Description"]]
+        embed = nextcord.Embed(color=nextcord.Colour.random(), title="Category List", description=f"Active Categories")
         for i, c in enumerate(categories):
-            table_data.append([f"{self.category_emojis[i]} - {c.id}", c.name, c.description])
-        return f"```\n{tabulate(table_data, headers="firstrow", tablefmt="double_grid")}\n```"
+            embed.add_field(name=f"{self.category_emojis[i]} - {c.name}", value=c.description, inline=False)
+        return embed
 
 class zCategoryListMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     def __init__(self, source: zCategoryListPageSource, *, style=ButtonStyle.secondary, timeout=None) -> None:
         super().__init__(source, style=style, timeout=timeout)
         # Disable buttons that are unavailable
         self._disable_unavailable_buttons()
+        
+        self.disabled_buttons = []
         self.category_buttons = []
         for i in range(0, source.per_page):
-            button = zButton(MenuItem(None, show_category_leaderboard, f"category_button_{i}", "Category Leaderboard", "View leaderboard for category"), 0, label="[CategoryID]")
+            button = zButton(MenuItem(None, show_category_info, f"category_button_{i}", "Category Leaderboard", "View leaderboard for category"), 0, label="[CategoryID]")
             self.category_buttons.append(button)
             self.add_item(button)
+            self.disabled_buttons.append(None)
 
         # Add the page buttons if there's more than one page
         if self.source.get_max_pages() > 1:
@@ -340,21 +353,27 @@ class zCategoryListMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
             self.add_item(zButton(MenuItem(LastPageEmoji, self.go_to_last_page, 'last_page', 'Last Page', 'Go to the last page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
 
     def update_buttons(self, categories, emojis=None):
+        # Update the button list based on how many categories we need to display
+        for i in range(0, self.source.per_page):
+            if i >= len(categories):
+                self.disabled_buttons[i] = self.category_buttons[i]
+                self.category_buttons[i] = None
+                self.remove_item(self.disabled_buttons[i])
+            elif self.category_buttons[i] is None:
+                self.category_buttons[i] = self.disabled_buttons[i]
+                self.disabled_buttons[i] = None
+                self.add_item(self.category_buttons[i])
+
         # Update the category leaderboard buttons
         for i,c in enumerate(categories):
             self.category_buttons[i].label = emojis[i] if emojis is not None else f"{c.id}"
             self.category_buttons[i].payload = c.id
             self.category_buttons[i].disabled = False
 
-        if len(categories) < self.source.per_page:
-            for i in range(self.source.per_page - (self.source.per_page - len(categories)), self.source.per_page):
-                self.category_buttons[i].label = "--"
-                self.category_buttons[i].disabled = True
-
     async def send_initial_message(self, ctx, channel):
         categories = await self.source.get_page(0)
         
-        await send_message(self.interaction, self.source.format_page(self, categories), view=self)
+        await send_message(self.interaction, embed=self.source.format_page(self, categories), view=self)
         return await self.interaction.original_message()
     
 ########################################################################################################################
@@ -369,6 +388,7 @@ class zRaceLeaderboardPageSource(menus.ListPageSource):
         super().__init__(entries=submission_list, per_page=per_page)
 
     async def format_page(self, menu, submissions):
+        random.shuffle(self.place_emojis)
         menu.update_buttons(submissions, self.place_emojis)
         return await get_race_leaderboard_embed(self.title, self.body_text, submissions, menu.current_page, self.per_page, self.bot_client, self.place_emojis)
 
@@ -379,11 +399,13 @@ class zRaceLeaderboardMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
         # Disable buttons that are unavailable
         self._disable_unavailable_buttons()
 
+        self.disabled_buttons = []
         self.submission_buttons = []
         for i in range(0, source.per_page):
             button = zButton(MenuItem(None, show_submission_details, f"submission_button_{i}", "Submission Details", "View details for the submission"), 0, label="[SubmissionID]")
             self.submission_buttons.append(button)
             self.add_item(button)
+            self.disabled_buttons.append(None)
 
         # Add the page buttons if there's more than one page
         if self.source.get_max_pages() > 1:
@@ -393,6 +415,17 @@ class zRaceLeaderboardMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
             self.add_item(zButton(MenuItem(LastPageEmoji, self.go_to_last_page, 'last_page', 'Last Page', 'Go to the last page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
 
     def update_buttons(self, submissions, emojis=None):
+        # Update the button list based on how many submissions we need to display
+        for i in range(0, self.source.per_page):
+            if i >= len(submissions):
+                self.disabled_buttons[i] = self.submission_buttons[i]
+                self.submission_buttons[i] = None
+                self.remove_item(self.disabled_buttons[i])
+            elif self.submission_buttons[i] is None:
+                self.submission_buttons[i] = self.disabled_buttons[i]
+                self.disabled_buttons[i] = None
+                self.add_item(self.submission_buttons[i])
+        
         # Update the submission buttons
         for i,s in enumerate(submissions):
             self.submission_buttons[i].label = emojis[i] if emojis is not None else f"{s.id}"
@@ -400,11 +433,6 @@ class zRaceLeaderboardMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
             self.submission_buttons[i].payload = s.id
             self.submission_buttons[i].disabled = False
 
-        if len(submissions) < self.source.per_page:
-            for i in range(self.source.per_page - (self.source.per_page - len(submissions)), self.source.per_page):
-                self.race_buttons[i].label = "--"
-                self.race_buttons[i].disabled = True
-        
     async def send_initial_message(self, ctx, channel):
         submissions = await self.source.get_page(0)
         
@@ -434,25 +462,235 @@ class zRaceInfoButtonView(nextcord.ui.View):
         super().__init__(timeout=None)
         self.race_id = race_id
 
-    @nextcord.ui.button(style=nextcord.ButtonStyle.blurple, label='⏱️ Submit/Edit Time')
+    async def check_can_submit(self, interaction):
+        race = get_race(self.race_id)
+        if race is not None:
+            if race.state == RaceState.Inactive:
+                await send_message(interaction, "Cannot create a submission, this race is Inactive")
+                return False
+            if race.state == RaceState.Completed and not race.category_id.allow_completed_submit:
+                await send_message(interaction, "The category for this race does not permit submitting to a completed race.")
+                return False
+        return True
+    
+    @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str(TimeEmoji))
     async def submit_time_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Lookup if the user has a submission for this race already
-        submission = get_race_submission(interaction.user.id, self.race_id)
-        submit_handler = zRaceSubmitHandler(self.race_id, submission)
-        await submit_handler.send_submit_modal(interaction)
+        if await self.check_can_submit(interaction):
+            # Lookup if the user has a submission for this race already
+            submission = get_race_submission(interaction.user.id, self.race_id)
+            submit_handler = zRaceSubmitHandler(self.race_id, submission)
+            await submit_handler.send_submit_modal(interaction)
 
-    @nextcord.ui.button(style=nextcord.ButtonStyle.red, label='🏳️ Forfeit Race')
+    @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str(ForfeitEmoji))
     async def forfeit_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        # Check if the user has already submitted a time for this race
-        if get_race_submission(interaction.user.id, self.race_id) is not None:
-            await send_message(interaction, "Time already submitted for this race, use `Submit/Edit` button to edit")
-            return
-        else:
-            forfeit_race(interaction.user.id, self.race_id)
+        if await self.check_can_submit(interaction):
+            # Check if the user has already submitted a time for this race
+            if get_race_submission(interaction.user.id, self.race_id) is not None:
+                await send_message(interaction, "Time already submitted for this race, use `Submit/Edit` button to edit")
+                return
+            else:
+                forfeit_race(interaction.user.id, self.race_id)
 
-    @nextcord.ui.button(style=nextcord.ButtonStyle.green, label='🥇 Leaderboard')
+    @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str(LeaderboardEmoji))
     async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        await show_race_leaderboard(interaction, self.race_id)
+        if can_view_race_leaderboard(self.race_id, interaction.user.id):
+            await show_race_leaderboard(interaction, self.race_id)
+
+    def add_static_embed_fields(embed: nextcord.Embed):
+        embed.add_field(name=f"{TimeEmoji} - Submit/Edit Time", value="Submit a time for this race or edit an already submitted time.", inline=False)
+        embed.add_field(name=f"{ForfeitEmoji} - Forfeit", value="Forfeit from this race. Will submit a max time on your behalf and unlock the leaderboard.", inline=False)
+        embed.add_field(name=f"{LeaderboardEmoji} - View Leaderboard", value="View the leaderboard for this race.", inline=False)
+
+########################################################################################################################
+# View which contains category info and buttons
+class zCategoryInfoButtonView(nextcord.ui.View):
+    def __init__(self, category_id):
+        super().__init__(timeout=None)
+        self.category_id = category_id
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str(CompletedRacesEmoji))
+    async def completed_races_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        # Get list of completed category races
+        races = get_completed_races_by_category(self.category_id)
+
+        # Then show it as a menu
+        race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id, use_inline_fields=True),
+                                            style=ButtonStyle.secondary,
+                                            timeout=None)
+    
+        await race_list_menu.start(interaction=interaction, ephemeral=True)
+
+    @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str(LeaderboardEmoji))
+    async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await show_category_leaderboard(interaction, self.category_id)
+
+    def add_static_embed_fields(embed: nextcord.Embed):
+        embed.add_field(name=f"{CompletedRacesEmoji} - Completed Races", value="View completed races in this category", inline=False)
+        embed.add_field(name=f"{LeaderboardEmoji} - View Leaderboard", value="View the most recent leaderboard for this category", inline=False)
+
+#####################################################################################################################
+# Handles a user race submission action
+class zRaceSubmitHandler():
+    def __init__(self, race_id, submission=None, include_points=False, user_id=None):
+        self.race = get_race(race_id)
+        self.submission = submission
+        self.include_points = include_points
+        self.user_id = user_id
+
+        # Set the title
+        if submission is None:
+            title = "Submit Time"
+        else:
+            title = f"Edit Submission"
+
+        self.finish_time_id = "finish_time"
+        self.comment_id     = "comment"
+
+        # Create the modal fields
+        self.fields = [
+            zField(custom_id=self.finish_time_id,
+                   label="Enter finish time in format `H:MM:SS`",
+                   default_value=submission.finish_time if submission is not None else None,
+                   required=True),
+            zField(custom_id=self.comment_id,
+                   label="Comment",
+                   default_value=submission.comment if submission is not None else None,
+                   required=False),
+        ]
+
+        # Include a points field if it was requested and this category supports scoring
+        self.points_id = "points"
+        if include_points and self.race.category_id.points_type != PointsType.NoScoring:
+            self.fields.append(zField(custom_id=self.points_id,
+                                      label="Points",
+                                      default_value=submission.points if submission is not None else None,
+                                      placeholder="Category points for this submission",
+                                      required=False))
+
+        # Add any extra info fields
+        for a in self.race.extra_info_assignments:
+            t = get_extra_info_type(a.info_type_id)
+            info = get_extra_info(self.submission, a.info_type_id)
+            self.fields.append(zField(
+                custom_id=str(a.info_type_id),
+                label=t.name,
+                default_value=info.data if info is not None else None,
+                placeholder=t.description,
+                required=a.required))
+
+    ####################################################################################################################
+    # Displays the multi-page modal used to capture submission info
+    async def send_submit_modal(self, interaction):
+        modal_sender = zMultiPageModalSender()
+        await modal_sender.send_modal(interaction,
+                                      self.fields,
+                                      self.on_submit,
+                                      "Race Submission")
+
+    ####################################################################################################################
+    # Takes the data submitted by the user and saves it to the DB
+    async def on_submit(self, interaction, submitted_values):
+        # If we don't already have a DB entry create one now
+        if self.submission is None:
+            self.submission = AsyncRaceSubmission()
+            self.submission.race_id = self.race.id
+            self.submission.user_id = self.user_id if self.user_id is not None else interaction.user.id
+            self.submission.submit_datetime = zBot_now()
+
+        for i, v in enumerate(submitted_values):
+            match self.fields[i].custom_id:
+                case self.finish_time_id:
+                    if game_time_is_valid(v) is False:
+                        await send_message(interaction, "**ERROR** Finish time must be in format `H:MM:SS`")
+                        return
+                    else:
+                        self.submission.finish_time = v
+                    self.submission.save()
+                case self.comment_id:
+                    self.submission.comment = v
+                case self.points_id:
+                    try:
+                        self.submission.points = int(v)
+                    except:
+                        await send_message(interaction, "**ERROR** Points must be an integer")
+                        return
+                case _:
+                    success = await self.save_extra_info(interaction, self.fields[i], v)
+                    if not success:
+                        return
+        
+        self.submission.save()
+        await send_message(interaction, "Race Submission Saved")
+
+        # Apply the submit role if the category or race specifies one
+        if self.race.category_id.submit_role is not None:
+            user = await get_user_from_interaction(interaction, self.submission.user_id)
+            if user is not None:
+                cat_role = interaction.guild.get_role(self.race.category_id.submit_role)
+                if cat_role is not None:
+                    await user.add_roles(cat_role)
+                race_role = interaction.guild.get_role(self.race.submission_role)
+                if race_role is not None:
+                    await user.add_roles(race_role)
+
+        # And update the leaderboard
+        await update_race_leaderboard(interaction, self.race)
+
+    ####################################################################################################################
+    # Saves an individual extra info value
+    async def save_extra_info(self, interaction, field: zField, value) -> bool:
+        data_is_valid = True
+        if value is None or value == "":
+            # The modal handles required fields so if we have an empty value it's because it's optional,
+            # so just return without creating a DB entry
+            return data_is_valid
+        
+        # We store the info_type_id in the custom ID of the zField
+        info = get_extra_info(self.submission, field.custom_id)
+        # We need to create a new DB entry
+        if info is None:
+            info = AsyncRaceExtraInfo()
+            info.submission_id = self.submission.id
+            info.info_type_id = int(field.custom_id)
+
+        # Validate the data
+        info_type = get_extra_info_type(info.info_type_id)
+        
+        # Validate the value based on the type
+        match(info_type.var_type):
+            case VarType.Str:
+                # No validation required
+                info.data = value
+            case VarType.Int:
+                try:
+                    info.data = int(value)
+                except:
+                    await send_message(interaction, f"**ERROR** {info_type.name} must be an integer")
+                    data_is_valid = False
+            case VarType.Float:
+                try:
+                    info.data = float(value)
+                except:
+                    await send_message(interaction, f"**ERROR** {info_type.name} must be a valid floating point number")
+                    data_is_valid =  False
+            case VarType.GameTime:
+                if game_time_is_valid(value) is False:
+                    await send_message(interaction, f"**ERROR** {info_type.name} must be in format `H:MM:SS`")
+                    data_is_valid = False
+                else:
+                    info.data = value
+            case VarType.DateTime:
+                if datetime_is_valid(value) is False:
+                    await send_message(interaction, f"**ERROR** {info_type.name} must be in one of the following formats: `YYYY-MM-DD`, `H:MM:SS` or `YYYY-MM-DD H:MM:SS`")
+                    data_is_valid = False
+            case _:
+                logging.info(f"Unknown VarType found in `save_extra_info`: {info_type.var_type} for extra info type ID {info_type.id}")
+                info.data = value
+
+        if data_is_valid:
+            info.save()
+
+        return data_is_valid
 
 ########################################################################################################################
 # Category Menu Functions
@@ -556,15 +794,15 @@ async def category_edit_leaderboard_channel(interaction, category):
     # Prompt for the new desired channel
     selected_channel = await prompt_for_channel(interaction)
 
-    logging.info(f"{interaction.user.display_name} selected leaderboard channel: {selected_channel} for category {category.id}")
+    if selected_channel is None:
+        return
+
+    logging.info(f"{interaction.user.display_name} selected leaderboard channel: {selected_channel.name} for category {category.id}")
     
     # Post an updated leaderboard in the new leaderboard channel
-    channel = interaction.guild.get_channel(selected_channel)
-    if channel is not None:
-        await post_channel_category_leaderboard(interaction, channel, category.id, interaction.client)
-        await send_message(interaction, "Category Leaderboard Updated")
-    else:
-        await send_message(interaction, "**ERROR** Could not fetch selected channel. Please contact a bot admin.")
+    await post_channel_category_leaderboard(interaction, selected_channel, category.id, interaction.client)
+    await send_message(interaction, "Category Leaderboard Updated")
+    
 
 ########################################################################################################################
 async def category_edit_points(interaction, category):
@@ -635,6 +873,20 @@ async def category_assign_extra_info(interaction, category):
         await send_message(interaction, f"Extra Info Type `{extra_info_name}` added to category `{category.name}`")
 
 ########################################################################################################################
+async def category_set_thumbnail(interaction, category):
+    thumbnail_url = await prompt_for_value(interaction, "Enter Thumbnail URL", "URL", category.thumbnail_url)
+    if thumbnail_url is None or thumbnail_url == "":
+        category.thumbnail_url = None
+        category.save()
+        await send_message(interaction, "Removed category thumbnail")
+    elif validators.url(thumbnail_url):
+        category.thumbnail_url = thumbnail_url
+        category.save()
+        await send_message(interaction, "Category thumbnail updated")
+    else:
+        await send_message(interaction, "Invalid URL")
+
+########################################################################################################################
 async def category_misc_toggles(interaction, category):
     # Build the list of toggle fields
     toggle_list = []
@@ -642,7 +894,9 @@ async def category_misc_toggles(interaction, category):
     toggle_list.append(get_remove_category_leaderboard_field(category))
     toggle_list.append(get_leaderboard_type_toggle_field(category))
     toggle_list.append(get_category_active_toggle_field(category))
-
+    toggle_list.append(get_category_pin_recent_toggle_field(category))
+    toggle_list.append(get_category_allow_completed_submit_toggle_field(category))
+    
     # Get extra info assignments for this category
     extra_infos = get_category_extra_info_assignments(category.id)
     for a in extra_infos:
@@ -676,6 +930,30 @@ def get_category_active_toggle_field(category):
         emoji=ChangeStateEmoji,
         embed_field=EmbedField(name=f"{ChangeStateEmoji} - Category Visibility",
                                value=active_field_to_str(category.active),
+                               inline=False))
+
+########################################################################################################################
+def get_category_pin_recent_toggle_field(category):
+    return ToggleField(
+        toggle_func=toggle_category_pin_recent,
+        payload=category,
+        button_style=bool_field_button_style(category.pin_recent_race),
+        custom_id=toggle_category_pin_recent_id,
+        emoji=PinEmoji,
+        embed_field=EmbedField(name=f"{PinEmoji} - Pin Most Recent Race",
+                               value=bool_field_to_str(category.pin_recent_race),
+                               inline=False))
+
+########################################################################################################################
+def get_category_allow_completed_submit_toggle_field(category):
+    return ToggleField(
+        toggle_func=toggle_category_allow_completed_submit,
+        payload=category,
+        button_style=bool_field_button_style(category.allow_completed_submit),
+        custom_id=toggle_category_allow_completed_submit_id,
+        emoji=TimeEmoji,
+        embed_field=EmbedField(name=f"{TimeEmoji} - Allow Submissions on Completed Races",
+                               value=bool_field_to_str(category.allow_completed_submit),
                                inline=False))
 
 ########################################################################################################################
@@ -836,6 +1114,16 @@ async def race_change_state(interaction, race):
     if new_state == RaceState.Active:
         # If the new state is active handle sending the race announcement message
         await send_race_announcement(interaction, race)
+
+        # Remove the category role from all racers
+        if race.category_id.submit_role is not None:
+            role = interaction.guild.get_role(race.category_id.submit_role)
+            if role is not None:
+                for m in interaction.guild.members:
+                    await m.remove_roles(role)
+
+        # And handle category pinning
+        await pin_race_for_category(interaction, race)
     elif new_state == RaceState.Completed:
         # If the new state is completed, score the race
         score_race(race)
@@ -849,9 +1137,8 @@ async def race_change_state(interaction, race):
 ########################################################################################################################
 async def race_pin(interaction, race):
     # Ask for the channel to pin the race to
-    channel_id = await prompt_for_channel(interaction)
-    if channel_id is None:
-        await send_message(interaction, "Cancelled")
+    channel = await prompt_for_channel(interaction)
+    if channel is None:
         return
 
     # Delete any existing race info messages
@@ -862,11 +1149,11 @@ async def race_pin(interaction, race):
                 await delete_message(get_server_from_interaction(interaction), m.id)
 
     # Then post the new race info message
-    succcess = await pin_race_info(channel_id, race, interaction)
+    succcess = await pin_race_info(channel.id, race, interaction)
     if succcess:
-        await send_message(interaction, f"Race #{race.id} pinned to channel ID {channel_id}")
+        await send_message(interaction, f"Race #{race.id} pinned to channel ID {channel.name}")
     else:
-        await send_message(interaction, f"**ERROR** Failed to pin Race #{race.id} to channel ID {channel_id}")
+        await send_message(interaction, f"**ERROR** Failed to pin Race #{race.id} to channel ID {channel.name}")
 
 ########################################################################################################################
 async def race_edit_submit_role(interaction, race):
@@ -894,6 +1181,11 @@ async def race_assign_racer(interaction, race):
     await send_message(interaction, f"User {user.display_name} assigned")
 ########################################################################################################################
 async def race_edit_submission(interaction, race):
+    if race.state == RaceState.Inactive:
+        await send_message(interaction, "Cannot create submissions for an Inactive race.")
+        return
+    
+    # Get a list of submissions
     # Get a list of submissions for this race
     submissions = get_sorted_race_submissions(race.id)
 
@@ -905,7 +1197,7 @@ async def race_edit_submission(interaction, race):
     select_list = [nextcord.SelectOption(label="Create New...", value=-1, description="Create a new submission"),
                    nextcord.SelectOption(label="Cancel...", value=0, description="Cancel the operation")]
     for s in submissions:
-        user = await interaction.client.fetch_user(s.user_id)
+        user = await get_user_from_interaction(interaction, s.user_id)
         select_list.append(nextcord.SelectOption(label=f"{user.display_name} - {s.finish_time}", value=s.id, description=f"{user.display_name} - {s.finish_time}"))
     
     # Prompt the user to select a submission
@@ -1058,15 +1350,19 @@ async def racer_info_stats(interaction, payload):
 
 ########################################################################################################################
 async def racer_info_show_open_races(interaction, payload):
-    # Get the list of open races
+    # Get the list of active open races
     races = get_open_races(interaction.guild_id)
+    races = list(filter(lambda r: r.state == RaceState.Active, races))
 
-    # Display it as a paginated list
-    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id, use_inline_fields=True),
-                                        style=ButtonStyle.secondary,
-                                        timeout=None)
-    
-    await race_list_menu.start(interaction=interaction, ephemeral=True)
+    if len(races) > 0:
+        # Display it as a paginated list
+        race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id, use_inline_fields=True),
+                                            style=ButtonStyle.secondary,
+                                            timeout=None)
+        
+        await race_list_menu.start(interaction=interaction, ephemeral=True)
+    else:
+        await send_message(interaction, "No open races found.")
 
 
 ########################################################################################################################
@@ -1200,9 +1496,12 @@ async def prompt_for_channel(interaction, placeholder="Choose Channel..."):
     server = get_server_from_interaction(interaction)
     channel_list = await get_permitted_channel_select_list(interaction.client.user.id, server)
     
-    selected_channel = await zSingleSelectView(channel_list, None, placeholder).prompt(interaction)
-    
-    return None if selected_channel == 0 else selected_channel
+    selected_channel_id = await zSingleSelectView(channel_list, None, placeholder).prompt(interaction)
+    if selected_channel_id == 0:
+        await send_message(interaction, "**ERROR** Could not fetch selected channel. Please contact a bot admin.")
+        return None
+    else:
+        return interaction.guild.get_channel(selected_channel_id)
 
 ########################################################################################################################
 async def show_race_details(interaction, race_id):
@@ -1210,14 +1509,15 @@ async def show_race_details(interaction, race_id):
     if race is None:
         await send_message(interaction, "**ERROR** Could not find race data. Please notify a bot admin")
         return
-    msg_text, seed_embed = get_race_info_message(race)
-    await send_message(interaction, msg_text, view=zRaceInfoButtonView(race.id), embed=seed_embed)
+    seed_embed = get_race_info_message(race)
+    zRaceInfoButtonView.add_static_embed_fields(seed_embed)
+    await send_message(interaction, view=zRaceInfoButtonView(race.id), embed=seed_embed)
 
 ########################################################################################################################
 async def show_submission_details(interaction, submission_id):
     submission = get_race_submission_by_id(submission_id)
     race_id = submission.race_id.id
-    user = await interaction.client.fetch_user(submission.user_id)
+    user = await get_user_from_interaction(interaction, submission.user_id)
     title=f"{user.display_name} Submission for Race ID #{race_id}"
     num_submissions = get_num_submissions(race_id)
     race_submissions = get_sorted_race_submissions(race_id)
@@ -1351,11 +1651,12 @@ async def post_channel_race_leaderboard(interaction, channel, race_id, bot_clien
     
     for menu in menu_list:
         await menu.start(interaction=interaction, channel=channel)
-        await menu.message.pin()
         if save_as_category_message:
             race = get_race(race_id)
+            logging.info(f"Saving race leaderboard {race_id} as a category message")
             save_message(interaction.guild_id, channel.id, menu.message.id, category_id=race.category_id.id)
         else:
+            logging.info(f"Saving race leaderboard {race_id} as a race message")
             save_message(interaction.guild_id, channel.id, menu.message.id, race_id=race_id)
 
 ########################################################################################################################
@@ -1364,25 +1665,25 @@ async def race_edit_leaderboard_channel(interaction, race):
 
     # Prompt for the desired channel
     selected_channel = await prompt_for_channel(interaction)
+    if selected_channel is None:
+        return
     
-    logging.info(f"{interaction.user.display_name} selected leaderboard channel: {selected_channel} for race {race.id}")
+    logging.info(f"{interaction.user.display_name} selected leaderboard channel: {selected_channel.name} for race {race.id}")
 
     # Find any existing leaderboard message and remove it
-    found_existing = False
     leaderboard_msg_list = get_messages_by_race_id(race.id)
     if leaderboard_msg_list is not None and len(leaderboard_msg_list) > 0:
         for m in leaderboard_msg_list:
             if m.message_id is not None:
-                found_existing = True
                 await delete_message(get_server_from_interaction(interaction), m.id)
     
     message_id = None
-    if found_existing:
-        # post the leaderboard to the new channel will save the message ID(s) to the DB
+    if race.state != RaceState.Inactive and race_has_submissions(race.id):
+        # posting the leaderboard to the new channel will save the message ID(s) to the DB
         await post_channel_race_leaderboard(interaction, selected_channel, race.id, interaction.client, get_emoji_list())
     else:
-        # If there's no existing leaderboard message (because the race hasn't started yet), we just save the channel and race ID
-        msg = AsyncRaceMessage(server_id=race.server_id, channel_id=selected_channel, message_id=message_id, race_id=race.id)
+        # If the race hasn't started or has no submissions yet, we just save the channel and race ID
+        msg = AsyncRaceMessage(server_id=race.server_id, channel_id=selected_channel.id, message_id=message_id, race_id=race.id)
         try:
             msg.save()
         except:
@@ -1413,7 +1714,6 @@ async def post_channel_category_leaderboard(interaction, channel, category_id, b
         #else:
         for e in embed_list:
             msg = await channel.send(embed=e)
-            await msg.pin()
             save_message(interaction.guild_id, channel.id, msg.id)
 
 ########################################################################################################################
@@ -1436,13 +1736,18 @@ async def show_category_leaderboard(interaction, category_id):
         await send_message(interaction, f"**ERROR** Fetching category with ID {category_id}. Please contact a bot admin.")
         return
     
-    points_list = get_category_points(category_id)
-    if points_list is None or len(points_list) == 0:
-        await send_message(interaction, get_category_no_points_message(category.name))
-        return
-    
-    menu = menus.ButtonMenuPages(source=zCategoryPointsLeaderboardPageSource(points_list, interaction.client))
-    await menu.start(interaction=interaction, ephemeral=True)
+    if category.leaderboard_type == RaceLeaderboardType.RecentRace:
+        # Determine the most recent completed race and show the leaderboard for it
+        races = get_completed_races_by_category(category_id)
+        await show_race_leaderboard(interaction, races[0].id)
+    else:
+        points_list = get_category_points(category_id)
+        if points_list is None or len(points_list) == 0:
+            await send_message(interaction, get_category_no_points_message(category.name))
+            return
+        
+        menu = menus.ButtonMenuPages(source=zCategoryPointsLeaderboardPageSource(points_list, interaction.client))
+        await menu.start(interaction=interaction, ephemeral=True)
 
 ########################################################################################################################
 def get_leaderboard_type_button_style(leaderboard_type) -> nextcord.ButtonStyle:
@@ -1466,6 +1771,14 @@ def active_field_button_style(active) -> nextcord.ButtonStyle:
 ########################################################################################################################
 def active_field_to_str(active) -> str:
     return "Active" if active else "Inactive"
+
+########################################################################################################################
+def bool_field_button_style(active) -> nextcord.ButtonStyle:
+    return nextcord.ButtonStyle.green if active else nextcord.ButtonStyle.grey
+
+########################################################################################################################
+def bool_field_to_str(bool_val) -> str:
+    return "True" if bool_val else "False"
 
 ########################################################################################################################
 async def toggle_category_leaderboard_type(interaction, payload):
@@ -1507,7 +1820,7 @@ async def category_ping_assigned_racers(interaction, payload):
 
     msg = ""
     for a in assignments:
-        user = await interaction.client.fetch_user(a.user_id)
+        user = await get_user_from_interaction(interaction, a.user_id)
         msg += f"{user.mention} "
     
     msg += f" You have been assigned to a new {category.name} race. Good luck!"
@@ -1590,6 +1903,61 @@ async def toggle_category_active(interaction, payload):
     await update_menu_embed_field(menu, toggle_field)
 
 ########################################################################################################################
+async def toggle_category_pin_recent(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+    
+    # ToggleField payload is the category
+    category = toggle_field.payload
+
+    category.pin_recent_race = not category.pin_recent_race
+    category.save()
+
+    # Then update the button style
+    toggle_field.button_style = bool_field_button_style(category.pin_recent_race)
+
+    # Then update the embed field value
+    toggle_field.embed_field.value = bool_field_to_str(category.pin_recent_race)
+
+    # Get the most recent active race for this category and either pin or unping it depending on what was just toggled
+    races = get_category_races(category.id)
+    if category.allow_completed_submit:
+        races = list(filter(lambda r: r.state != RaceState.Inactive))
+    else:
+        races = list(filter(lambda r: r.state == RaceState.Active))
+
+    if len(races) > 0:
+        if category.pin_recent_race:
+            await pin_race_for_category(interaction, races[0].id)
+        else:
+            await remove_category_race_info_messages(interaction, races[0])
+
+    # Finally update the menu
+    await update_menu_embed_field(menu, toggle_field)
+
+########################################################################################################################
+async def toggle_category_allow_completed_submit(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+    
+    # ToggleField payload is the category
+    category = toggle_field.payload
+
+    category.allow_completed_submit = not category.allow_completed_submit
+    category.save()
+
+    # Then update the button style
+    toggle_field.button_style = bool_field_button_style(category.allow_completed_submit)
+
+    # Then update the embed field value
+    toggle_field.embed_field.value = bool_field_to_str(category.allow_completed_submit)
+
+    # Finally update the menu
+    await update_menu_embed_field(menu, toggle_field)
+
+########################################################################################################################
 async def update_menu_embed_field(menu, toggle_field: ToggleField):
     # Create a new embed copying the base data from the existing one
     embed = copy_embed(menu.embed)
@@ -1611,37 +1979,56 @@ async def update_category_leaderboard(interaction, race):
     msgs = get_messages_by_category_id(race.category_id.id)
     msgs = list(filter(lambda x: x.message_type is RaceMessageType.Leaderboard, msgs))
 
-    if msgs is None or len(msgs) == 0:
-        return
-    
-    # Extract the channel_id from the message and fetch the channel
-    channel = await interaction.guild.get_channel(msgs[0].channel_id)
+    # We can only update the leaderboard if there is a message stored in the DB indicating the saved channel
+    if msgs is not None and len(msgs) > 0:
+        # Extract the channel_id from the message and fetch the channel
+        channel = await interaction.guild.get_channel(msgs[0].channel_id)
 
-    # Delete the existing messages
-    for m in msgs:
-        await delete_message(interaction.guild, m.message_id)
+        # Delete the existing messages
+        for m in msgs:
+            await delete_message(interaction.guild, m.message_id)
 
-    # Post the updated leaderboard to the channel
-    post_channel_category_leaderboard(interaction, channel, race.category_id.id, interaction.client)
+        # Post the updated leaderboard to the channel
+        post_channel_category_leaderboard(interaction, channel, race.category_id.id, interaction.client)
 
 ########################################################################################################################
 async def update_race_leaderboard(interaction, race):
-    # Check if there are any category leaderboard messages
-    msgs = get_messages_by_race_id(race.id)
-    msgs = list(filter(lambda x: x.message_type is RaceMessageType.Leaderboard, msgs))
-
-    if msgs is None or len(msgs) == 0:
+    if not race_has_submissions(race.id):
+        # If there are no submissions yet then there's nothing to do
         return
     
-    # Extract the channel_id from the message and fetch the channel
-    channel = await interaction.guild.get_channel(msgs[0].channel_id)
+    # Check if there are any race leaderboard messages
+    msgs = get_messages_by_race_id(race.id, message_type=RaceMessageType.Leaderboard)
+    
+    if msgs is not None and len(msgs) > 0:
+        # Extract the channel_id from the message and fetch the channel
+        channel = interaction.guild.get_channel(msgs[0].channel_id)
 
-    # Delete the existing messages
-    for m in msgs:
-        await delete_message(interaction.guild, m.message_id)
+        # Delete the existing messages
+        for m in msgs:
+            await delete_message(interaction.guild, m.id)
 
-    # Post the updated leaderboard to the channel
-    post_channel_race_leaderboard(interaction, channel, race.id, interaction.client, get_emoji_list())
+        # Post the updated leaderboard to the channel
+        await post_channel_race_leaderboard(interaction, channel, race.id, interaction.client, get_emoji_list())
+    else:
+        logging.info(f"No race messages found in update_race_leaderboard")
+
+########################################################################################################################
+async def send_confirmed_race_announcement(interaction, confirmed, payload):
+    race, msg_text = payload
+
+    # If so, prompt the user for the desired message
+    if confirmed:
+        msg_text = await prompt_for_value(interaction, "Enter New Message (blank to cancel sending)", "Announcement Message", msg_text)
+
+    # Prompt the user for the desired channel
+    channel = await prompt_for_channel(interaction, "Choose Announcement Channel...")
+    if channel is None:
+        return
+
+    # Finally post the message to the channel and save it to the DB
+    msg = await channel.send(msg_text)
+    save_message(interaction.guild_id, channel.id, msg.id, message_type=RaceMessageType.Announcement, category_id=race.category_id.id)
 
 ########################################################################################################################
 async def send_race_announcement(interaction, race):
@@ -1656,26 +2043,160 @@ async def send_race_announcement(interaction, race):
         msg_text = f"Hey {role.mention}! A new {race.category_id.name} race has been created. Check it out and submit your time. GLHF!"
 
         # Ask the user if they want to make changes
-        edit_confirm = await zConfirmMenu(f"The following message will be sent to {role.mention}:\n\n{msg_text}\n\Would you like to edit the message?").prompt(interaction)
+        await send_message(interaction, 
+                           msg = f"The following message will be sent to {role.mention}:\n\n{msg_text}\n\nWould you like to edit the message?",
+                           view=zYesNoButtonView(send_confirmed_race_announcement, (race, msg_text)))
 
-        # If so, prompt the user for the desired message
-        if edit_confirm:
-            msg_text = await prompt_for_value(interaction, "Enter New Message (blank to cancel sending)", "Announcement Message", msg_text)
+#################################################################################################################
+async def pin_race_info(channel_id, race, interaction):
+    # Get the channel
+    server = get_server_from_interaction(interaction)
+    channel = server.get_channel(channel_id)
 
-        # Prompt the user for the desired channel
-        channel = await prompt_for_channel(interaction, "Choose Announcement Channel...")
+    if channel is None:
+        logging.info(f"Could not find channel with id {channel_id}")
+        return False
+    
+    msg = await post_race_info_message(race, channel)
+    db_msg = AsyncRaceMessage(
+        server_id=interaction.guild_id,
+        channel_id=channel_id,
+        message_id=msg.id,
+        race_id=race.id,
+        message_type=RaceMessageType.RaceInfo)
+    try:
+        db_msg.save()
+    except:
+        logging.info("Failed to save race info message to DB in `pin_race_info`")
+    return True
 
-        # Finally post the message to the channel and save it to the DB
-        msg = await channel.send(msg_text)
-        save_message(interaction.guild_id, channel.id, msg.id, message_type=RaceMessageType.Announcement, category_id=race.category_id.id)
+####################################################################################################################
+async def post_race_info_message(race, channel, for_category=False):
+    seed_embed = get_race_info_message(race)
+    zRaceInfoButtonView.add_static_embed_fields(seed_embed)
+    msg = await channel.send("", view=zRaceInfoButtonView(race.id), embed=seed_embed)
+    category_id = None
+    if for_category:
+        category_id = race.category_id.id
+    save_message(race.server_id, channel.id, msg.id, category_id=category_id, message_type=RaceMessageType.RaceInfo)
+    return msg
+
+####################################################################################################################
+async def remove_category_race_info_messages(interaction, race):
+    # Find and remove any existing race info that's pinned for the category
+    db_msg_list = get_category_race_info_messages(race)
+    for m in db_msg_list:
+        if m.message_id is not None:
+            await delete_message(get_server_from_interaction(interaction), m.id)
+
+####################################################################################################################
+async def pin_race_for_category(interaction, race):
+    if race.category_id.pin_recent_race:
+        # Find and remove any existing race info that's pinned for the category
+        await remove_category_race_info_messages(interaction, race)
+
+        # Prompt for the channel to pin the race info to
+        channel = await prompt_for_channel(interaction, "Choose Channel for Pinned Race Info..")
+
+        # Pin the race info to the channel
+        await post_race_info_message(race, channel, for_category=True)
 
 ########################################################################################################################
 def get_emoji_list():
-    return random.shuffle(copy(EmojiList))
+    ret_list = copy.copy(EmojiList)
+    random.shuffle(ret_list)
+    return ret_list
 
 ########################################################################################################################
 def get_random_emoji():
     return random.choice(EmojiList)
+
+########################################################################################################################
+async def show_completed_category_races(interaction, category):
+    # Get the list of completed races
+    races = get_completed_races_by_category(interaction.user.id, interaction.guild_id)
+
+    if races is None or len(races) == 0:
+        await send_message(interaction, "No completed races found.")
+        return
+    
+    # Display it as a paginated list
+    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id),
+                                        style=ButtonStyle.secondary,
+                                        timeout=None)
+    
+    await race_list_menu.start(interaction=interaction, ephemeral=True)
+
+########################################################################################################################
+async def show_category_info(interaction, category_id):
+    category = get_category(category_id)
+    if category is None:
+        await send_message(interaction, f"**ERROR** Fetching category with ID {category_id}. Please contact a bot admin.")
+        return
+
+    # Get some stats about the category and user
+    races = get_completed_races_by_category(category_id)
+    num_races = len(races)
+    num_submissions = 0
+    num_user_races = 0
+    fastest_user_time = ForfeitFinishTimeSeconds
+    fastest_user_submission = None
+    racers = {}
+    fastest_time = ForfeitFinishTimeSeconds
+    fastest_submission = None
+    for r in races:
+        # Get the submissions
+        submissions = get_sorted_race_submissions(r.id)
+        # Trim off DNFs
+        if submissions is not None:
+            submissions = list(filter(lambda x: x.finish_time is not ForfeitFinishTime, submissions))
+            num_submissions += len(submissions)
+            for s in submissions:
+                time_in_seconds = finish_time_to_seconds(s.finish_time)
+                if s.user_id == interaction.user.id:
+                    num_user_races += 1
+                    if time_in_seconds < fastest_user_time:
+                        fastest_user_time = time_in_seconds
+                        fastest_user_submission = s
+
+                if time_in_seconds < fastest_time:
+                    fastest_time = time_in_seconds
+                    fastest_submission = s
+                    logging.info(f"Fastest time updated to {fastest_time} by {s.user_id}")
+
+                if s.user_id not in racers:
+                    racers[s.user_id] = 1
+                else:
+                    racers[s.user_id] += 1
+        else:
+            logging.info(f"No submissions found for race {r.id}")
+    
+    # Create an embed with the category stats
+    user = await get_user_from_interaction(interaction, interaction.user.id)
+    
+    embed = nextcord.Embed(title=f"{category.name} Info", description=f"Stats for {interaction.user.display_name}\n\n{category.description}", color=nextcord.Color.random())
+    embed.add_field(name="Total Races", value=num_races, inline=True)
+    embed.add_field(name=f"Races by {user.display_name}", value=num_user_races, inline=True)
+    embed.add_field(name="Total Category Submissions", value=num_submissions, inline=True)
+    embed.add_field(name="Unique Racers", value=len(racers), inline=True)
+    fastest_racer = await get_user_from_interaction(interaction, fastest_submission.user_id)
+    fastest_racer_name = fastest_racer.display_name if fastest_racer is not None else "Unknown"
+    fastest_race = get_race(fastest_submission.race_id)
+    fastest_race_name = fastest_race.description if fastest_race is not None else "Unknown Mode"
+    embed.add_field(name="Fastest Time",
+                    value=f"{fastest_submission.finish_time} by {fastest_racer_name} in {fastest_race_name}",
+                    inline=True)
+    
+    fastest_user_race = get_race(fastest_user_submission.race_id)
+    fastest_user_race_name = fastest_user_race.description if fastest_user_race is not None else "Unknown Mode"
+    embed.add_field(name=f"{user.display_name}'s Fastest Time",
+                    value=f"{fastest_user_submission.finish_time} by {user.display_name} in {fastest_user_race_name}",
+                    inline=True)
+    
+    zCategoryInfoButtonView.add_static_embed_fields(embed)
+                
+    # Create button view to show completed races and leaderboard (if applicable)
+    await send_message(interaction, view=zCategoryInfoButtonView(category.id), embed=embed)
 
 ########################################################################################################################
 # Menu Static Data
@@ -1696,6 +2217,7 @@ CategoryButtonMenuItems = [
     MenuItem(LeaderboardEmoji, category_edit_leaderboard_channel, 'category_edit_leaderboard_channel', 'Set Leaderboard Channel'  , CategorySetLeaderboardChannelDescription),
     MenuItem(EditPointsEmoji , category_edit_points             , 'category_edit_points'             , 'Modify Racer Point Totals', CategoryEditPointsDescription),
     MenuItem(ExtraInfoEmoji  , category_assign_extra_info       , 'category_assign_extra_info'       , 'Assign Submission Value'  , CategoryAssignExtraInfoDescription),
+    MenuItem(ThumbnailEmoji  , category_set_thumbnail           , 'category_set_thumbnail'           , 'Set Category Thumbnail'   , CategorySetThumbnailDescription),
     MenuItem(ToggleEmoji     , category_misc_toggles            , 'category_misc_toggles'            , 'Misc Category Config'     , CategoryMiscToggleDescription),
 ]
 
