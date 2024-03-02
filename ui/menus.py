@@ -893,6 +893,8 @@ async def category_display_raw_submit_info(interaction, category):
     # Prompt the user to select which info types to include
     selected_info_types = await zMultiSelectView(select_list, len(select_list), None, "Choose Info Fields to include...").prompt(interaction)
 
+    await send_message(interaction, "Fetching data, this may take a minute. Please wait...")
+
     # Get the extra infos for the selected list
     info_types = {}
     for s in selected_info_types:
@@ -919,13 +921,14 @@ async def category_display_raw_submit_info(interaction, category):
                     else:
                         raw_data_dict[t] = {s.user_id: [s.finish_time]}
                 elif t == -2:
-                    if t in raw_data_dict:
-                        if s.user_id in raw_data_dict[t]:
-                            raw_data_dict[t][s.user_id].append(s.comment)
+                    if s.comment is not None and s.comment != "":
+                        if t in raw_data_dict:
+                            if s.user_id in raw_data_dict[t]:
+                                raw_data_dict[t][s.user_id].append(s.comment)
+                            else:
+                                raw_data_dict[t][s.user_id] = [s.comment]
                         else:
-                            raw_data_dict[t][s.user_id] = [s.comment]
-                    else:
-                        raw_data_dict[t] = {s.user_id: [s.comment]}
+                            raw_data_dict[t] = {s.user_id: [s.comment]}
                 else:
                     info = get_extra_info(s, t)
                     if info is not None:
@@ -2301,6 +2304,7 @@ CategoryButtonMenuItems = [
     MenuItem(LeaderboardEmoji, category_edit_leaderboard_channel, 'category_edit_leaderboard_channel', 'Set Leaderboard Channel'  , CategorySetLeaderboardChannelDescription),
     MenuItem(EditPointsEmoji , category_edit_points             , 'category_edit_points'             , 'Modify Racer Point Totals', CategoryEditPointsDescription),
     MenuItem(ExtraInfoEmoji  , category_assign_extra_info       , 'category_assign_extra_info'       , 'Assign Submission Value'  , CategoryAssignExtraInfoDescription),
+    MenuItem(StatsEmoji      , category_display_raw_submit_info , 'category_display_raw_submit_info' , 'Display Raw Submit Info'  , CategoryDisplayRawSubmitInfoDescription),
     MenuItem(ThumbnailEmoji  , category_set_thumbnail           , 'category_set_thumbnail'           , 'Set Category Thumbnail'   , CategorySetThumbnailDescription),
     MenuItem(ToggleEmoji     , category_misc_toggles            , 'category_misc_toggles'            , 'Misc Category Config'     , CategoryMiscToggleDescription),
 ]

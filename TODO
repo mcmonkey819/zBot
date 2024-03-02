@@ -1,6 +1,7 @@
 General Stuff
 -------------------------------------------------------
-[ ] - Function to get extra info data for last N races in a category (multi-select)
+[X] - Function to get extra info data for last N races in a category (multi-select)
+[ ] - Remove server_id field from extra_info_assignments?
 
 [ ] - Test on BTT with Forty bonks DB data
     [X] - Wipe DB

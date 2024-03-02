@@ -419,7 +419,11 @@ def copy_embed(embed):
 ########################################################################################################################
 async def get_user_from_interaction(interaction, user_id):
     # First try to fetch from the guild
-    user = await interaction.guild.fetch_member(user_id)
+    try:
+        user = await interaction.guild.fetch_member(user_id)
+    except:
+        user = None
+
     if user is None:
         # If that fails, try to fetch from the client
         user = await interaction.client.fetch_user(user_id)
@@ -544,20 +548,25 @@ class zMultiSelect(nextcord.ui.Select):
 class zMultiSelectView(nextcord.ui.View):
     def __init__(self, select_list: SelectList, max_values: int, submit_handler, placeholder = None):
         super().__init__(timeout=None)
-        self.selected_value = None
+        self.selected_values = None
         self.submit_handler = submit_handler
-        self.category_select = zMultiSelect(select_list, max_values, self.save_selected_value, placeholder)
+        self.category_select = zMultiSelect(select_list, max_values, self.save_selected_values, placeholder)
         self.add_item(self.category_select)
 
-    async def save_selected_value(self, value, interaction):
+    async def save_selected_values(self, values, interaction):
         self.interaction = interaction
-        self.selected_value = value
+        self.selected_values = values
         if self.submit_handler is not None:
-            await self.submit_handler(value, interaction)
+            await self.submit_handler(values, interaction)
         self.stop()
 
-    def get_selected_value(self):
-        return self.selected_value
+    async def prompt(self, interaction: nextcord.Interaction, msg: str = ""):
+        await send_message(interaction, "", view=self)
+        await self.wait()
+        return self.selected_values
+
+    def get_selected_values(self):
+        return self.selected_values
     
 ########################################################################################################################
 # View which contains buttons for continuing or cancelling
