@@ -873,6 +873,90 @@ async def category_assign_extra_info(interaction, category):
         await send_message(interaction, f"Extra Info Type `{extra_info_name}` added to category `{category.name}`")
 
 ########################################################################################################################
+async def category_display_raw_submit_info(interaction, category):
+    # Prompt for how many races we want to query from
+    num_races = await prompt_for_value(interaction, "How many races would you like to search?", "# of Races", 1)
+    try:
+        num_races = int(num_races)
+    except:
+        await send_message(interaction, "Number of races must be a valid integer, defaulting to 1")
+        num_races = 1
+
+    # Create a select list with the extra info types
+    cat_assignments = get_category_extra_info_assignments(category.id)
+    select_list = [
+        nextcord.SelectOption(label="Finish Time", value=-1, description="Finish Time"),
+        nextcord.SelectOption(label="Comment", value=-2, description="Comment")]
+    for a in cat_assignments:
+        select_list.append(nextcord.SelectOption(label=a.info_type_id.name, value=a.info_type_id.id, description=a.info_type_id.description))
+
+    # Prompt the user to select which info types to include
+    selected_info_types = await zMultiSelectView(select_list, len(select_list), None, "Choose Info Fields to include...").prompt(interaction)
+
+    # Get the extra infos for the selected list
+    info_types = {}
+    for s in selected_info_types:
+        if s == -1 or s == -2:
+            info_types[s] = None
+        else:
+            info_types[s] = get_extra_info_type(s)
+
+    # Get the list of races, it comes pre-sorted by date so we can just slice the full list
+    races = list(get_category_races(category.id))[:num_races]
+    
+    # Walk through the race submissions, one race at a time, collecting the data
+    raw_data_dict = {}
+    for r in races:
+        submissions = get_sorted_race_submissions(r.id)
+        for s in submissions:
+            for t in selected_info_types:
+                if t == -1:
+                    if t in raw_data_dict:
+                        if s.user_id in raw_data_dict[t]:
+                            raw_data_dict[t][s.user_id].append(s.finish_time)
+                        else:
+                            raw_data_dict[t][s.user_id] = [s.finish_time]
+                    else:
+                        raw_data_dict[t] = {s.user_id: [s.finish_time]}
+                elif t == -2:
+                    if t in raw_data_dict:
+                        if s.user_id in raw_data_dict[t]:
+                            raw_data_dict[t][s.user_id].append(s.comment)
+                        else:
+                            raw_data_dict[t][s.user_id] = [s.comment]
+                    else:
+                        raw_data_dict[t] = {s.user_id: [s.comment]}
+                else:
+                    info = get_extra_info(s, t)
+                    if info is not None:
+                        if t in raw_data_dict:
+                            if s.user_id in raw_data_dict[t]:
+                                raw_data_dict[t][s.user_id].append(info.data)
+                            else:
+                                raw_data_dict[t][s.user_id] = [info.data]
+                        else:
+                            raw_data_dict[t] = {s.user_id: [info.data]}
+
+    # Print it all out grouped by type
+    msg = ""
+    for t in raw_data_dict:
+        info_type = info_types[t]
+        if info_type is None:
+            msg += f"**{"Finish Time" if t == -1 else "Comment"}**\n"
+        else:
+            msg += f"**{info_type.name}**\n"
+        for u in raw_data_dict[t]:
+            user = await get_user_from_interaction(interaction, u)
+            if user is None:
+                user = {"display_name": "Unknown User"}
+            for d in raw_data_dict[t][u]:
+                msg += f"{user.display_name} > {d}\n"
+    
+    # Finally display it to the user
+    await send_message(interaction, msg)
+            
+
+########################################################################################################################
 async def category_set_thumbnail(interaction, category):
     thumbnail_url = await prompt_for_value(interaction, "Enter Thumbnail URL", "URL", category.thumbnail_url)
     if thumbnail_url is None or thumbnail_url == "":
