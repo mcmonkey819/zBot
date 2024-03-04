@@ -359,6 +359,20 @@ async def get_race_leaderboard_embed(title, body_text, submissions, current_page
     return embed
 
 ########################################################################################################################
+def format_points_str(points) -> str:
+    points_str = f"{points:0.3f}"
+    # If there's no data after the decimal, remove it
+    parts = points_str.split(".")
+    if len(parts) > 1:
+        found_significant_digit = False
+        for c in parts[1]:
+            if c != "0":
+                found_significant_digit = True
+                break
+        if found_significant_digit == False:
+            points_str = parts[0]
+
+########################################################################################################################
 async def get_category_leaderboard_embed(title, body_text, points_list, current_page, per_page, bot_client):
     embed = nextcord.Embed(color=nextcord.Colour.random(), title=title, description=body_text)
         
@@ -366,7 +380,7 @@ async def get_category_leaderboard_embed(title, body_text, points_list, current_
         place_num = (current_page * per_page) + i + 1
         user = await bot_client.fetch_user(p.user_id)
         user_name = f"{p.user_id}" if user is None else user.display_name
-        embed.add_field(name=f"{get_place_str(place_num)} - {p.points}", value=user_name, inline=False)
+        embed.add_field(name=f"{get_place_str(place_num)} - {format_points_str(p.points)}", value=user_name, inline=False)
 
     return embed
 

@@ -27,7 +27,7 @@ class AsyncRaceCategory(Model):
     submit_role             = IntegerField(null=True)
     points_type             = IntegerField(default=0)
     leaderboard_type        = IntegerField(null=True, default=0)
-    active                  = BooleanField(default=False)
+    active                  = BooleanField(default=True)
     thumbnail_url           = CharField(null=True)
     pin_recent_race         = BooleanField(default=False)
     allow_completed_submit  = BooleanField(default=False)
@@ -69,7 +69,7 @@ class AsyncRaceSubmission(Model):
     submit_datetime         = DateField(null=True)
     finish_time             = CharField()
     comment                 = CharField(null=True)
-    points                  = IntegerField(null=True)
+    points                  = FloatField(null=True)
 
     class Meta:
         table_name = 'async_submissions'
@@ -127,7 +127,7 @@ class AsyncRaceCategoryPoints(Model):
     id                      = IntegerField(primary_key= True)
     user_id                 = IntegerField()
     category_id             = ForeignKeyField(AsyncRaceCategory, backref='extra_info_assignments', null=True)
-    points                  = IntegerField()
+    points                  = FloatField()
 
     class Meta:
         table_name = 'async_race_category_points'
@@ -150,6 +150,7 @@ class AsyncRaceTrueSkillRacerParams(Model):
     user_id     = IntegerField()
     mu          = FloatField()
     sigma       = FloatField()
+    draw_chance = FloatField()
 
     class Meta:
         table_name = 'async_race_true_skill_params'

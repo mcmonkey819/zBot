@@ -299,6 +299,15 @@ def get_category_trueskill_params(category_id):
     return trueskill_params
 
 ########################################################################################################################
+def create_default_trueskill_params(category_id):
+    trueskill_params = AsyncRaceTrueSkillParams()
+    trueskill_params.category_id = category_id
+    trueskill_params.mu = 25.0
+    trueskill_params.sigma = 8.333
+    trueskill_params.draw_chance = 0.01
+    trueskill_params.save()
+
+########################################################################################################################
 def get_racer_trueskill_params(category_id, user_id):
     try:
         trueskill_params = AsyncRaceTrueSkillRacerParams.select().where(
@@ -526,13 +535,19 @@ def finish_time_to_seconds(finish_time_str):
     return (3600 * hours) + (60 * mins) + seconds
 
 ########################################################################################################################
+def finish_time_seconds_to_str(finish_time_seconds):
+    hours = finish_time_seconds // 3600
+    minutes = (finish_time_seconds % 3600) // 60
+    seconds = finish_time_seconds % 60
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+########################################################################################################################
 # Used to sort submissions by finish time
 def finish_time_sort_key(submission):
-    # Convert the time to seconds for sorting
-    time_in_seconds = 0
-    if submission.finish_time is not None and submission.finish_time != '':
-        time_in_seconds = finish_time_to_seconds(submission.finish_time)
-    return time_in_seconds
+    try:
+        return finish_time_to_seconds(submission.finish_time)
+    except:
+        return ForfeitFinishTimeSeconds
 
 ########################################################################################################################
 def get_sorted_race_submissions(race_id, reverse=False):
@@ -572,7 +587,7 @@ def calculate_par_time(submissions):
         times_to_average = 3
     elif len(submissions) <= 12:
         times_to_average = 4
-
+    
     total_seconds = 0
     for i, s in enumerate(submissions[:times_to_average]):
         total_seconds += finish_time_to_seconds(s.finish_time)
@@ -584,9 +599,10 @@ def calculate_par_time(submissions):
 def get_draw_threshold_seconds(category_id):
     # The default cutoff for a tie is within 2 seconds if there is not one  specified by the category
     draw_threshold_seconds = 2
-    draw_threshold = get_race_draw_threshold(race.category_id.id)
-    if draw_threshold is None:
+    draw_threshold = get_race_draw_threshold(category_id)
+    if draw_threshold is not None:
         draw_threshold_seconds = draw_threshold.draw_threshold_seconds
+    return draw_threshold_seconds
 
 ########################################################################################################################
 def score_race(race):
@@ -608,46 +624,48 @@ def score_race(race):
 ########################################################################################################################
 def score_mario_kart_race(race):
     # Get the submissions for this race, sorted from highest time to lowest
-    submissions = get_sorted_race_submissions(race.id, reverse=True)
+    reverse_submissions = get_sorted_race_submissions(race.id, reverse=True)
+    submissions = get_sorted_race_submissions(race.id, reverse=False)
 
     # If there are no submissions, there's nothing to do here
     if submissions == None:
         return
 
-    # If there are more than 15 submissions, any outside the top 15 get zero points
-    if len(submissions) > 15:
-        num_zeroes = len(submissions)-15
-        zero_list = submissions[:num_zeroes]
+    # If there are more submissions than scores, the rest get zero points
+    mk_points_lookup = [ 25, 21, 18, 15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 ]
+    #scoring_places = len(mk_points_lookup)
+    scoring_places = 4
+    num_zeroes = 0
+    if len(reverse_submissions) > scoring_places:
+        num_zeroes = len(reverse_submissions)-scoring_places
+        zero_list = reverse_submissions[:num_zeroes]
         for z in zero_list:
             # If there's a tie at the cutoff, make sure all tied players are in points list
-            if is_tie(z.finish_time, submissions[num_zeroes]):
+            if is_tie(z.finish_time, reverse_submissions[num_zeroes].finish_time):
                 num_zeroes -= 1
-            else:
-                z.points = 0
-                z.save()
-        # Then save the top 15 for scoring below
-        submissions = submissions[num_zeroes:]
+        
+        logging.info(f"Saving slice [{num_zeroes}:]")
 
-    # The top 15 get points according to the lookup table
-    mk_points_lookup = [ 25, 21, 18, 15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 ]
+    # The top times get points according to the lookup table
     last_points_idx = 0
-    for i, s in enumerate(submissions.reverse()):
+    
+    for i, s in enumerate(submissions):
         points_idx = i
         # Check for a tie with the previous time
-        if i > 0 and is_tie(s.finish_time, submissions.reverse[i-1]):
+        if i > 0 and is_tie(s.finish_time, submissions[i-1].finish_time):
             # If this submission is tied with the previous then it gets the same points
             # the previous one did
             points_idx = last_points_idx
 
         # Lookup the point value to assign
-        if i > len(mk_points_lookup):
+        if i >= len(submissions) - num_zeroes:
             points = 0
         else:
             points = mk_points_lookup[points_idx]
 
         s.points = points
         s.save()
-        last_points_idx = i
+        last_points_idx = points_idx
 
         # Now update the category totals for the racer
         cat_points = get_create_category_points(race.category_id.id, s.user_id)
@@ -663,12 +681,12 @@ def score_trueskill_race(race):
     # Get this category's trueskill params from DB
     trueskill_params = get_category_trueskill_params(race.category_id.id)
     if trueskill_params is not None:
-        env = trueskill.Trueskill(mu=trueskill_params.mu,
+        env = trueskill.TrueSkill(mu=trueskill_params.mu,
                         sigma=trueskill_params.sigma,
                         draw_probability=trueskill_params.draw_chance)
 
         # Create a list of rating objects matching the submissions
-        rating_dict = {}
+        rating_list = []
         for s in submissions:
             player_rating = None
 
@@ -680,27 +698,27 @@ def score_trueskill_race(race):
                 # If the player doesn't exist in this category yet, create a new player rating
                 player_rating = env.create_rating()
 
-            rating_dict[s.user_id] = player_rating
+            rating_list.append({s.user_id: player_rating})
 
         # Rate the race
-        new_rates = env.rate(rating_dict)
+        new_rates = env.rate(rating_list)
 
         # Now walk the submission list again and update the ratings.
-        for s in submissions:
+        for i, s in enumerate(submissions):
             # The points for this race represents a snapshot of the rating at this point in time. 
-            s.points = new_rates[s.user_id].mu
+            s.points = new_rates[i][s.user_id].mu
             s.save()
 
             # The category points is the most up to date rating
             cat_points = get_create_category_points(race.category_id.id, s.user_id)
-            cat_points.points = new_rates[s.user_id].mu
+            cat_points.points = new_rates[i][s.user_id].mu
             cat_points.save()
 
             # Finally save the updated, underlying trueskill params
             update_create_trueskill_racer_params(race.category_id.id,
                                                  s.user_id,
-                                                 new_rates[s.user_id].mu,
-                                                 new_rates[s.user_id].sigma)
+                                                 new_rates[i][s.user_id].mu,
+                                                 new_rates[i][s.user_id].sigma)
 
 ########################################################################################################################
 def update_create_trueskill_racer_params(category_id, user_id, mu, sigma):
@@ -714,25 +732,46 @@ def update_create_trueskill_racer_params(category_id, user_id, mu, sigma):
     player_params.save()
 
 ########################################################################################################################
+def score_points_key(submission):
+    return submission.points
+
+########################################################################################################################
 def score_par_time_race(race):
     submissions = get_sorted_race_submissions(race.id)
 
+    last_finish_idx = 0
+    for i, s in enumerate(submissions):
+        if s.finish_time == ForfeitFinishTime:
+            last_finish_idx = i - 1
+            break
+    
+    if last_finish_idx != 0:
+        # DNFs get a time equal to the slowest non-DNF time + 15 minutes
+        dnf_time_seconds = finish_time_to_seconds(submissions[last_finish_idx].finish_time) + (15 * 60)
+        dnf_time = finish_time_seconds_to_str(dnf_time_seconds)
+        for i in range(last_finish_idx+1, len(submissions)):
+            submissions[i].finish_time = dnf_time
+            submissions[i].save()
+    
     # Calculate the par time in seconds
     par_time_seconds = calculate_par_time(submissions)
+    logging.info(f"Par time: {finish_time_seconds_to_str(int(par_time_seconds))}({par_time_seconds} seconds)")
 
     # For each submission
     for s in submissions:
         # Score is calculated as (2 - (time_in_seconds / par_time)) * 100
-        s.points = (2 - (par_time_seconds / finish_time_to_seconds(s.finish_time))) * 100
+        s.points = (2.0 - (float(finish_time_to_seconds(s.finish_time) / par_time_seconds))) * 100.0
         s.save()
+
+        logging.info(f"Points for {s.finish_time}: {s.points}")
 
         # Category points is the average of all scores, dropping the bottom score if there
         # are more than 2 and dropping top and bottom if there are more than 3
         cat_submissions = get_category_submissions(s.user_id, race.category_id.id)
         num_scores = 0
-        total_score = 0
+        total_score = 0.0
         num_subs = len(cat_submissions)
-        for i, c in enumerate(sorted(cat_submission, key=score_points_key, reverse=True)):
+        for i, c in enumerate(sorted(cat_submissions, key=score_points_key, reverse=True)):
             if i == 0 and num_subs > 3:
                 # Drop top score
                 continue
@@ -741,7 +780,7 @@ def score_par_time_race(race):
                 continue
             total_score += c.points
             num_scores += 1
-        new_category_score = total_score / num_scores
+        new_category_score = float(total_score / num_scores)
         cat_points = get_create_category_points(race.category_id.id, s.user_id)
         cat_points.points = new_category_score
         cat_points.save()
@@ -752,8 +791,8 @@ def score_fixed_points_race(race):
 
     draw_threshold_seconds = get_draw_threshold_seconds(race.category_id.id)
 
-    # Fixed points is designed for 1v1 races only, so we'll just check for a tie
-    # and then assign points
+    # Fixed points is designed for 1v1 races only, so we'll just check for a tie between
+    # the first two items and then assign points
     if len(submissions) > 1:
         if is_tie(submissions[0].finish_time, submissions[1].finish_time, draw_threshold_seconds):
             submissions[0].points = 1
@@ -773,6 +812,14 @@ def score_fixed_points_race(race):
             cat_points = get_create_category_points(race.category_id.id, submissions[0].user_id)
             cat_points.points += submissions[0].points
             cat_points.save()
+
+            for s in submissions[1:]:
+                s.points = 0
+                s.save()
+                cat_points = get_create_category_points(race.category_id.id, s.user_id)
+                if cat_points.points is None:
+                    cat_points.points = 0
+                    cat_points.save()
 
 ########################################################################################################################
 def get_user_place(race_id, user_id):

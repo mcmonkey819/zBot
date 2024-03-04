@@ -607,13 +607,15 @@ class zRaceSubmitHandler():
                         self.submission.finish_time = v
                     self.submission.save()
                 case self.comment_id:
-                    self.submission.comment = v
+                    if v is not None and v != "":
+                        self.submission.comment = v
                 case self.points_id:
-                    try:
-                        self.submission.points = int(v)
-                    except:
-                        await send_message(interaction, "**ERROR** Points must be an integer")
-                        return
+                    if v is not None and v != "":
+                        try:
+                            self.submission.points = int(v)
+                        except:
+                            await send_message(interaction, "**ERROR** Points must be an integer")
+                            return
                 case _:
                     success = await self.save_extra_info(interaction, self.fields[i], v)
                     if not success:
@@ -747,18 +749,36 @@ async def category_delete(interaction, category):
 async def category_edit_scoring(interaction, category):
     await defer(interaction)
 
+    # If there are completed races in this category, don't allow the scoring type to change
+    races = get_completed_races_by_category(category.id)
+    if races is not None and len(races) > 0:
+        await send_message(interaction, "Cannot change scoring method for a category that has completed races.")
+        return
+
     select_list = copy.deepcopy(PointsType.SelectOptionList)
     if category.points_type is None:
         select_list[0].default = True
     for s in select_list:
+        
         if s.value == category.points_type:
             s.default = True
             break
     
     selected = await zSingleSelectView(select_list, None, "Choose Scoring Method...").prompt(interaction)
     
+    curr_type = category.points_type
+    # If the current points type is Trueskill and the user is changing it, remove any existing params
+    if curr_type == PointsType.Trueskill and selected != PointsType.Trueskill:
+        curr_params = get_category_trueskill_params(category.id)
+        if curr_params is not None:
+            curr_params.delete_instance()
+    
     category.points_type = selected if selected != 0 else None
     category.save()
+
+    # If the new points type is Trueskill and the old one was not, create trueskill params
+    if selected == PointsType.Trueskill and curr_type != PointsType.Trueskill:
+        create_default_trueskill_params(category.id)
 
     await send_message(interaction, f"Category Scoring Method Saved")
 
@@ -1276,16 +1296,13 @@ async def race_edit_submission(interaction, race):
     # Get a list of submissions for this race
     submissions = get_sorted_race_submissions(race.id)
 
-    if submissions is None or len(submissions) == 0:
-        await send_message(interaction, "No submissions found for this race")
-        return
-
     # Create a select list from the submissions
     select_list = [nextcord.SelectOption(label="Create New...", value=-1, description="Create a new submission"),
                    nextcord.SelectOption(label="Cancel...", value=0, description="Cancel the operation")]
-    for s in submissions:
-        user = await get_user_from_interaction(interaction, s.user_id)
-        select_list.append(nextcord.SelectOption(label=f"{user.display_name} - {s.finish_time}", value=s.id, description=f"{user.display_name} - {s.finish_time}"))
+    if submissions is not None:
+        for s in submissions:
+            user = await get_user_from_interaction(interaction, s.user_id)
+            select_list.append(nextcord.SelectOption(label=f"{user.display_name} - {s.finish_time}", value=s.id, description=f"{user.display_name} - {s.finish_time}"))
     
     # Prompt the user to select a submission
     view = zSingleSelectView(select_list, on_select_edit_submission, "Choose Submission To Edit..", payload=race.id)
@@ -1621,7 +1638,7 @@ async def show_submission_details(interaction, submission_id):
     if not is_value_empty(submission.comment):
         embed.add_field(name="Comment", value=submission.comment, inline=False)
     if not is_value_empty(submission.points):
-        embed.add_field(name="Points", value=str(submission.points), inline=False)
+        embed.add_field(name="Points", value=format_points_str(submission.points), inline=False)
     
     # Get extra info types assigned to this race
     extra_info_assignments = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.race_id == race_id)
@@ -1796,12 +1813,9 @@ async def post_channel_category_leaderboard(interaction, channel, category_id, b
             await post_channel_race_leaderboard(interaction, channel, races[0].id, bot_client, get_emoji_list())
     else:
         embed_list = await get_category_leaderboard_embed_list(category_id, per_page, bot_client)
-        #if embed_list is None or len(embed_list) == 0:
-        #    await send_message(interaction, f"No points yet for category {category.name}")
-        #else:
         for e in embed_list:
             msg = await channel.send(embed=e)
-            save_message(interaction.guild_id, channel.id, msg.id)
+            save_message(interaction.guild_id, channel.id, msg.id, category_id=category_id)
 
 ########################################################################################################################
 async def get_category_leaderboard_embed_list(category_id, per_page, bot_client):

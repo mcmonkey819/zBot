@@ -57,6 +57,7 @@ class zCategoryAddEditModal(zModal):
             # Create a new category
             self.category = AsyncRaceCategory()
             self.category.server_id = interaction.guild_id
+            self.category.active = True
 
         for c in modal.children:
             match c.custom_id:
