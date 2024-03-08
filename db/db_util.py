@@ -124,15 +124,14 @@ def get_extra_info_type(info_type_id):
     return info_type
 
 ########################################################################################################################
-def get_extra_info(submission, info_type_id):
+def get_extra_info(submission_id, info_type_id):
     info = None
-    if submission is not None:
-        try:
-            info = AsyncRaceExtraInfo.select().where(
-                (AsyncRaceExtraInfo.submission_id == submission.id) &
-                (AsyncRaceExtraInfo.info_type_id == info_type_id)).get()
-        except:
-            info = None
+    try:
+        info = AsyncRaceExtraInfo.select().where(
+            (AsyncRaceExtraInfo.submission_id == submission_id) &
+            (AsyncRaceExtraInfo.info_type_id == info_type_id)).get()
+    except:
+        info = None
     return info
 
 ########################################################################################################################
@@ -176,7 +175,6 @@ def get_race_assignment(user_id, race_id):
 def get_category_race_info_messages(race):
     return AsyncRaceMessage.select().where(
         (AsyncRaceMessage.category_id == race.category_id.id) &
-        (AsyncRaceMessage.race_id == race.id) &
         (AsyncRaceMessage.message_type == RaceMessageType.RaceInfo))
 
 ########################################################################################################################
@@ -236,6 +234,20 @@ def get_completed_races(user_id, server_id):
     races = open_races + assigned_races
     
     return races
+
+########################################################################################################################
+def get_most_recent_race(category_id, include_completed=True):
+    # This list will come sorted by create_datetime, so we can just walk through the list to find the most recent
+    # active or completed race
+    races = get_category_races(category_id)
+
+    for r in races:
+        if r.state == RaceState.Active:
+            return r
+        if include_completed and r.state == RaceState.Completed:
+            return r
+
+    return None
 
 ########################################################################################################################
 def get_completed_races_by_category(category_id):
@@ -555,7 +567,7 @@ def get_sorted_race_submissions(race_id, reverse=False):
     submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id)
 
     if len(submissions) == 0:
-        return None
+        return submissions
 
     # Return the list, sorted by finish time
     return sorted(submissions, key=finish_time_sort_key, reverse=reverse)

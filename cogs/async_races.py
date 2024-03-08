@@ -5,7 +5,6 @@ import nextcord
 import logging
 import re
 import config.bot_config as bot_config
-from ui.ui_elements import *
 from ui.menus import *
 
 class AsyncRaces(commands.Cog, name='AsyncRaces'):

@@ -1,27 +1,16 @@
 General Stuff
 -------------------------------------------------------
-[X] - Function to get extra info data for last N races in a category (multi-select)
-[ ] - Remove server_id field from extra_info_assignments?
-[ ] - Find main tourney qualifier spreadsheet and create races to test par time scoring
-[ ] - Test category leaderboard
-[X] - Category visible by default
-[X] - Par time points display limit to 2-4 decimal places
-[X] - Restrict category scoring if there are completed races
-[X] - Category leaderboard not updating on race completion
-[X] - Create Trueskill category params on setting scoring to Trueskill, remove if scoring is changed
-
-
-[ ] - Test on BTT with Forty bonks DB data
-    [X] - Wipe DB
-    [X] - Port 40 Bonks data
-
-[ ] - Write demo script
-    [ ] - Moderator
-    [ ] - Racer
-
+[X] - forfeit doesn't show message, neither does unauthorized leaderboard 
+[X] - display_name incorrect (showing account name instead)
 [ ] - Record demos
     [ ] - Moderator
     [ ] - Racer
+[X] - Creating new race didn't remove old category leaderboard
+[X] - Completed races only showing one
+[X] - Category info not working
+[X] - More clicks to create new race
+    [X] - Create category toggle to mark race active on create
+[X] - Race announcement is awkward
 
 Manual DB Conversion Steps
 -------------------------------------------------------
@@ -30,9 +19,10 @@ Manual DB Conversion Steps
 
 Future Work
 -------------------------------------------------------
+[ ] - Remove server_id field from extra_info_assignments?
 [ ] - Add optional calculated category leaderboard fields (high/low score, average time, num races)
 [ ] - `rescore_race` when a submission is edited and as a manual option
-[ ] - Update button menus to remove unused buttons (rather than disable and change label to `--`)
+[X] - Update button menus to remove unused buttons (rather than disable and change label to `--`)
 [ ] - Racetime data import
 [ ] - Category leaderboard minimum races
 [ ] - Unpin/Unset leaderboard messages

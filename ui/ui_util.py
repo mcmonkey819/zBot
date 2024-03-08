@@ -207,11 +207,11 @@ def get_race_leaderboard_table(interaction, race_id):
             places.append(get_place_str(i+1))
             # Get the username
             user = interaction.client.get_user(s.user_id)
-            username = "" if user is None else user.display_name
+            username = "" if user is None else user.global_name
             table_row = [username, s.finish_time]
             for a in extra_info_assignments:
                 # Lookup the extra infos for this submission and add them to the table
-                info = get_extra_info(s, a.info_type_id)
+                info = get_extra_info(s.id, a.info_type_id)
                 if info is not None:
                     table_row.append(info.data)
             table_row.append(s.comment)
@@ -353,7 +353,7 @@ async def get_race_leaderboard_embed(title, body_text, submissions, current_page
     for i, s in enumerate(submissions):
         place_num = (current_page * per_page) + i + 1
         user = await bot_client.fetch_user(s.user_id)
-        user_name = f"{s.user_id}" if user is None else user.display_name
+        user_name = f"{s.user_id}" if user is None else user.global_name
         embed.add_field(name=f"{get_place_str(place_num)} - {emojis[i]}", value=f"{s.finish_time} - {user_name}", inline=False)
 
     return embed
@@ -379,7 +379,7 @@ async def get_category_leaderboard_embed(title, body_text, points_list, current_
     for i, p in enumerate(points_list):
         place_num = (current_page * per_page) + i + 1
         user = await bot_client.fetch_user(p.user_id)
-        user_name = f"{p.user_id}" if user is None else user.display_name
+        user_name = f"{p.user_id}" if user is None else user.global_name
         embed.add_field(name=f"{get_place_str(place_num)} - {format_points_str(p.points)}", value=user_name, inline=False)
 
     return embed
@@ -432,14 +432,10 @@ def copy_embed(embed):
 
 ########################################################################################################################
 async def get_user_from_interaction(interaction, user_id):
-    # First try to fetch from the guild
-    try:
-        user = await interaction.guild.fetch_member(user_id)
-    except:
-        user = None
-
+    # First try to get the user from the guild
+    user = interaction.guild.get_member(user_id)
     if user is None:
-        # If that fails, try to fetch from the client
+        # If that fails, try to get the user from the client
         user = await interaction.client.fetch_user(user_id)
     return user
 
@@ -621,6 +617,7 @@ class zUserSelectView(nextcord.ui.View):
         self.submit_handler = submit_handler
         self.user_select = zUserSelect(self.on_select, placeholder, payload=payload)
         self.add_item(self.user_select)
+        selected_user = None
 
     async def on_select(self, user, interaction: nextcord.Interaction):
         self.selected_user = user

@@ -31,6 +31,7 @@ class AsyncRaceCategory(Model):
     thumbnail_url           = CharField(null=True)
     pin_recent_race         = BooleanField(default=False)
     allow_completed_submit  = BooleanField(default=False)
+    activate_new_races      = BooleanField(default=False)
 
     class Meta:
         table_name = 'async_race_categories'
