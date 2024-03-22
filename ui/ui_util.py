@@ -207,7 +207,7 @@ def get_race_leaderboard_table(interaction, race_id):
             places.append(get_place_str(i+1))
             # Get the username
             user = interaction.client.get_user(s.user_id)
-            username = "" if user is None else user.global_name
+            username = get_user_name_str(s.user_id, user)
             table_row = [username, s.finish_time]
             for a in extra_info_assignments:
                 # Lookup the extra infos for this submission and add them to the table
@@ -346,15 +346,49 @@ def get_race_embed_field_value(race, user_id=None):
 
     return field_value
 
+###########################################################################################################################
+def get_submission_details_dict(submission):
+    details = {}
+    details["Finish Time"] = submission.finish_time
+    if not is_value_empty(submission.comment):
+        details["Comment"] = submission.comment
+    if not is_value_empty(submission.points):
+        details["Points"] = format_points_str(submission.points)
+    
+    # Get extra info types assigned to this race
+    extra_info_assignments = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.race_id == submission.race_id)
+    for a in extra_info_assignments:
+        # Lookup the extra infos for this submission and add them to the table
+        info = get_extra_info(submission.id, a.info_type_id)
+        if info is not None:
+            info_type = get_extra_info_type(a.info_type_id)
+            if not is_value_empty(info.data):
+                details[info_type.name] = value=info.data
+   
+    return details
+
 ########################################################################################################################
-async def get_race_leaderboard_embed(title, body_text, submissions, current_page, per_page, bot_client, emojis):
+async def get_race_leaderboard_embed(title, body_text, submissions, current_page, per_page, bot_client):
     embed = nextcord.Embed(color=nextcord.Colour.random(), title=title, description=body_text)
         
+    show_details = True
     for i, s in enumerate(submissions):
         place_num = (current_page * per_page) + i + 1
         user = await bot_client.fetch_user(s.user_id)
-        user_name = f"{s.user_id}" if user is None else user.global_name
-        embed.add_field(name=f"{get_place_str(place_num)} - {emojis[i]}", value=f"{s.finish_time} - {user_name}", inline=False)
+        user_name = get_user_name_str(s.user_id, user)
+        if show_details:
+            value_text = f"**{user_name}**"
+            details = get_submission_details_dict(s)
+            for k, v in details.items():
+                # Want to add points last
+                if k == "Points":
+                    continue
+                value_text += f"\n--: {k}: {v}"
+            if "Points" in details:
+                value_text += f"\n--: Points: {details['Points']}"
+        else:
+            value_text = f"{s.finish_time} - {user_name}"
+        embed.add_field(name=f"{get_place_str(place_num)}", value=value_text, inline=False)
 
     return embed
 
@@ -371,6 +405,7 @@ def format_points_str(points) -> str:
                 break
         if found_significant_digit == False:
             points_str = parts[0]
+    return points_str
 
 ########################################################################################################################
 async def get_category_leaderboard_embed(title, body_text, points_list, current_page, per_page, bot_client):
@@ -379,8 +414,9 @@ async def get_category_leaderboard_embed(title, body_text, points_list, current_
     for i, p in enumerate(points_list):
         place_num = (current_page * per_page) + i + 1
         user = await bot_client.fetch_user(p.user_id)
-        user_name = f"{p.user_id}" if user is None else user.global_name
-        embed.add_field(name=f"{get_place_str(place_num)} - {format_points_str(p.points)}", value=user_name, inline=False)
+        user_name = get_user_name_str(p.user_id, user)
+        num_submissions = get_num_category_submissions(p.user_id, p.category_id)
+        embed.add_field(name=f"{get_place_str(place_num)} - {format_points_str(p.points)}", value=f"{user_name} ({num_submissions})", inline=False)
 
     return embed
 
@@ -406,7 +442,10 @@ def get_category_leaderboard_description(category_id):
     if category is None:
         description =  f"Category `{category_id}`"
     else:
-        description = f"Category `{category.name}`\nScoring Type: {PointsType.to_str(category.points_type)}\n\n{category.description}"
+        completed_races = len(get_completed_races_by_category(category_id))
+        description = f"Category `{category.name}`\nScoring Type: {PointsType.to_str(category.points_type)}"
+        description += f"\nCompleted Races: {completed_races}\n\n{category.description}"
+    description += f"\n(Note: Number of races run in parentheses)"
     return description
 
 ########################################################################################################################
@@ -451,6 +490,16 @@ def can_view_race_leaderboard(race_id, user_id):
         can_view = True
 
     return can_view
+
+########################################################################################################################
+def get_user_name_str(user_id, user):
+    user_name = str(user_id)
+    if user is not None:
+        if user.global_name is not None and user.global_name != "None":
+            user_name = user.global_name
+        else:
+            user_name = user.display_name
+    return user_name
 
 ########################################################################################################################
 # BASE CLASSES

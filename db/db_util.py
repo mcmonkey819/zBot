@@ -183,6 +183,13 @@ def get_assigned_racers(race_id):
     return racers
 
 ########################################################################################################################
+def is_assigned_race(race_id):
+    racers = get_assigned_racers(race_id)
+    if racers is None or len(racers) == 0:
+        return False
+    return True
+
+########################################################################################################################
 def get_open_races(server_id):
     races = AsyncRace.select().where(AsyncRace.server_id == server_id).order_by(AsyncRace.create_datetime.desc())
     ret_list = []
@@ -577,6 +584,13 @@ def get_num_submissions(race_id):
     return AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id).count()
 
 ########################################################################################################################
+def get_num_category_submissions(user_id, category_id):
+    return AsyncRaceSubmission.select().join(AsyncRace).where(
+        (AsyncRaceSubmission.user_id == user_id) &
+        (AsyncRace.state == RaceState.Completed) &
+        (AsyncRace.category_id == category_id)).count()
+
+########################################################################################################################
 def is_tie(finish_time_a, finish_time_b, tie_threshold_seconds=2):
     time_a_seconds = finish_time_to_seconds(finish_time_a)
     time_b_seconds = finish_time_to_seconds(finish_time_b)
@@ -780,6 +794,9 @@ def score_par_time_race(race):
         # Category points is the average of all scores, dropping the bottom score if there
         # are more than 2 and dropping top and bottom if there are more than 3
         cat_submissions = get_category_submissions(s.user_id, race.category_id.id)
+        
+        # Filter for only races that have been scored
+        cat_submissions = list(filter(lambda x: x.points is not None, cat_submissions))
         num_scores = 0
         total_score = 0.0
         num_subs = len(cat_submissions)

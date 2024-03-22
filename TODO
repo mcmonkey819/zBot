@@ -11,6 +11,33 @@ General Stuff
 [X] - More clicks to create new race
     [X] - Create category toggle to mark race active on create
 [X] - Race announcement is awkward
+[X] - Message during race activation to show it's doing something
+[X] - Handle category info when no completed races
+[X] - Edit Submission: Don't show points field if race is still Active
+[X] - Bots show `None` as name on leaderboard
+[X] - Pin race not working
+[X] - Display number of races on points leaderboard
+    [X] - Don't include active races
+[X] - Mess around with more detailed leaderboard
+[X] - Don't announce assigned races
+[X] - Remove "Activating race" message
+[X] - Ping all select channel
+[X] - Check for assignment when adding submission via Edit Submission
+
+Testing
+-------------------------------------
+[X] - Basic overview
+    [X] - Recorded
+[X] - 40 Bonks workflow
+    [X] - Recorded
+[X] - Par time qualifiers
+    [X] - Recorded
+[ ] - Mario Kart BR
+    [ ] - Recorded
+[ ] - Fixed Scoring
+    [ ] - Recorded
+[ ] - Trueskill
+    [ ] - Recorded
 
 Manual DB Conversion Steps
 -------------------------------------------------------
@@ -19,6 +46,9 @@ Manual DB Conversion Steps
 
 Future Work
 -------------------------------------------------------
+[ ] - Add auto-complete option when all assigned racers have submitted
+[ ] - Buttons for seeing per-race details on points category leaderboard
+[ ] - Assign a role to a race instead of individual racers
 [ ] - Remove server_id field from extra_info_assignments?
 [ ] - Add optional calculated category leaderboard fields (high/low score, average time, num races)
 [ ] - `rescore_race` when a submission is edited and as a manual option

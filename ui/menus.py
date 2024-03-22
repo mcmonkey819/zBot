@@ -383,14 +383,11 @@ class zRaceLeaderboardPageSource(menus.ListPageSource):
         self.bot_client = bot_client
         self.title = title
         self.body_text = body_text
-        self.place_emojis = get_emoji_list()
 
         super().__init__(entries=submission_list, per_page=per_page)
 
     async def format_page(self, menu, submissions):
-        random.shuffle(self.place_emojis)
-        menu.update_buttons(submissions, self.place_emojis)
-        return await get_race_leaderboard_embed(self.title, self.body_text, submissions, menu.current_page, self.per_page, self.bot_client, self.place_emojis)
+        return await get_race_leaderboard_embed(self.title, self.body_text, submissions, menu.current_page, self.per_page, self.bot_client)
 
 class zRaceLeaderboardMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     def __init__(self, source: zRaceLeaderboardPageSource, *, style=ButtonStyle.secondary, timeout=None) -> None:
@@ -399,39 +396,12 @@ class zRaceLeaderboardMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
         # Disable buttons that are unavailable
         self._disable_unavailable_buttons()
 
-        self.disabled_buttons = []
-        self.submission_buttons = []
-        for i in range(0, source.per_page):
-            button = zButton(MenuItem(None, show_submission_details, f"submission_button_{i}", "Submission Details", "View details for the submission"), 0, label="[SubmissionID]")
-            self.submission_buttons.append(button)
-            self.add_item(button)
-            self.disabled_buttons.append(None)
-
         # Add the page buttons if there's more than one page
         if self.source.get_max_pages() > 1:
             self.add_item(zButton(MenuItem(FirstPageEmoji, self.go_to_first_page, 'first_page', 'First Page', 'Go to the first page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
             self.add_item(zButton(MenuItem(PreviousPageEmoji, self.go_to_previous_page, 'previous_page', 'Previous Page', 'Go to the previous page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
             self.add_item(zButton(MenuItem(NextPageEmoji, self.go_to_next_page, 'next_page', 'Next Page', 'Go to the next page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
             self.add_item(zButton(MenuItem(LastPageEmoji, self.go_to_last_page, 'last_page', 'Last Page', 'Go to the last page of the list.', include_interaction=False), None, style=ButtonStyle.primary, row=2))
-
-    def update_buttons(self, submissions, emojis=None):
-        # Update the button list based on how many submissions we need to display
-        for i in range(0, self.source.per_page):
-            if i >= len(submissions):
-                self.disabled_buttons[i] = self.submission_buttons[i]
-                self.submission_buttons[i] = None
-                self.remove_item(self.disabled_buttons[i])
-            elif self.submission_buttons[i] is None:
-                self.submission_buttons[i] = self.disabled_buttons[i]
-                self.disabled_buttons[i] = None
-                self.add_item(self.submission_buttons[i])
-        
-        # Update the submission buttons
-        for i,s in enumerate(submissions):
-            self.submission_buttons[i].label = emojis[i] if emojis is not None else f"{s.id}"
-            self.submission_buttons[i].custom_id = str(s.id)
-            self.submission_buttons[i].payload = s.id
-            self.submission_buttons[i].disabled = False
 
     async def send_initial_message(self, ctx, channel):
         submissions = await self.source.get_page(0)
@@ -563,7 +533,7 @@ class zRaceSubmitHandler():
 
         # Include a points field if it was requested and this category supports scoring
         self.points_id = "points"
-        if include_points and self.race.category_id.points_type != PointsType.NoScoring:
+        if include_points and self.race.category_id.points_type != PointsType.NoScoring and self.race.state == RaceState.Active:
             self.fields.append(zField(custom_id=self.points_id,
                                       label="Points",
                                       default_value=submission.points if submission is not None else None,
@@ -794,13 +764,12 @@ class zRaceAddEditModal(zModal):
             if self.race.category_id.activate_new_races:
                 # Get the previous race in this category to mark it as completed
                 recent_race = get_most_recent_race(self.race.category_id.id)
-                if recent_race.state == RaceState.Active:
+                if recent_race is not None and recent_race.state == RaceState.Active:
                     recent_race.state = RaceState.Completed
                     recent_race.save()
                     score_race(recent_race)
                     update_race_leaderboard(recent_race)
 
-                logging.info("Activating new race")
                 self.race.state = RaceState.Active
                 self.race.save()
                 await handle_activate_race(interaction, self.race)
@@ -1018,7 +987,7 @@ async def category_edit_submit_role(interaction, category):
     # Prompt for the desired role
     selected_role = await prompt_for_role(interaction)
 
-    logging.info(f"{interaction.user.global_name} selected submit role: {selected_role} for category {category.id}")
+    logging.info(f"{get_user_name_str(interaction.user)} selected submit role: {selected_role} for category {category.id}")
     category.submit_role = selected_role
     category.save()
     await send_message(interaction, "Category Submit Role Saved")
@@ -1029,7 +998,7 @@ async def category_edit_create_role(interaction, category):
 
     # Prompt for the desired role
     selected_role = await prompt_for_role(interaction)
-    logging.info(f"{interaction.user.global_name} selected create role: {selected_role} for category {category.id}")
+    logging.info(f"{get_user_name_str(interaction.user)} selected create role: {selected_role} for category {category.id}")
     category.create_role = selected_role
     category.save()
     await send_message(interaction, "Category Create Role Saved")
@@ -1046,7 +1015,7 @@ async def category_edit_leaderboard_channel(interaction, category):
     if selected_channel is None:
         return
 
-    logging.info(f"{interaction.user.global_name} selected leaderboard channel: {selected_channel.name} for category {category.id}")
+    logging.info(f"{get_user_name_str(interaction.user.id, interaction.user)} selected leaderboard channel: {selected_channel.name} for category {category.id}")
     
     # Post an updated leaderboard in the new leaderboard channel
     await post_channel_category_leaderboard(interaction, selected_channel, category.id, interaction.client)
@@ -1065,7 +1034,8 @@ async def category_edit_points(interaction, category):
     select_list = [nextcord.SelectOption(label=f"Cancel...", value=0, description="Cancel the operation")]
     for p in points_list:
         member = await server.fetch_member(p.user_id)
-        select_list.append(nextcord.SelectOption(label=f"{member.global_name} - {p.points}", value=p.id, description=f"{member.global_name} Current Points: {p.points}"))
+        member_name = get_user_name_str(p.user_id, member)
+        select_list.append(nextcord.SelectOption(label=f"{member_name} - {p.points}", value=p.id, description=f"{member_name} Current Points: {p.points}"))
 
     view = zSingleSelectView(select_list, category_edit_db_points, "Choose Racer To Modify...")
     await send_message(interaction, view=view)
@@ -1076,15 +1046,16 @@ async def category_edit_db_points(points_id, interaction):
     if db_points is not None:
         # Ask what the new points value should be
         member = await server.fetch_member(db_points.user_id)
+        member_name = get_user_name_str(db_points.user_id, member)
         new_points = await prompt_for_value(interaction,
-                                            f"Enter New Points for `{member.global_name}`",
+                                            f"Enter New Points for `{member_name}`",
                                             "Points",
                                             str(db_points.points))
         # Update the points value
-        logging.info(f"{interaction.user.global_name} changed points for {member.global_name} from {db_points.points} to {new_points}")
+        logging.info(f"{get_user_name_str(interaction.user.id, interaction.user)} changed points for {member_name} from {db_points.points} to {new_points}")
         db_points.points = int(new_points)
         db_points.save()
-        await send_message(interaction, f"Points for {member.global_name} updated to {new_points}")
+        await send_message(interaction, f"Points for {member_name} updated to {new_points}")
 
         # TODO Update the leaderboard if there is a leaderboard channel
     else:
@@ -1203,7 +1174,7 @@ async def category_display_raw_submit_info(interaction, category):
                 if user is None:
                     msg += f"Unknown User > {d}\n"
                 else:
-                    msg += f"{user.global_name} > {d}\n"
+                    msg += f"{get_user_name_str(user.id, user)} > {d}\n"
     
     # Finally display it to the user
     await send_message(interaction, msg)
@@ -1480,6 +1451,7 @@ async def race_change_state(interaction, race):
 
 ########################################################################################################################
 async def race_pin(interaction, race):
+    await interaction.response.defer(ephemeral=True)
     # Ask for the channel to pin the race to
     channel = await prompt_for_channel(interaction)
     if channel is None:
@@ -1505,7 +1477,7 @@ async def race_edit_submit_role(interaction, race):
 
     # Prompt for the desired role
     selected_role = await prompt_for_role(interaction)
-    logging.info(f"{interaction.user.global_name} selected submit role: {selected_role} for race {race.id}")
+    logging.info(f"{get_user_name_str(interaction.user.id, interaction.user)} selected submit role: {selected_role} for race {race.id}")
     race.submission_role = selected_role
     race.save()
     await send_message(interaction, "Submit Role Saved")
@@ -1522,7 +1494,7 @@ async def race_assign_racer(interaction, race):
     # Create a race assignment for this user
     assign_racer(user_id=user.id, race_id=race.id)
 
-    await send_message(interaction, f"User {user.global_name} assigned")
+    await send_message(interaction, f"User {get_user_name_str(user.id, user)} assigned")
 ########################################################################################################################
 async def race_edit_submission(interaction, race):
     if race.state == RaceState.Inactive:
@@ -1539,7 +1511,8 @@ async def race_edit_submission(interaction, race):
     if submissions is not None:
         for s in submissions:
             user = await get_user_from_interaction(interaction, s.user_id)
-            select_list.append(nextcord.SelectOption(label=f"{user.global_name} - {s.finish_time}", value=s.id, description=f"{user.global_name} - {s.finish_time}"))
+            user_name = get_user_name_str(s.user_id, user)
+            select_list.append(nextcord.SelectOption(label=f"{user_name} - {s.finish_time}", value=s.id, description=f"{user_name} - {s.finish_time}"))
     
     # Prompt the user to select a submission
     view = zSingleSelectView(select_list, on_select_edit_submission, "Choose Submission To Edit..", payload=race.id)
@@ -1569,6 +1542,13 @@ async def on_select_user_edit_submission(select_data, interaction):
     if user is None:
         await send_message(interaction, "Cancelled")
         return
+    
+    # If this is an assigned race, make sure the selected user is assigned to it
+    if is_assigned_race(race_id):
+        assignment = get_race_assignment(user.id, race_id)
+        if assignment is None:
+            await send_message(interaction, "Cancelled. Selected user is not assigned to this race and the race is not open.")
+            return
     
     # Check if the selected user already has a submission to avoid duplicates
     submission = get_race_submission(user.id, race_id)
@@ -1863,7 +1843,7 @@ async def show_submission_details(interaction, submission_id):
     
     race_id = submission.race_id.id
     user = await get_user_from_interaction(interaction, submission.user_id)
-    title=f"{user.global_name} Submission for Race ID #{race_id}"
+    title=f"{get_user_name_str(submission.user_id, user)} Submission for Race ID #{race_id}"
     num_submissions = get_num_submissions(race_id)
     race_submissions = get_sorted_race_submissions(race_id)
     place_ordinal = 0
@@ -1902,7 +1882,7 @@ async def show_submission_details(interaction, submission_id):
 async def show_racer_stats(interaction, user_id):
     server = get_server_from_interaction(interaction)
     user = await server.fetch_member(user_id)
-    user_name = None if user is None else user.global_name
+    user_name = get_user_name_str(user_id, user)
     
     # Collect the core stats
     races = get_completed_races(user_id, interaction.guild_id)
@@ -1941,7 +1921,7 @@ async def show_racer_stats(interaction, user_id):
         opponent_id = user_id
         viewing_self = False
     one_v_one_wins, one_v_one_losses, one_v_one_ties = get_one_v_one_record(interaction.user.id, interaction.guild_id, opponent_id=opponent_id)
-    one_v_one_label = "1v1 Record" if viewing_self else f"{interaction.user.global_name} 1v1 Record vs {user_name}"
+    one_v_one_label = "1v1 Record" if viewing_self else f"{get_user_name_str(interaction.user.id, interaction.user)} 1v1 Record vs {user_name}"
     one_v_one_value = f"{one_v_one_wins} - {one_v_one_losses} - {one_v_one_ties}"
 
     # Store the stats as embed fields
@@ -1993,27 +1973,20 @@ async def post_channel_race_leaderboard(interaction, channel, race_id, bot_clien
     num_pages = math.ceil(len(submissions) / per_page)
     race_id = submissions[0].race_id
     
-    menu_list = []
+    embed_list = []
     for p in range(0, num_pages):
         slice = submissions[p*per_page:(p+1)*per_page]
-        emoji_slice = emojis[p*per_page:(p+1)*per_page]
         embed = await get_race_leaderboard_embed(title, body_text, slice, p, per_page, bot_client, emojis=emoji_slice)
-        # Create the menu item list
-        menu_items = []
-        for s in slice:
-            menu_items.append(MenuItem(emoji_slice[slice.index(s)], show_submission_details, str(s.id), f"Show Submission {s.id} Details", SubmissionDetailsHelpText))
-        submission_id_list = [s.id for s in slice]
-        menu = zButtonMenu(submission_id_list, menu_items, embed=embed, use_channel=True)
-        menu_list.append(menu)
+        embed_list.append(embed)
     
-    for menu in menu_list:
-        await menu.start(interaction=interaction, channel=channel)
+    for e in embed_list:
+        msg = await channel.send(embed=e)
         if save_as_category_message:
             logging.info(f"Saving race leaderboard {race_id} as a category message")
-            save_message(interaction.guild_id, channel.id, menu.message.id, category_id=race.category_id.id)
+            save_message(interaction.guild_id, channel.id, msg.id, category_id=race.category_id.id)
         else:
             logging.info(f"Saving race leaderboard {race_id} as a race message")
-            save_message(interaction.guild_id, channel.id, menu.message.id, race_id=race_id)
+            save_message(interaction.guild_id, channel.id, msg.id, race_id=race_id)
 
 ########################################################################################################################
 async def race_edit_leaderboard_channel(interaction, race):
@@ -2024,7 +1997,7 @@ async def race_edit_leaderboard_channel(interaction, race):
     if selected_channel is None:
         return
     
-    logging.info(f"{interaction.user.global_name} selected leaderboard channel: {selected_channel.name} for race {race.id}")
+    logging.info(f"{get_user_name_str(interaction.user.id, interaction.user)} selected leaderboard channel: {selected_channel.name} for race {race.id}")
 
     # Find any existing leaderboard message and remove it
     leaderboard_msg_list = get_messages_by_race_id(race.id)
@@ -2065,9 +2038,13 @@ async def post_channel_category_leaderboard(interaction, channel, category_id, b
             await post_channel_race_leaderboard(interaction, channel, race.id, bot_client, get_emoji_list(), save_as_category_message=True)
     else:
         embed_list = await get_category_leaderboard_embed_list(category_id, per_page, bot_client)
-        for e in embed_list:
-            msg = await channel.send(embed=e)
+        if embed_list is None or len(embed_list) == 0:
+            msg = await channel.send(f"No points scored yet for category {category.name}. This is likely due to no completed races.")
             save_message(interaction.guild_id, channel.id, msg.id, category_id=category_id)
+        else:
+            for e in embed_list:
+                msg = await channel.send(embed=e)
+                save_message(interaction.guild_id, channel.id, msg.id, category_id=category_id)
 
 ########################################################################################################################
 async def get_category_leaderboard_embed_list(category_id, per_page, bot_client):
@@ -2168,6 +2145,13 @@ async def category_ping_assigned_racers(interaction, payload):
     # ToggleField payload is the category
     category = toggle_field.payload
 
+    # Ask what channel we should put the ping
+    channel = await prompt_for_channel(interaction, placeholder="Choose Channel for Ping Message...")
+
+    if channel is None:
+        await send_message(interaction, "**ERROR** Could not fetch channel. Please contact a bot admin.")
+        return
+
     # Get a list of active race assignments in this category
     assignments = get_active_category_assignments(category.id)
 
@@ -2177,7 +2161,7 @@ async def category_ping_assigned_racers(interaction, payload):
         msg += f"{user.mention} "
     
     msg += f" You have been assigned to a new {category.name} race. Good luck!"
-    await interaction.channel.send(msg)
+    await channel.send(msg)
 
 ########################################################################################################################
 async def category_remove_channel_leaderboard(interaction, payload):
@@ -2416,7 +2400,7 @@ async def send_race_announcement(interaction, race):
 
     # Ask the user if they want to make changes
     await send_message(interaction, 
-                       msg = f"The following message will be sent to {role.mention}:\n\n{msg_text}\n\nWould you like to edit the message?\n  (NOTE: you can dismiss this message to cancel sending any announcement)",
+                       msg = f"The following message will be sent:\n\n{msg_text}\n\nWould you like to edit the message?\n  (NOTE: you can dismiss this message to cancel sending any announcement)",
                        view=zYesNoButtonView(send_confirmed_race_announcement, (race, msg_text)))
 
 #################################################################################################################
@@ -2522,61 +2506,68 @@ async def show_category_info(interaction, category_id):
     # Get some stats about the category and user
     races = get_completed_races_by_category(category_id)
     num_races = len(races)
-    num_submissions = 0
-    num_user_races = 0
-    fastest_user_time = ForfeitFinishTimeSeconds
-    fastest_user_submission = None
-    racers = {}
-    fastest_time = ForfeitFinishTimeSeconds
-    fastest_submission = None
-    for r in races:
-        # Get the submissions
-        submissions = get_sorted_race_submissions(r.id)
-        # Trim off DNFs
-        if submissions is not None:
-            submissions = list(filter(lambda x: x.finish_time is not ForfeitFinishTime, submissions))
-            num_submissions += len(submissions)
-            for s in submissions:
-                time_in_seconds = finish_time_to_seconds(s.finish_time)
-                if s.user_id == interaction.user.id:
-                    num_user_races += 1
-                    if time_in_seconds < fastest_user_time:
-                        fastest_user_time = time_in_seconds
-                        fastest_user_submission = s
 
-                if time_in_seconds < fastest_time:
-                    fastest_time = time_in_seconds
-                    fastest_submission = s
+    embed = None
+    if num_races > 0:
+        num_submissions = 0
+        num_user_races = 0
+        fastest_user_time = ForfeitFinishTimeSeconds
+        fastest_user_submission = None
+        racers = {}
+        fastest_time = ForfeitFinishTimeSeconds
+        fastest_submission = None
+        for r in races:
+            # Get the submissions
+            submissions = get_sorted_race_submissions(r.id)
+            # Trim off DNFs
+            if submissions is not None:
+                submissions = list(filter(lambda x: x.finish_time is not ForfeitFinishTime, submissions))
+                num_submissions += len(submissions)
+                for s in submissions:
+                    time_in_seconds = finish_time_to_seconds(s.finish_time)
+                    if s.user_id == interaction.user.id:
+                        num_user_races += 1
+                        if time_in_seconds < fastest_user_time:
+                            fastest_user_time = time_in_seconds
+                            fastest_user_submission = s
 
-                if s.user_id not in racers:
-                    racers[s.user_id] = 1
-                else:
-                    racers[s.user_id] += 1
-        else:
-            logging.info(f"No submissions found for race {r.id}")
+                    if time_in_seconds < fastest_time:
+                        fastest_time = time_in_seconds
+                        fastest_submission = s
+
+                    if s.user_id not in racers:
+                        racers[s.user_id] = 1
+                    else:
+                        racers[s.user_id] += 1
+            else:
+                logging.info(f"No submissions found for race {r.id}")
+        
+        # Create an embed with the category stats
+        user = await get_user_from_interaction(interaction, interaction.user.id)
+        user_name = get_user_name_str(interaction.user.id, user)
     
-    # Create an embed with the category stats
-    user = await get_user_from_interaction(interaction, interaction.user.id)
-    
-    embed = nextcord.Embed(title=f"{category.name} Info", description=f"Stats for {category.name}\n\n{category.description}", color=nextcord.Color.random())
-    embed.add_field(name="Total Races", value=num_races, inline=True)
-    embed.add_field(name=f"Races by {user.global_name}", value=num_user_races, inline=True)
-    embed.add_field(name="Total Category Submissions", value=num_submissions, inline=True)
-    embed.add_field(name="Unique Racers", value=len(racers), inline=True)
-    fastest_racer = await get_user_from_interaction(interaction, fastest_submission.user_id)
-    fastest_racer_name = fastest_racer.global_name if fastest_racer is not None else "Unknown"
-    fastest_race = get_race(fastest_submission.race_id)
-    fastest_race_name = fastest_race.description if fastest_race is not None else "Unknown Mode"
-    embed.add_field(name="Fastest Time",
-                    value=f"{fastest_submission.finish_time} by {fastest_racer_name} in {fastest_race_name}",
-                    inline=True)
-    
-    fastest_user_race = get_race(fastest_user_submission.race_id)
-    fastest_user_race_name = fastest_user_race.description if fastest_user_race is not None else "Unknown Mode"
-    embed.add_field(name=f"{user.global_name}'s Fastest Time",
-                    value=f"{fastest_user_submission.finish_time} by {user.global_name} in {fastest_user_race_name}",
-                    inline=True)
-    
+        embed = nextcord.Embed(title=f"{category.name} Info", description=f"Stats for {category.name}\n\n{category.description}", color=nextcord.Color.random())
+        embed.add_field(name="Total Races", value=num_races, inline=True)
+        embed.add_field(name=f"Races by {user_name}", value=num_user_races, inline=True)
+        embed.add_field(name="Total Category Submissions", value=num_submissions, inline=True)
+        embed.add_field(name="Unique Racers", value=len(racers), inline=True)
+        fastest_racer = await get_user_from_interaction(interaction, fastest_submission.user_id)
+        fastest_racer_name = get_user_name_str(fastest_submission.user_id, fastest_racer)
+        fastest_race = get_race(fastest_submission.race_id)
+        fastest_race_name = fastest_race.description if fastest_race is not None else "Unknown Mode"
+        embed.add_field(name="Fastest Time",
+                        value=f"{fastest_submission.finish_time} by {fastest_racer_name} in {fastest_race_name}",
+                        inline=True)
+        
+        fastest_user_race = get_race(fastest_user_submission.race_id)
+        fastest_user_race_name = fastest_user_race.description if fastest_user_race is not None else "Unknown Mode"
+        embed.add_field(name=f"{user_name}'s Fastest Time",
+                        value=f"{fastest_user_submission.finish_time} by {user_name} in {fastest_user_race_name}",
+                        inline=True)
+    else:
+        # If there are no races yet, just create a basic embed with the category description
+        embed = nextcord.Embed(title=f"{category.name} Info", description=f"{category.description}", color=nextcord.Color.random())
+
     zCategoryInfoButtonView.add_static_embed_fields(embed)
                 
     # Create button view to show completed races and leaderboard (if applicable)
@@ -2584,8 +2575,9 @@ async def show_category_info(interaction, category_id):
 
 ########################################################################################################################
 async def handle_activate_race(interaction, race):
-    # Handle sending the race announcement message
-    await send_race_announcement(interaction, race)
+    # Handle sending the race announcement message (only for open races)
+    if not is_assigned_race(race.id):
+        await send_race_announcement(interaction, race)
 
     # Remove the category role from all racers
     if race.category_id.submit_role is not None:
