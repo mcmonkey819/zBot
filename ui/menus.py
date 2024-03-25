@@ -533,7 +533,7 @@ class zRaceSubmitHandler():
 
         # Include a points field if it was requested and this category supports scoring
         self.points_id = "points"
-        if include_points and self.race.category_id.points_type != PointsType.NoScoring and self.race.state == RaceState.Active:
+        if include_points and self.race.category_id.points_type != PointsType.NoScoring and self.race.state == RaceState.Completed:
             self.fields.append(zField(custom_id=self.points_id,
                                       label="Points",
                                       default_value=submission.points if submission is not None else None,

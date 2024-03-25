@@ -15,7 +15,7 @@ def create_race_assignments_from_category_assignments(server_id):
             for r in races:
                 for a in cat_assignments:
                     # First check to make sure there's not already an assignment
-                    if get_race_assignment(r.id, a.info_type_id) is None:
+                    if get_race_info_assignment(r.id, a.info_type_id) is None:
                         new_assign = AsyncRaceExtraInfoAssignment()
                         new_assign.server_id = server_id
                         new_assign.race_id = r.id

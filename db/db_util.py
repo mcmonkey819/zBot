@@ -373,7 +373,7 @@ def get_category_assignment(info_type_id, category_id):
     return a
 
 #####################################################################################################################
-def get_race_assignment(info_type_id, race_id):
+def get_race_info_assignment(info_type_id, race_id):
     try:
         a = AsyncRaceExtraInfoAssignment.select().where(
                 (AsyncRaceExtraInfoAssignment.info_type_id == info_type_id) &
@@ -401,7 +401,7 @@ def check_category_assignment_exists(info_type_id, category_id):
 
 #####################################################################################################################
 def check_race_assignment_exists(info_type_id, race_id):
-    a = get_race_assignment(info_type_id, race_id)
+    a = get_race_info_assignment(info_type_id, race_id)
     return a is not None
 
 #####################################################################################################################
@@ -659,8 +659,7 @@ def score_mario_kart_race(race):
 
     # If there are more submissions than scores, the rest get zero points
     mk_points_lookup = [ 25, 21, 18, 15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 ]
-    #scoring_places = len(mk_points_lookup)
-    scoring_places = 4
+    scoring_places = len(mk_points_lookup)
     num_zeroes = 0
     if len(reverse_submissions) > scoring_places:
         num_zeroes = len(reverse_submissions)-scoring_places
