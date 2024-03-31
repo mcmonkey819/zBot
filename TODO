@@ -1,28 +1,7 @@
 General Stuff
 -------------------------------------------------------
-[X] - forfeit doesn't show message, neither does unauthorized leaderboard 
-[X] - display_name incorrect (showing account name instead)
-[ ] - Record demos
-    [ ] - Moderator
-    [ ] - Racer
-[X] - Creating new race didn't remove old category leaderboard
-[X] - Completed races only showing one
-[X] - Category info not working
-[X] - More clicks to create new race
-    [X] - Create category toggle to mark race active on create
-[X] - Race announcement is awkward
-[X] - Message during race activation to show it's doing something
-[X] - Handle category info when no completed races
-[X] - Edit Submission: Don't show points field if race is still Active
-[X] - Bots show `None` as name on leaderboard
-[X] - Pin race not working
-[X] - Display number of races on points leaderboard
-    [X] - Don't include active races
-[X] - Mess around with more detailed leaderboard
-[X] - Don't announce assigned races
-[X] - Remove "Activating race" message
-[X] - Ping all select channel
-[X] - Check for assignment when adding submission via Edit Submission
+[ ] - Schedule state change
+[ ] - Fix racer stats
 
 Testing
 -------------------------------------
@@ -32,8 +11,8 @@ Testing
     [X] - Recorded
 [X] - Par time qualifiers
     [X] - Recorded
-[ ] - Mario Kart BR
-    [ ] - Recorded
+[X] - Mario Kart BR
+    [X] - Recorded
 [ ] - Fixed Scoring
     [ ] - Recorded
 [ ] - Trueskill
@@ -66,3 +45,4 @@ Future Work
 [ ] - Co-op Support
 
 
+https://discord.com/oauth2/authorize?client_id=1021893860001054862&permissions=68169720397687&scope=bot
