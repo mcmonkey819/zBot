@@ -70,6 +70,28 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         self.log_command(interaction.user, "STARTUP")
 
         await interaction.response.defer(ephemeral=True)
+
+        # Check if this server is in the DB and that the user is an admin
+        server = self.get_server(interaction)
+        if server is None:
+            if interaction.user.id == bot_config.CoolestGuy:
+                # Query for the moderator and admin roles and then create a DB entry for this server
+                admin_role = await prompt_for_role(interaction, placeholder="Select Race Admin Role...")
+                mod_role = await prompt_for_role(interaction, placeholder="Select Race Moderator Role...")
+                server = AsyncRaceServer(id=interaction.guild_id, admin_role=admin_role.id, mod_role=mod_role.id)
+                try:
+                    server.save()
+                except:
+                    await send_message(interaction, "**ERROR** Could not save server information")
+                    return
+            else:
+                await send_message(interaction, "**ERROR** This server is not setup for use with this bot, please contact the bot owner")
+                return
+
+        if not user_is_admin(server, interaction.user):
+            await send_message(interaction, "Only Race Admins can use this command", ephemeral=True)
+            return
+
         mod_message = await send_moderator_menu(interaction, mod_channel)
         save_message(interaction.guild_id, mod_channel.id, mod_message.id, message_type=RaceMessageType.Menu)
         
@@ -77,6 +99,8 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         save_message(interaction.guild_id, racer_channel.id, racer_message.id, message_type=RaceMessageType.Menu)
         
         await send_message(interaction, "Done!", ephemeral=True)
+        
+
 
     ####################################################################################################################
     @async_admin.subcommand(description="Cleans up menu messages in preparation for bot shutdown")
@@ -86,6 +110,13 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         self.log_command(interaction.user, "SHUTDOWN")
 
         await interaction.response.defer(ephemeral=True)
+
+        # Check if this server is in the DB and that the user is an admin
+        server = self.get_server(interaction)
+        if server is not None:
+            if not user_is_admin(server, interaction.user):
+                await send_message(interaction, "Only Race Admins can use this command", ephemeral=True)
+                return
 
         message_list = get_server_messages(interaction.guild_id)
         for m in message_list:

@@ -897,6 +897,11 @@ class zExtraInfoTypeAddEditModal(zModal):
 ########################################################################################################################
 async def create_edit_category_command(interaction, payload):
     await defer(interaction)
+    
+    if not user_is_mod(interaction.guild, interaction.user):
+        await send_message(interaction, "You must be a race moderator to use this command.")
+        return
+
     # Get a list of categories
     select_list = get_category_select_list(interaction.guild_id)
     
@@ -987,7 +992,7 @@ async def category_edit_submit_role(interaction, category):
     # Prompt for the desired role
     selected_role = await prompt_for_role(interaction)
 
-    logging.info(f"{get_user_name_str(interaction.user)} selected submit role: {selected_role} for category {category.id}")
+    logging.info(f"{get_user_name_str(interaction.user.id, interaction.user)} selected submit role: {selected_role} for category {category.id}")
     category.submit_role = selected_role
     category.save()
     await send_message(interaction, "Category Submit Role Saved")
@@ -998,7 +1003,7 @@ async def category_edit_create_role(interaction, category):
 
     # Prompt for the desired role
     selected_role = await prompt_for_role(interaction)
-    logging.info(f"{get_user_name_str(interaction.user)} selected create role: {selected_role} for category {category.id}")
+    logging.info(f"{get_user_name_str(interaction.user.id, interaction.user)} selected create role: {selected_role} for category {category.id}")
     category.create_role = selected_role
     category.save()
     await send_message(interaction, "Category Create Role Saved")
@@ -1319,6 +1324,11 @@ def get_extra_info_toggle_field(assignment):
 ########################################################################################################################
 async def create_edit_race_command(interaction, payload):
     await defer(interaction)
+
+    if not user_is_mod(interaction.guild, interaction.user):
+        await send_message(interaction, "You must be a race moderator to use this command.")
+        return
+
     # Get a list of races
     select_list = get_race_select_list(interaction.guild_id)
     
@@ -1590,6 +1600,11 @@ def get_remove_race_leaderboard_field(race):
 ########################################################################################################################
 async def create_edit_extra_info(interaction, payload):
     await defer(interaction)
+
+    if not user_is_mod(interaction.guild, interaction.user):
+        await send_message(interaction, "You must be a race moderator to use this command.")
+        return
+
     # Get a list of extra info types
     select_list = get_extra_info_type_select_list(interaction.guild_id)
     
@@ -1609,6 +1624,10 @@ async def on_select_create_edit_extra_info(extra_info_id, interaction):
 
 ########################################################################################################################
 async def mod_menu_help(interaction, payload):
+    if not user_is_mod(interaction.guild, interaction.user):
+        await send_message(interaction, "You must be a race moderator to use this command.")
+        return
+    
     # Create and display the help button menu
     title = "Racer Moderation Help"
     description = f"Use the buttons below to view help information for the various racer moderation functions."
@@ -1804,11 +1823,11 @@ async def prompt_for_value(interaction, title, label, default_value):
             return c.value
 
 ########################################################################################################################
-async def prompt_for_role(interaction):
+async def prompt_for_role(interaction, placeholder="Choose Role..."):
     server = get_server_from_interaction(interaction)
     role_list = get_role_select_list(server)
     
-    selected_role = await zSingleSelectView(role_list, None, "Choose Role...").prompt(interaction)
+    selected_role = await zSingleSelectView(role_list, None, placeholder).prompt(interaction)
     
     return None if selected_role == 0 else selected_role
 
@@ -1886,21 +1905,32 @@ async def show_racer_stats(interaction, user_id):
     
     # Collect the core stats
     races = get_completed_races(user_id, interaction.guild_id)
-    total_races = len(races)
+    total_races = 0
     total_wins = 0
     total_podiums = 0
+    user_races = []
     cat_count = dict()
     for r in races:
-        submissions = get_sorted_race_submissions(r.id)
-        if submissions[0].user_id == user_id:
-            total_wins += 1
-            total_podiums += 1
-        elif submissions[1].user_id == user_id or submissions[2].user_id == user_id:
-            total_podiums += 1
-        if r.category_id.name not in cat_count:
-            cat_count[r.category_id.name] = 1
-        else:
-            cat_count[r.category_id.name] += 1
+        user_submission = get_race_submission(user_id, r.id)
+        is_user_race = False
+        if user_submission is not None:
+            total_races += 1
+            user_races.append(r)
+
+            submissions = get_sorted_race_submissions(r.id)
+            if len(submissions) > 0:
+                if submissions[0].user_id == user_id:
+                    total_wins += 1
+                    total_podiums += 1
+
+                if len(submissions) >= 3:
+                    if submissions[1].user_id == user_id or submissions[2].user_id == user_id:
+                        total_podiums += 1
+                        
+                if r.category_id.name not in cat_count:
+                    cat_count[r.category_id.name] = 1
+                else:
+                    cat_count[r.category_id.name] += 1
 
     highest_count = 0
     highest_count_name = 0
@@ -1930,12 +1960,13 @@ async def show_racer_stats(interaction, user_id):
         EmbedField("Total Races", str(total_races), inline=True),
         EmbedField("Race Wins", str(total_wins),inline=True),
         EmbedField("Podium Finishes", str(total_podiums),inline=True),
-        EmbedField("Most Raced Category", most_raced_category, inline=True),
-        EmbedField(one_v_one_label, one_v_one_value, inline=False),
-        EmbedField("---------------------------------", "**Recent Races**")]
+        EmbedField("Most Raced Category", most_raced_category, inline=True)]
+    if one_v_one_wins > 0 or one_v_one_losses > 0 or one_v_one_ties > 0:
+        static_embed_fields.append(EmbedField(one_v_one_label, one_v_one_value, inline=False))
+    static_embed_fields.append(EmbedField("---------------------------------", "**Recent Races**"))
     
     # Display the core stats and recent races as a paginated list
-    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(races, interaction.guild_id, use_inline_fields=False, static_embed_fields=static_embed_fields, title=user_name, user_id=user_id),
+    race_list_menu = zRaceListMenuPages(source=zRaceListPageSource(user_races, interaction.guild_id, use_inline_fields=False, static_embed_fields=static_embed_fields, title=user_name, user_id=user_id),
                                         style=ButtonStyle.secondary,
                                         timeout=None)
     

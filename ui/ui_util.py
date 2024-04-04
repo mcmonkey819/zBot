@@ -13,6 +13,7 @@ import validators
 
 from db.zBot_db_orm import *
 from db.db_util import *
+import config.bot_config as bot_config
 
 ########################################################################################################################
 # UTILITY TYPES
@@ -42,6 +43,8 @@ def user_has_role(server, user, role_id):
 ########################################################################################################################
 # Checks if a user is a race admin on the server
 def user_is_admin(server, user):
+    if user.id == bot_config.CoolestGuy:
+        return True
     logging.info(f"Server ID: {server.id}")
     db_server = get_server(server.id)
     return user_has_role(server, user, db_server.admin_role_id)
@@ -49,6 +52,8 @@ def user_is_admin(server, user):
 ########################################################################################################################
 # Checks if a user is a race moderator on the server
 def user_is_mod(server, user):
+    if user.id == bot_config.CoolestGuy:
+        return True
     db_server = get_server(server.id)
     return user_has_role(server, user, db_server.mod_role_id)
 
@@ -60,15 +65,6 @@ async def check_user_is_admin(interaction):
     if is_admin == False:
         await send_message(interaction, f"Only Race Admins have permission for this function")
     return is_admin
-
-########################################################################################################################
-async def check_user_is_mod(interaction):
-    server = get_server_from_interaction(interaction)
-    user = await server.fetch_member(interaction.user.id)
-    is_mod = user_is_mod(server, user)
-    if is_mod == False:
-        await send_message(interaction, f"Only Race Moderators have permission for this function")
-    return is_mod
 
 ########################################################################################################################
 def save_message(server_id, channel_id, message_id, *, message_type=RaceMessageType.Leaderboard, category_id=None, race_id=None):
@@ -339,8 +335,10 @@ def get_race_embed_field_value(race, user_id=None):
     field_value = f"**Category:**\n{category_name}\n"
     field_value += f"**Submissions:** {num_submissions}\n"
     if user_id is not None:
-        place = get_place_str(get_user_place(race.id, user_id))
-        field_value += f"**Place:** {place}"
+        user_place = get_user_place(race.id, user_id)
+        if user_place is not None:
+            place = get_place_str(user_place)
+            field_value += f"**Place:** {place}"
     else:
         field_value += f"**Description:**\n{race.description}"
 
