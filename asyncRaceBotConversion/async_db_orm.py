@@ -60,7 +60,7 @@ class ArbAsyncSubmission(Model):
     collection_rate = IntegerField()
     next_mode = CharField(null=True)
     comment = CharField(null=True)
-    #vod_link = CharField(null=True)
+    vod_link = CharField(null=True)
 
     class Meta:
         table_name = 'async_submissions'
