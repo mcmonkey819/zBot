@@ -166,6 +166,9 @@ def convert_database(write_server_id=arb_server_id):
     arb_races = ArbAsyncRace.select()
     for r in arb_races:
         try:
+            if r.category_id is None:
+                r.category_id = 1
+                
             zbot_race = AsyncRace()
             zbot_race.server_id = write_server_id
             zbot_race.create_datetime = r.start
