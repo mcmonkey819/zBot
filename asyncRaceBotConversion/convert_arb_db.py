@@ -168,7 +168,7 @@ def convert_database(write_server_id=arb_server_id):
         try:
             if r.category_id is None:
                 r.category_id = 1
-                
+
             zbot_race = AsyncRace()
             zbot_race.server_id = write_server_id
             zbot_race.create_datetime = r.start
@@ -176,7 +176,11 @@ def convert_database(write_server_id=arb_server_id):
             zbot_race.description = r.description
             zbot_race.additional_instructions = r.additional_instructions
             zbot_race.category_id = cat_lookup[r.category_id]
-            zbot_race.state = RaceState.Active if r.active else RaceState.Completed
+            if arb_server_id == forty_bonks_tourney_server_id:
+                zbot_race.state = RaceState.Completed
+            else:
+                # Mark all races completed except the last one
+                zbot_race.state = RaceState.Active if r == arb_races[-1] else RaceState.Completed
             zbot_race.save()
         except:
             print(f"Error converting race ID {r.id}. Category ID: {r.category_id}")
@@ -184,6 +188,9 @@ def convert_database(write_server_id=arb_server_id):
             return
 
         race_lookup[r.id] = zbot_race.id
+
+    print("--: Creating Race Assignments")
+    create_race_assignments_from_category_assignments(write_server_id)
 
     # Convert Rosters
     print("--: Converting Rosters")
