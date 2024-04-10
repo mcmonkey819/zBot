@@ -10,7 +10,6 @@ import random
 from nextcord.emoji import Emoji
 from nextcord.enums import ButtonStyle
 from nextcord.ext import commands, menus
-from nextcord.ext.menus.constants import DEFAULT_TIMEOUT
 from nextcord.interactions import Interaction
 from nextcord.partial_emoji import PartialEmoji
 import re
@@ -768,7 +767,7 @@ class zRaceAddEditModal(zModal):
                     recent_race.state = RaceState.Completed
                     recent_race.save()
                     score_race(recent_race)
-                    update_race_leaderboard(recent_race)
+                    update_race_leaderboard(interaction, recent_race)
 
                 self.race.state = RaceState.Active
                 self.race.save()
@@ -1170,7 +1169,8 @@ async def category_display_raw_submit_info(interaction, category):
     for t in raw_data_dict:
         info_type = info_types[t]
         if info_type is None:
-            msg += f"**{"Finish Time" if t == -1 else "Comment"}**\n"
+            text = "Finish Time" if t == -1 else "Comment"
+            msg += f"**{text}**\n"
         else:
             msg += f"**{info_type.name}**\n"
         for u in raw_data_dict[t]:
@@ -1849,6 +1849,18 @@ async def show_race_details(interaction, race_id):
     if race is None:
         await send_message(interaction, "**ERROR** Could not find race data. Please notify a bot admin")
         return
+    # If this is an assigned race and the user has not viewed the race info before, confirm they are ready
+    if is_assigned_race(race_id):
+        assignment = get_race_assignment(interaction.user.id, race_id)
+        if assignment is not None and assignment.seed_time is None:
+            confirmed = await zConfirmMenu(ConfirmSeedText).prompt(interaction)
+            if confirmed:
+                assignment.seed_time = datetime.now()
+                assignment.save()
+            else:
+                await send_message(interaction, "Cancelled")
+                return
+
     seed_embed = get_race_info_message(race)
     zRaceInfoButtonView.add_static_embed_fields(seed_embed)
     await send_message(interaction, view=zRaceInfoButtonView(race.id), embed=seed_embed)
@@ -2007,7 +2019,7 @@ async def post_channel_race_leaderboard(interaction, channel, race_id, bot_clien
     embed_list = []
     for p in range(0, num_pages):
         slice = submissions[p*per_page:(p+1)*per_page]
-        embed = await get_race_leaderboard_embed(title, body_text, slice, p, per_page, bot_client, emojis=emoji_slice)
+        embed = await get_race_leaderboard_embed(title, body_text, slice, p, per_page, bot_client)
         embed_list.append(embed)
     
     for e in embed_list:

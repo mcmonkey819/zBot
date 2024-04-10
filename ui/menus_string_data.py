@@ -96,6 +96,8 @@ RacerViewOtherRacerDescription = "Shows a list of racers in the server. Selectin
 RacerShowCompletedRacesDescription = 'Shows a list of completed races. Selecting a race from th drop down will display additional information and commands. Note that completed races will not accept new submissions, but the race info and leaderboard can be viewed.'
 RacerHelpDescription = 'Displays detailed help information for the other commands in this menu.'
 
+ConfirmSeedText = "This will display the seed for the race. It is expected that you will begin racing as soon as the seed is given. Do you want to continue?"
+
 CategoryHelpText = """
 All races start with a category. Categories can be used in a number of different ways to share history and keep track of scoring.
 

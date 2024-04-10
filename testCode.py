@@ -1,3 +1,5 @@
-from zBot_db_orm import *
+def testFunc(a):
+    print(a*10)
 
-print("DB Loaded")
+def testFunc2(a):
+    print(a+2)
