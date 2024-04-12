@@ -355,7 +355,6 @@ def get_submission_details_dict(submission):
     
     # Get extra info types assigned to this race
     extra_info_assignments = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.race_id == submission.race_id)
-    logging.info(f"Found {len(extra_info_assignments)} extra info assignments for submission {submission.id}")
     for a in extra_info_assignments:
         # Lookup the extra infos for this submission and add them to the table
         info = get_extra_info(submission.id, a.info_type_id)
@@ -499,6 +498,13 @@ def get_user_name_str(user_id, user):
         else:
             user_name = user.display_name
     return user_name
+
+########################################################################################################################
+async def remove_role_from_members(guild, role):
+    if role is not None:
+        for m in guild.members:
+            if role in m.roles:
+                await m.remove_roles(role)
 
 ########################################################################################################################
 # BASE CLASSES

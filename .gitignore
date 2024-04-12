@@ -26,3 +26,8 @@ var/
 
 # Our bot token file which cannot be upstreamed
 bot_tokens.py
+.vscode/
+*.db
+*.zip
+test.py
+workflows.md

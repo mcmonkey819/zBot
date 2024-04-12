@@ -2410,6 +2410,13 @@ async def update_race_leaderboard(interaction, race):
     else:
         logging.info(f"No race messages found in update_race_leaderboard")
 
+    # If this is the most recent race in the category and the category leaderboard type is set to recent race,
+    # update the category leaderboard
+    if race.category_id.leaderboard_type == RaceLeaderboardType.RecentRace:
+        recent_race = get_most_recent_race(race.category_id.id)
+        if recent_race.id == race.id:
+            await update_category_leaderboard(interaction, race)
+
 ########################################################################################################################
 async def send_confirmed_race_announcement(interaction, confirmed, payload):
     race, msg_text = payload
@@ -2625,9 +2632,12 @@ async def handle_activate_race(interaction, race):
     # Remove the category role from all racers
     if race.category_id.submit_role is not None:
         role = interaction.guild.get_role(race.category_id.submit_role)
-        if role is not None:
-            for m in interaction.guild.members:
-                await m.remove_roles(role)
+        await remove_role_from_members(interaction.guild, role)
+
+        # Sometimes the role removal fails, check the list of members and if any still have the role, try again
+        for m in interaction.guild.members:
+            if role in m.roles:
+                await remove_role_from_members(interaction.guild, role)
 
     # Pin the race if the category specifies it
     await pin_race_for_category(interaction, race)

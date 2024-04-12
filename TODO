@@ -1,6 +1,9 @@
 General Stuff
 -------------------------------------------------------
 [ ] - Schedule state change
+[X] - Loop on remove role
+[ ] - Assign role to race
+[X] - Leaderboard not updating
 [X] - Fix racer stats
 
 Testing
