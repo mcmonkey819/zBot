@@ -1,10 +1,16 @@
 General Stuff
 -------------------------------------------------------
-[ ] - Schedule state change
+[ ] - Finish schedule state change (CMC TODO)
 [X] - Loop on remove role
 [ ] - Assign role to race
 [X] - Leaderboard not updating
 [X] - Fix racer stats
+[ ] - Add defer for pin race
+[ ] - Add voice channel cog
+
+[ ] - Test role assignment
+[ ] - Test category leaderboard update
+[ ] - Test schedule race state update
 
 Testing
 -------------------------------------
