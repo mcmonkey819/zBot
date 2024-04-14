@@ -29,6 +29,7 @@ EyesEmoji = '👀'
 ForfeitEmoji = '🏳️'
 TimeEmoji = '⏱️'
 ThumbnailEmoji = '🖼️'
+CalendarEmoji = '📅'
 
 EmojiList = [
     "🐱", "🐵", "🦄", "🐼",
@@ -81,6 +82,7 @@ RaceEditLeaderboardChannelDescription = 'Allows you to select a channel to displ
 RaceAssignExtraInfoDescription = 'Allows you to assign a specific submission value to this race. Already assigned values are marked with a ✅, choosing an already assigned value will unassign it from this race.'
 RaceAssignRacerDescription = 'Allows you to assign specific racers to this race. See the "Race Assignment" command under the Race Moderation Info embed to learn more about race assignments.'
 RaceEditSubmissionDescription = 'Allows you to modify a submission to this race. This is useful for correcting errors, fixing scoring errors or submitting on behalf of someone else.'
+RaceScheduleOpDescription = 'Allows you to schedule an operation to be executed at a different time. Currently, this is only supported for race state changes.'
 RaceMiscToggleDescription = 'Allows configuration of various miscellaneous race data such as force removing the leaderboard and specifying which extra info fields are required.'
 
 CategoryHelpDescription = 'Displays information about creating and managing categories.'
@@ -93,7 +95,7 @@ RacerOpenRacesDescription = 'Shows a list of open async races. Selecting a race 
 RacerAssignedRacesDescription = 'Shows a list of races that have been assigned to you. Selecting a race from the drop down will display additional details and commands.'
 RacerShowCategoriesDescription = 'Creates a dropdown menu with a list of categories, selecting a category will display info and additional commands.'
 RacerViewOtherRacerDescription = "Shows a list of racers in the server. Selecting a racer from the drop down will display that racer's stats and a list of their completed races."
-RacerShowCompletedRacesDescription = 'Shows a list of completed races. Selecting a race from th drop down will display additional information and commands. Note that completed races will not accept new submissions, but the race info and leaderboard can be viewed.'
+RacerShowCompletedRacesDescription = 'Shows a list of completed races. Selecting a race from the drop down will display additional information and commands. Note that completed races will not accept new submissions, but the race info and leaderboard can be viewed.'
 RacerHelpDescription = 'Displays detailed help information for the other commands in this menu.'
 
 ConfirmSeedText = "This will display the seed for the race. It is expected that you will begin racing as soon as the seed is given. Do you want to continue?"

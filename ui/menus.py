@@ -7,6 +7,8 @@ import logging
 import math
 import nextcord
 import random
+import time
+import threading
 from nextcord.emoji import Emoji
 from nextcord.enums import ButtonStyle
 from nextcord.ext import commands, menus
@@ -1401,7 +1403,7 @@ async def race_delete(interaction, race):
     await send_message(interaction, f"Race ID {race_id} has been deleted.")
 
 ########################################################################################################################
-async def race_change_state(interaction, race):
+async def prompt_for_race_state(interaction, race):
     # Query for the new race state
     select_list = copy.deepcopy(RaceState.SelectOptionList)
     for s in select_list:
@@ -1410,6 +1412,12 @@ async def race_change_state(interaction, race):
             break
 
     new_state = await zSingleSelectView(select_list, None, "Choose new state...").prompt(interaction)
+    return new_state
+
+########################################################################################################################
+async def race_change_state(interaction, race, new_state=None, confirmed: bool=None):
+    if new_state is None:
+        new_state = await prompt_for_race_state(interaction, race)
 
     # Do some sanity checks of the new state
     if new_state == RaceState.Inactive:
@@ -1426,7 +1434,8 @@ async def race_change_state(interaction, race):
     elif new_state == RaceState.Completed:
         # If there are no submissions, confirm that the user meant to select `Completed`` and not `Inactive`
         if race_has_submissions(race.id) == False:
-            confirmed = await zConfirmMenu("There are no submissions for this race, do you want to change to 'Inactive' instead?").prompt(interaction)
+            if confirmed is None:
+                confirmed = await zConfirmMenu("There are no submissions for this race, do you want to change to 'Inactive' instead?").prompt(interaction)
             if confirmed:
                 new_state = RaceState.Inactive
         else:
@@ -1439,7 +1448,8 @@ async def race_change_state(interaction, race):
                     all_submitted = False
                     break
             if not all_submitted:
-                confirmed = await zConfirmMenu("Not all assigned racers have submitted, do you want to change to 'Completed' anyway?").prompt(interaction)
+                if confirmed is None:
+                    confirmed = await zConfirmMenu("Not all assigned racers have submitted, do you want to change to 'Completed' anyway?").prompt(interaction)
                 if not confirmed:
                     await send_message(interaction, "Cancelled")
                     return
@@ -1498,13 +1508,34 @@ async def race_assign_racer(interaction, race):
     if race.state != RaceState.Inactive:
         await send_message(interaction, "Can only assign racers in the `Inactive` state.")
     
-    # Prompt for the user to assign, removing already assigned racers
-    user = await zUserSelectView(None).prompt(interaction)
-    
-    # Create a race assignment for this user
-    assign_racer(user_id=user.id, race_id=race.id)
+    # Ask the user if they want to assign a specific user or a role
+    select_list = [
+        nextcord.SelectOption(label="User", value=1, description="Assign a specific user"),
+        nextcord.SelectOption(label="Role", value=2, description="Assign all users with a specific role")
+    ]
+    assign_type = await zSingleSelectView(select_list, None, "Choose Assignment Type...").prompt(interaction)
 
-    await send_message(interaction, f"User {get_user_name_str(user.id, user)} assigned")
+    if assign_type == 1:
+        # Prompt for the user to assign, removing already assigned racers
+        user = await zUserSelectView(None).prompt(interaction)
+    
+        # Create a race assignment for this user
+        assign_racer(user_id=user.id, race_id=race.id)
+        await send_message(interaction, f"User {get_user_name_str(user.id, user)} assigned")
+    elif assign_type == 2:
+        # Prompt for the role to assign
+        role = await prompt_for_role(interaction)
+        if role is None:
+            await send_message(interaction, "**ERROR** - No role selected or role could not be found, cancelled assignment")
+            return
+        # Create an assignment for each member who has the selected role
+        for m in role.members:
+            assign_racer(user_id=m.id, race_id=race.id)
+        await send_message(interaction, "Role assignment complete")
+    else:
+        await send_message(interaction, "**ERROR** - Unknown option selected, cancelled assignment")
+        return
+    
 ########################################################################################################################
 async def race_edit_submission(interaction, race):
     if race.state == RaceState.Inactive:
@@ -1566,6 +1597,44 @@ async def on_select_user_edit_submission(select_data, interaction):
     submit_handler = zRaceSubmitHandler(race_id, submission, include_points=True, user_id=user.id)
     await submit_handler.send_submit_modal(interaction)
     pass
+
+########################################################################################################################
+async def race_schedule_op(interaction, race):
+    # Prompt the user for the date/time
+    now_ts = int(time.time())
+    timestamp = await prompt_for_value(interaction,
+                                       "Enter Date/Time",
+                                       "Date/Time in Discord Timestamp Format",
+                                       now_ts)
+    timestamp = int(timestamp)
+    
+    # Validate the timestamp. Time must not be in the past and no more than 2 days in the future
+    if timestamp < now_ts:
+        await send_message(interaction, "Cannot schedule a time in the past.")
+        return
+    elif timestamp > now_ts + (60*48):
+        await send_message(interaction, "Cannot schedule a time more than 2 days in the future.")
+        return
+    else:
+        # Prompt the user for the new state
+        new_state = await prompt_for_race_state(interaction, race)
+        
+        # Create a thread to wait the appropriate amount of time and then call the race state update
+        schedule_thread = threading.Thread(target=asyncio.run, args=(schedule_race_state_change(interaction, race, timestamp, new_state),))
+        schedule_thread.start()
+
+########################################################################################################################
+async def schedule_race_state_change(interaction, race, end_timestamp, new_state):
+    # Sleep until the timestamp in 1 minute increments to avoid accumulating sleep drift
+    while int(time.time()) < end_timestamp:
+        delta = (end_timestamp - int(time.time())) + 1
+        if delta < 60:
+            await asyncio.sleep(delta)
+        else:
+            await asyncio.sleep(60)
+
+    # Now execute the race state change
+    await race_change_state(interaction, race, new_state=new_state, confirmed=True)
 
 ########################################################################################################################
 async def race_misc_toggles(interaction, race):
@@ -2679,6 +2748,7 @@ RaceButtonMenuItems = [
     MenuItem(ExtraInfoEmoji     , race_assign_extra_info       , 'race_assign_extra_info'       , 'Assign Submission Values' , RaceAssignExtraInfoDescription),
     MenuItem(AssignEmoji        , race_assign_racer            , 'race_assign_racer'            , 'Assign Racers'            , RaceAssignRacerDescription),
     MenuItem(EditSubmissionEmoji, race_edit_submission         , 'race_edit_submission'         , 'Modify Submission'        , RaceEditSubmissionDescription),
+    #MenuItem(CalendarEmoji      , race_schedule_op             , 'race_schedule_op'             , 'Schedule Operation'       , RaceScheduleOpDescription),
     MenuItem(ToggleEmoji        , race_misc_toggles            , 'race_misc_toggles'            , 'Misc Race Config'         , RaceMiscToggleDescription),
 ]
 
