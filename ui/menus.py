@@ -461,6 +461,8 @@ class zRaceInfoButtonView(nextcord.ui.View):
                 return
             else:
                 forfeit_race(interaction.user.id, self.race_id)
+                race = get_race(self.race_id)
+                await do_post_submit_actions(interaction, race, interaction.user.id)
                 await send_message(interaction, "Forfeit submitted")
 
     @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str(LeaderboardEmoji))
@@ -598,19 +600,7 @@ class zRaceSubmitHandler():
         self.submission.save()
         await send_message(interaction, "Race Submission Saved")
 
-        # Apply the submit role if the category or race specifies one
-        if self.race.category_id.submit_role is not None:
-            user = await get_user_from_interaction(interaction, self.submission.user_id)
-            if user is not None:
-                cat_role = interaction.guild.get_role(self.race.category_id.submit_role)
-                if cat_role is not None:
-                    await user.add_roles(cat_role)
-                race_role = interaction.guild.get_role(self.race.submission_role)
-                if race_role is not None:
-                    await user.add_roles(race_role)
-
-        # And update the leaderboard
-        await update_race_leaderboard(interaction, self.race)
+        await do_post_submit_actions(interaction, self.race, self.submission.user_id)
 
     ####################################################################################################################
     # Saves an individual extra info value
@@ -1471,7 +1461,8 @@ async def race_change_state(interaction, race, new_state=None, confirmed: bool=N
 
 ########################################################################################################################
 async def race_pin(interaction, race):
-    await interaction.response.defer(ephemeral=True)
+    await defer(interaction)
+
     # Ask for the channel to pin the race to
     channel = await prompt_for_channel(interaction)
     if channel is None:
@@ -1524,10 +1515,16 @@ async def race_assign_racer(interaction, race):
         await send_message(interaction, f"User {get_user_name_str(user.id, user)} assigned")
     elif assign_type == 2:
         # Prompt for the role to assign
-        role = await prompt_for_role(interaction)
-        if role is None:
-            await send_message(interaction, "**ERROR** - No role selected or role could not be found, cancelled assignment")
+        role_id = await prompt_for_role(interaction)
+        if role_id is None:
+            await send_message(interaction, "**ERROR** - No role selected, cancelled assignment")
             return
+        
+        role = interaction.guild.get_role(role_id)
+        if role is None:
+            await send_message(interaction, "**ERROR** - Role not found, cancelled assignment")
+            return
+
         # Create an assignment for each member who has the selected role
         for m in role.members:
             assign_racer(user_id=m.id, race_id=race.id)
@@ -2713,6 +2710,26 @@ async def handle_activate_race(interaction, race):
 
     # And update the category leaderboard
     await update_category_leaderboard(interaction, race)
+
+########################################################################################################################
+async def do_post_submit_actions(interaction, race, user_id):
+    if race is None:
+        logging.info(f"**ERROR** Invalid race sent to 'do_post_submit_actions'")
+        return
+    
+    # Apply the submit role if the category or race specifies one
+    if race.category_id.submit_role is not None:
+        user = await get_user_from_interaction(interaction, user_id)
+        if user is not None:
+            cat_role = interaction.guild.get_role(race.category_id.submit_role)
+            if cat_role is not None:
+                await user.add_roles(cat_role)
+            race_role = interaction.guild.get_role(race.submission_role)
+            if race_role is not None:
+                await user.add_roles(race_role)
+
+    # And update the leaderboard
+    await update_race_leaderboard(interaction, race)
 
 ########################################################################################################################
 # Menu Static Data

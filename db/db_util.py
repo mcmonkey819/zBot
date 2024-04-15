@@ -80,6 +80,21 @@ class RaceMessageType:
     Menu         = 2
     Announcement = 3
 
+class VcChannelType:
+    Ignore        = 0  # Ignore this channel for dynamic VC creation
+    Permanent     = 1  # Permanent VC that should not be deleted
+    OnDemand      = 2  # VC created by the bot that can be deleted when empty
+
+    def to_str(channel_type: int):
+        if channel_type == VcChannelType.Ignore:
+            return "Ignore"
+        elif channel_type == VcChannelType.Permanent:
+            return "Permanent"
+        elif channel_type == VcChannelType.OnDemand:
+            return "On Demand"
+        else:
+            return "Unknown"
+
 ForfeitFinishTime = "23:59:59"
 ForfeitFinishTimeSeconds = (3600 * 23) + (60 * 59) + 59
 
@@ -344,6 +359,49 @@ def get_race_draw_threshold(category_id):
     except:
         draw_threshold = None
     return draw_threshold
+
+########################################################################################################################
+def get_vc_ignore_list(server_id):
+    ignore_list = []
+    try:
+        ignore_list = ServerUtilsVcList.select().where(
+            (ServerUtilsVcList.server_id == server_id) &
+            (ServerUtilsVcList.channel_type == VcChannelType.Ignore))
+    except:
+        ignore_list = []
+    return ignore_list
+
+########################################################################################################################
+def get_vc_channel(server_id, channel_id):
+    try:
+        ignore_channel = ServerUtilsVcList.select().where(
+            (ServerUtilsVcList.server_id == server_id) &
+            (ServerUtilsVcList.channel_id == channel_id)).get()
+    except:
+        ignore_channel = None
+    return ignore_channel
+
+########################################################################################################################
+def get_vc_permanent_list(server_id):
+    permanent_list = []
+    try:
+        permanent_list = ServerUtilsVcList.select().where(
+            (ServerUtilsVcList.server_id == server_id) &
+            (ServerUtilsVcList.channel_type == VcChannelType.Permanent))
+    except:
+        permanent_list = []
+    return permanent_list
+
+########################################################################################################################
+def get_vc_on_demand_list(server_id):
+    on_demand_list = []
+    try:
+        on_demand_list = ServerUtilsVcList.select().where(
+            (ServerUtilsVcList.server_id == server_id) &
+            (ServerUtilsVcList.channel_type == VcChannelType.OnDemand))
+    except:
+        on_demand_list = []
+    return on_demand_list
 
 ########################################################################################################################
 # Other Utility Functions

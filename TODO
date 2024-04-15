@@ -1,16 +1,32 @@
 General Stuff
 -------------------------------------------------------
 [ ] - Finish schedule state change (CMC TODO)
+    [ ] - Need to deal with everything needing an interaction
 [X] - Loop on remove role
-[ ] - Assign role to race
+[X] - Assign role to race
 [X] - Leaderboard not updating
 [X] - Fix racer stats
-[ ] - Add defer for pin race
-[ ] - Add voice channel cog
+[X] - Add defer for pin race
+[X] - Add voice channel cog
+[X] - Mark assigned race completed fails silently when not all racers are done
+[X] - Role not being given on forfeit
+[X] - Add command to add permanent/ignore VCs to the list
+[X] - Add command to enable/disable VC creation
+[ ] - Rework VC creation to ignore any channels not marked as permanent or dynamically created (to avoid problem when channels are created I can't see as in GMP "Moderators")
 
-[ ] - Test role assignment
-[ ] - Test category leaderboard update
-[ ] - Test schedule race state update
+[X] - Test VC create/destroy
+[X] - Test role assignment
+[X] - Test category leaderboard update
+[ ] - Test scheduling something with an interaction that takes 24 hours
+    [ ] - Test schedule race state update
+
+DB Updates Required:
+async_race_servers
+    [ ] - Add enable_vc_create field
+server_utils_vc_list
+    [ ] - Add entire table
+    [ ] - Add ignore/permanent lists per server
+
 
 Testing
 -------------------------------------

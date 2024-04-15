@@ -13,6 +13,7 @@ class AsyncRaceServer(Model):
     name                    = CharField()
     mod_role_id             = IntegerField()
     admin_role_id           = IntegerField()
+    enable_vc_create        = BooleanField(default=False)
 
     class Meta:
         table_name = 'async_race_servers'
@@ -166,6 +167,15 @@ class AsyncRaceCategoryDrawThreshold(Model):
         table_name = 'async_race_category_draw_threshold'
         database = db
 
+class ServerUtilsVcList(Model):
+    id                      = IntegerField(primary_key=True)
+    server_id               = ForeignKeyField(AsyncRaceServer, backref='vc_list')
+    channel_id              = IntegerField()
+    channel_type            = IntegerField()
+
+    class Meta:
+        table_name = 'server_utils_vc_list'
+        database = db
 
 ####################################################################################################################
 # Deletes all existing tables, then recreates them.
@@ -183,7 +193,8 @@ def drop_add_db_tables():
         AsyncRaceCategoryPoints,
         AsyncRaceTrueSkillParams,
         AsyncRaceTrueSkillRacerParams,
-        AsyncRaceCategoryDrawThreshold])
+        AsyncRaceCategoryDrawThreshold,
+        ServerUtilsVcList])
     add_db_tables()
 
 ####################################################################################################################
@@ -202,7 +213,8 @@ def add_db_tables():
         AsyncRaceCategoryPoints,
         AsyncRaceTrueSkillParams,
         AsyncRaceTrueSkillRacerParams,
-        AsyncRaceCategoryDrawThreshold])
+        AsyncRaceCategoryDrawThreshold,
+        ServerUtilsVcList])
 
 ####################################################################################################################
 # Recreates the indicated table
@@ -249,6 +261,9 @@ def recreate_table(table_name):
         case "AsyncRaceCategoryDrawThreshold":
             db.drop_tables([AsyncRaceCategoryDrawThreshold])
             db.create_tables([AsyncRaceCategoryDrawThreshold])
+        case "ServerUtilsVcList":
+            db.drop_tables([ServerUtilsVcList])
+            db.create_tables([ServerUtilsVcList])
         case _:
             logging.info(f"Unrecognized table name {table_name}")
             result = False
