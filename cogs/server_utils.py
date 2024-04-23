@@ -161,18 +161,18 @@ class ServerUtils(commands.Cog, name='ServerUtils'):
                     logging.info(f"Found empty channel {vc.name}")
                     break
 
-                # If no empty channels were found, create a new one by cloning the first permananent one
-                if not found_empty:
-                    logging.info("No empty channels, creating a new one")
-                    perm_vc = guild.get_channel(permanent_vc_list[0])
-                    adj = random.choice(adjectives)
-                    noun = random.choice(nouns)
-                    new_channel = await perm_vc.clone(name=f"{adj} {noun}")
-                    new_db_channel = ServerUtilsVcList()
-                    new_db_channel.server_id = guild.id
-                    new_db_channel.channel_id = new_channel.id
-                    new_db_channel.channel_type = VcChannelType.OnDemand
-                    new_db_channel.save()
+            # If no empty channels were found, create a new one by cloning the first permananent one
+            if not found_empty:
+                logging.info("No empty channels, creating a new one")
+                perm_vc = guild.get_channel(permanent_vc_list[0])
+                adj = random.choice(adjectives)
+                noun = random.choice(nouns)
+                new_channel = await perm_vc.clone(name=f"{adj} {noun}")
+                new_db_channel = ServerUtilsVcList()
+                new_db_channel.server_id = guild.id
+                new_db_channel.channel_id = new_channel.id
+                new_db_channel.channel_type = VcChannelType.OnDemand
+                new_db_channel.save()
 
         # If the member is leaving a channel, check for empty channels to clean up
         if leave_channel is not None and leave_channel.id not in ignore_list:

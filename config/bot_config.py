@@ -1,5 +1,5 @@
 # Controls whether the bot will start in test mode
-TEST_MODE = False
+TEST_MODE = True
 
 # Path to the production database file
 PRODUCTION_DB = "AsyncRaceProd.db"

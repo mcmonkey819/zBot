@@ -52,7 +52,8 @@ def user_is_admin(server, user):
 ########################################################################################################################
 # Checks if a user is a race moderator on the server
 def user_is_mod(server, user):
-    if user.id == bot_config.CoolestGuy:
+    # Admins are like super mods
+    if user_is_admin(server, user):
         return True
     db_server = get_server(server.id)
     return user_has_role(server, user, db_server.mod_role_id)
@@ -477,14 +478,15 @@ async def get_user_from_interaction(interaction, user_id):
     return user
 
 ########################################################################################################################
-def can_view_race_leaderboard(race_id, user_id):
-    # The user can view the leaderboard if the race is completed or if they have already submitted a time
+def can_view_race_leaderboard(server, race_id, user):
+    # The user can view the leaderboard if the race is completed or if they have already submitted a time or they are
+    # a moderator
     race = get_race(race_id)
-    can_view = False
+    can_view = user_is_mod(server, user)
     if race is not None and race.state == RaceState.Completed:
         can_view = True
     
-    if get_race_submission(user_id, race_id) is not None:
+    if get_race_submission(user.id, race_id) is not None:
         can_view = True
 
     return can_view

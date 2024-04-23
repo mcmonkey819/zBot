@@ -9,6 +9,7 @@ PreviousPageEmoji = '⬆️'
 LeaderboardEmoji = '🥇'
 EditEmoji = '✏️'
 DeleteEmoji = '🗑️'
+CrossMarkEmoji = '❌'
 CategoryEmoji = '🏷️'
 RaceEmoji = '🏎️'
 ExtraInfoEmoji = '📋'
@@ -68,6 +69,7 @@ CategoryEditSubmitRoleDescription = 'Allows you to choose the role that is assig
 CategoryEditCreateRoleDescription = 'Allows you to select a role to be pinged on race creation for this category. The announcement message will be editable at the time of creation. Choosing the "None" option will result in no new race ping.'
 CategorySetLeaderboardChannelDescription = 'Allows you to select a channel to display the points leaderboard for this category. The leaderboard will be updated when races are completed. Choosing the "None" option will result in no leaderboard being displayed.'
 CategoryEditPointsDescription = 'Allows you to manually modify the points of racers in this category. This is useful for manually awarding bonus points or correcting errors.'
+CategoryAssignRacerDescription = 'Allows you to assign a role or specific racers to the races in this category. If assigning to fewer than "all" the races assigned will be randomized. See the "Race Assignment" command under the Race Moderation Info embed to learn more about race assignments.'
 CategoryAssignExtraInfoDescription = 'Allows you to assign a specific submission value to all races in this category. Already assigned values are marked with a ✅, choosing an already assigned value will unassign it from this category.'
 CategoryDisplayRawSubmitInfoDescription = 'Displays raw submission info for a user-specified set of fields, for user-specified number of races in this category. This is useful for collecting stats, creating a manual leaderboard based on a custom field, etc'
 CategorySetThumbnailDescription = 'Sets the thumbnail for the category. The thumbnail is used when displaying race info for races in the category. The thumbnail should be a URL to an image (http or https only), or leave blank to remove the thumbnail.'
@@ -80,7 +82,7 @@ RacePinDescription = 'Allows you to select a a channel to pin the race info mess
 RaceEditSubmitRoleDescription = 'Allows you to choose the role that is assigned to users when they submit a time for this race. This is in addition to any role assigned by the race category. Choosing the "None" option means no role will be assigned.'
 RaceEditLeaderboardChannelDescription = 'Allows you to select a channel to display the leaderboard for this race. The leaderboard will be updated when times are submitted. Choosing the "None" option will result in no leaderboard being displayed.'
 RaceAssignExtraInfoDescription = 'Allows you to assign a specific submission value to this race. Already assigned values are marked with a ✅, choosing an already assigned value will unassign it from this race.'
-RaceAssignRacerDescription = 'Allows you to assign specific racers to this race. See the "Race Assignment" command under the Race Moderation Info embed to learn more about race assignments.'
+RaceAssignRacerDescription = 'Allows you to assign a role or specific racers to this race. See the "Race Assignment" command under the Race Moderation Info embed to learn more about race assignments.'
 RaceEditSubmissionDescription = 'Allows you to modify a submission to this race. This is useful for correcting errors, fixing scoring errors or submitting on behalf of someone else.'
 RaceScheduleOpDescription = 'Allows you to schedule an operation to be executed at a different time. Currently, this is only supported for race state changes.'
 RaceMiscToggleDescription = 'Allows configuration of various miscellaneous race data such as force removing the leaderboard and specifying which extra info fields are required.'
@@ -204,6 +206,7 @@ Use the buttons below to toggle the miscelaneous settings. Some of the buttons p
 """
 
 SubmissionDetailsHelpText = "Shows all of the information about the chosen submission, including the finish time, comment and any extra info fields that were captured."
+CategoryAssignNoAvailableRacesText = "There are no valid races to assign to in this category. Races must be inactive or active with existing assignment or no submissions."
 
 def get_race_leaderboard_title(race_id):
     return f"Leaderboard for Race ID `{race_id}`"

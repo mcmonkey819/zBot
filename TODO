@@ -1,32 +1,15 @@
 General Stuff
 -------------------------------------------------------
-[ ] - Finish schedule state change (CMC TODO)
-    [ ] - Need to deal with everything needing an interaction
-[X] - Loop on remove role
-[X] - Assign role to race
-[X] - Leaderboard not updating
-[X] - Fix racer stats
-[X] - Add defer for pin race
-[X] - Add voice channel cog
-[X] - Mark assigned race completed fails silently when not all racers are done
-[X] - Role not being given on forfeit
-[X] - Add command to add permanent/ignore VCs to the list
-[X] - Add command to enable/disable VC creation
 [ ] - Rework VC creation to ignore any channels not marked as permanent or dynamically created (to avoid problem when channels are created I can't see as in GMP "Moderators")
-
-[X] - Test VC create/destroy
-[X] - Test role assignment
-[X] - Test category leaderboard update
 [ ] - Test scheduling something with an interaction that takes 24 hours
     [ ] - Test schedule race state update
-
-DB Updates Required:
-async_race_servers
-    [ ] - Add enable_vc_create field
-server_utils_vc_list
-    [ ] - Add entire table
-    [ ] - Add ignore/permanent lists per server
-
+    [ ] - Finish schedule state change (CMC TODO)
+    [ ] - Need to deal with everything needing an interaction
+    
+[X] - Mods can view leaderboard at any time
+[X] - Add command/button to randomly assign everyone with a role to "n" of the current races in a category
+[X] - Allow assigning racers in active state
+[ ] - Test delete, assign, view leaderbaord
 
 Testing
 -------------------------------------
@@ -43,20 +26,13 @@ Testing
 [ ] - Trueskill
     [ ] - Recorded
 
-Manual DB Conversion Steps
--------------------------------------------------------
-[ ] - Add create/submit roles for weekly and BWS categories
-[X] - Duplicate 40 bonks data in test server for more testing
-
 Future Work
 -------------------------------------------------------
 [ ] - Add auto-complete option when all assigned racers have submitted
 [ ] - Buttons for seeing per-race details on points category leaderboard
-[ ] - Assign a role to a race instead of individual racers
 [ ] - Remove server_id field from extra_info_assignments?
 [ ] - Add optional calculated category leaderboard fields (high/low score, average time, num races)
 [ ] - `rescore_race` when a submission is edited and as a manual option
-[X] - Update button menus to remove unused buttons (rather than disable and change label to `--`)
 [ ] - Racetime data import
 [ ] - Category leaderboard minimum races
 [ ] - Unpin/Unset leaderboard messages

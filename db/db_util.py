@@ -544,6 +544,9 @@ def assign_racer(user_id, race_id):
         assignment.user_id = user_id
         assignment.race_id = race_id
         assignment.save()
+        return True
+    else:
+        return False
 
 ########################################################################################################################
 def datetime_is_valid(datetime_str):

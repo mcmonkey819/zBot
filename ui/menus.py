@@ -467,7 +467,7 @@ class zRaceInfoButtonView(nextcord.ui.View):
 
     @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str(LeaderboardEmoji))
     async def leaderboard_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
-        if can_view_race_leaderboard(self.race_id, interaction.user.id):
+        if can_view_race_leaderboard(interaction.guild, self.race_id, interaction.user):
             await show_race_leaderboard(interaction, self.race_id)
         else:
             await send_message(interaction, "You must submit a time, forfeit or wait for the race to be completd to view the leaderboard")
@@ -921,7 +921,14 @@ async def category_edit_description(interaction, category):
     await interaction.response.send_modal(zCategoryAddEditModal(category))
 
 ########################################################################################################################
-async def category_delete(interaction, category):
+async def category_delete(interaction, payload):
+    # The button payload is the ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+
+    # ToggleField payload is the category
+    category = toggle_field.payload
+    
     # Check if there are any races created for this category
     races = get_category_races(category.id)
     
@@ -1056,6 +1063,54 @@ async def category_edit_db_points(points_id, interaction):
         # TODO Update the leaderboard if there is a leaderboard channel
     else:
         await send_message(interaction, "Cancelled")
+
+########################################################################################################################
+async def category_assign_racer(interaction, category):
+    # Get the list of races in this category
+    cat_races = get_category_races(category.id)
+
+    # Races can be assigned to if they are inactive or active and either are already assigned races or have no submissions
+    available_races = []
+    for r in cat_races:
+        if r.state == RaceState.Inactive:
+            available_races.append(r)
+        elif r.state == RaceState.Active:
+            if is_assigned_race(r.id) or not race_has_submissions(r.id):
+                available_races.append(r)
+
+    # If there are no available races to assign to, inform the user and return
+    if len(available_races) == 0:
+        await send_message(interaction, CategoryAssignNoAvailableRacesText)
+        return
+
+    # Get the list of users to assign
+    user_id_list = await prompt_for_assign_list(interaction)
+
+    # Prompt the user how many races they'd like to assign to (including the "all" option)
+    select_list = [nextcord.SelectOption(label="All", value=-1, description="Assign to all available races")]
+    for i in range(1, len(available_races) + 1):
+        select_list.append(nextcord.SelectOption(label=f"{i}", value=i, description=f"Randomly assign to {i} available races"))
+    num_races = await zSingleSelectView(select_list, None, "Choose Number of Races...").prompt(interaction)
+    if num_races == -1:
+        num_races = len(available_races)
+
+    # For the selected racer or each racer in the role
+    for u in user_id_list:
+        target_races = available_races.copy()
+        # We'll handle randomizing the races by shuffling the list of available races
+        random.shuffle(target_races)
+        # Assign the racer to the selected races
+        num_assigned = 0
+        for r in target_races:
+            # We can't just loop through `num_races` of the shuffled list because the racer may already be assigned
+            # to some of the races. This means in some cases we may not assign to the full number
+            did_assign = assign_racer(u, r.id)
+            if did_assign:
+                num_assigned += 1
+                if num_assigned == num_races:
+                    break
+
+    await send_message(interaction, "Racers assignment complete")
 
 ########################################################################################################################
 async def category_assign_extra_info(interaction, category):
@@ -1195,6 +1250,7 @@ async def category_set_thumbnail(interaction, category):
 async def category_misc_toggles(interaction, category):
     # Build the list of toggle fields
     toggle_list = []
+    toggle_list.append(get_delete_category_field(category))
     toggle_list.append(get_ping_assigned_field(category))
     toggle_list.append(get_remove_category_leaderboard_field(category))
     toggle_list.append(get_leaderboard_type_toggle_field(category))
@@ -1275,6 +1331,18 @@ def get_category_activate_new_races_toggle_field(category):
                                inline=False))
 
 ########################################################################################################################
+def get_delete_category_field(category):
+    return ToggleField(
+        toggle_func=category_delete,
+        payload=category,
+        button_style=nextcord.ButtonStyle.blurple,
+        custom_id='category_delete',
+        emoji=DeleteEmoji,
+        embed_field=EmbedField(name=f"{DeleteEmoji} - Delete Category",
+                               value=CategoryDeleteDescription,
+                               inline=False))
+
+########################################################################################################################
 def get_ping_assigned_field(category):
     return ToggleField(
         toggle_func=category_ping_assigned_racers,
@@ -1293,8 +1361,8 @@ def get_remove_category_leaderboard_field(category):
         payload=category,
         button_style=nextcord.ButtonStyle.blurple,
         custom_id=remove_category_leaderboard_id,
-        emoji=DeleteEmoji,
-        embed_field=EmbedField(name=f"{DeleteEmoji} - Remove Leaderboard",
+        emoji=CrossMarkEmoji,
+        embed_field=EmbedField(name=f"{CrossMarkEmoji} - Remove Leaderboard",
                                value="Button will remove any leaderboard channel assignment and delete leaderboard messages.",
                                inline=False))
 
@@ -1369,8 +1437,13 @@ async def race_edit_core(interaction, race):
     await interaction.response.send_modal(modal)
 
 ########################################################################################################################
-async def race_delete(interaction, race):
-    await defer(interaction)
+async def race_delete(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+
+    # ToggleField payload is the race
+    race = toggle_field.payload
 
     # We can only delete a race if it's inactive and has no submissions
     has_submissions = race_has_submissions(race.id)
@@ -1495,9 +1568,26 @@ async def race_edit_submit_role(interaction, race):
 
 ########################################################################################################################
 async def race_assign_racer(interaction, race):
-    # Racers can only be assigned when in the inactive state
-    if race.state != RaceState.Inactive:
-        await send_message(interaction, "Can only assign racers in the `Inactive` state.")
+    # Races can't be assigned in the completed state
+    if race.state == RaceState.Completed:
+        await send_message(interaction, "Can't assign racers in the `Complete` state.")
+        return
+    
+    if race.state == RaceState.Active:
+        # Can't assign racers in the active state if there are no assigned racers yet and there are submissions
+        if race_has_submissions(race.id) and not is_assigned_race(race.id):
+            await send_message(interaction, "Can't assign racers because the race is active and there are already submissions as an open race.")
+            return
+    
+    user_id_list = await prompt_for_assign_list(interaction)
+    # Create an assignment for each member returned
+    for u in user_id_list:
+        assign_racer(user_id=u, race_id=race.id)
+    await send_message(interaction, "Role assignment complete")
+    
+########################################################################################################################
+async def prompt_for_assign_list(interaction):
+    user_id_list = []
     
     # Ask the user if they want to assign a specific user or a role
     select_list = [
@@ -1511,27 +1601,25 @@ async def race_assign_racer(interaction, race):
         user = await zUserSelectView(None).prompt(interaction)
     
         # Create a race assignment for this user
-        assign_racer(user_id=user.id, race_id=race.id)
-        await send_message(interaction, f"User {get_user_name_str(user.id, user)} assigned")
+        user_id_list.append(user.id)
     elif assign_type == 2:
         # Prompt for the role to assign
         role_id = await prompt_for_role(interaction)
+
         if role_id is None:
             await send_message(interaction, "**ERROR** - No role selected, cancelled assignment")
-            return
-        
-        role = interaction.guild.get_role(role_id)
-        if role is None:
-            await send_message(interaction, "**ERROR** - Role not found, cancelled assignment")
-            return
+        else:
+            role = interaction.guild.get_role(role_id)
 
-        # Create an assignment for each member who has the selected role
-        for m in role.members:
-            assign_racer(user_id=m.id, race_id=race.id)
-        await send_message(interaction, "Role assignment complete")
+            if role is None:
+                await send_message(interaction, "**ERROR** - Role not found, cancelled assignment")
+            else:
+                for m in role.members:
+                    user_id_list.append(m.id)
     else:
         await send_message(interaction, "**ERROR** - Unknown option selected, cancelled assignment")
-        return
+    
+    return user_id_list
     
 ########################################################################################################################
 async def race_edit_submission(interaction, race):
@@ -1637,6 +1725,7 @@ async def schedule_race_state_change(interaction, race, end_timestamp, new_state
 async def race_misc_toggles(interaction, race):
     # Build the list of toggle fields
     toggle_list = []
+    toggle_list.append(get_delete_race_field(race))
     toggle_list.append(get_remove_race_leaderboard_field(race))
     
     # Get extra info assignments for this category
@@ -1651,14 +1740,26 @@ async def race_misc_toggles(interaction, race):
     await menu.start(interaction=interaction)
 
 ########################################################################################################################
+def get_delete_race_field(race):
+    return ToggleField(
+        toggle_func=race_delete,
+        payload=race,
+        button_style=nextcord.ButtonStyle.blurple,
+        custom_id='race_delete' ,
+        emoji=DeleteEmoji,
+        embed_field=EmbedField(name=f"{DeleteEmoji} - Delete Race",
+                               value=RaceDeleteDescription,
+                               inline=False))
+
+########################################################################################################################
 def get_remove_race_leaderboard_field(race):
     return ToggleField(
         toggle_func=race_remove_channel_leaderboard,
         payload=race,
         button_style=nextcord.ButtonStyle.blurple,
         custom_id=remove_race_leaderboard_id,
-        emoji=DeleteEmoji,
-        embed_field=EmbedField(name=f"{DeleteEmoji} - Remove Leaderboard",
+        emoji=CrossMarkEmoji,
+        embed_field=EmbedField(name=f"{CrossMarkEmoji} - Remove Leaderboard",
                                value="Button will remove any leaderboard channel assignment and delete leaderboard messages.",
                                inline=False))
         
@@ -2675,11 +2776,12 @@ async def show_category_info(interaction, category_id):
                         value=f"{fastest_submission.finish_time} by {fastest_racer_name} in {fastest_race_name}",
                         inline=True)
         
-        fastest_user_race = get_race(fastest_user_submission.race_id)
-        fastest_user_race_name = fastest_user_race.description if fastest_user_race is not None else "Unknown Mode"
-        embed.add_field(name=f"{user_name}'s Fastest Time",
-                        value=f"{fastest_user_submission.finish_time} by {user_name} in {fastest_user_race_name}",
-                        inline=True)
+        if fastest_user_submission is not None:
+            fastest_user_race = get_race(fastest_user_submission.race_id)
+            fastest_user_race_name = fastest_user_race.description if fastest_user_race is not None else "Unknown Mode"
+            embed.add_field(name=f"{user_name}'s Fastest Time",
+                            value=f"{fastest_user_submission.finish_time} by {user_name} in {fastest_user_race_name}",
+                            inline=True)
     else:
         # If there are no races yet, just create a basic embed with the category description
         embed = nextcord.Embed(title=f"{category.name} Info", description=f"{category.description}", color=nextcord.Color.random())
@@ -2743,12 +2845,12 @@ ModeratorMenuItems = [
 
 CategoryButtonMenuItems = [
     MenuItem(EditEmoji       , category_edit_description        , 'category_edit_description'        , 'Edit Description'         , CategoryEditDescription),
-    MenuItem(DeleteEmoji     , category_delete                  , 'category_delete'                  , 'Delete Category'          , CategoryDeleteDescription),
     MenuItem(EditScoreEmoji  , category_edit_scoring            , 'category_edit_scoring'            , 'Edit Scoring Method'      , CategoryEditScoringDescription),
     MenuItem(SubmitRoleEmoji , category_edit_submit_role        , 'category_edit_submit_role'        , 'Choose Submit Role'       , CategoryEditSubmitRoleDescription),
     MenuItem(CreateRoleEmoji , category_edit_create_role        , 'category_edit_create_role'        , 'Choose Create Ping Role'  , CategoryEditCreateRoleDescription),
     MenuItem(LeaderboardEmoji, category_edit_leaderboard_channel, 'category_edit_leaderboard_channel', 'Set Leaderboard Channel'  , CategorySetLeaderboardChannelDescription),
     MenuItem(EditPointsEmoji , category_edit_points             , 'category_edit_points'             , 'Modify Racer Point Totals', CategoryEditPointsDescription),
+    MenuItem(AssignEmoji     , category_assign_racer            , 'category_assign_racer'            , 'Assign Racers'            , CategoryAssignRacerDescription),
     MenuItem(ExtraInfoEmoji  , category_assign_extra_info       , 'category_assign_extra_info'       , 'Assign Submission Value'  , CategoryAssignExtraInfoDescription),
     MenuItem(StatsEmoji      , category_display_raw_submit_info , 'category_display_raw_submit_info' , 'Display Raw Submit Info'  , CategoryDisplayRawSubmitInfoDescription),
     MenuItem(ThumbnailEmoji  , category_set_thumbnail           , 'category_set_thumbnail'           , 'Set Category Thumbnail'   , CategorySetThumbnailDescription),
@@ -2757,7 +2859,6 @@ CategoryButtonMenuItems = [
 
 RaceButtonMenuItems = [
     MenuItem(EditEmoji          , race_edit_core               , 'race_edit_core'               , 'Edit Race'                , RaceEditDescription),
-    MenuItem(DeleteEmoji        , race_delete                  , 'race_delete'                  , 'Delete Race'              , RaceDeleteDescription),
     MenuItem(ChangeStateEmoji   , race_change_state            , 'race_change_state'            , 'Change Race State'        , RaceChangeStateDescription),
     MenuItem(PinEmoji           , race_pin                     , 'race_pin'                     , 'Pin Race Info'            , RacePinDescription),
     MenuItem(SubmitRoleEmoji    , race_edit_submit_role        , 'race_edit_submit_role'        , 'Choose Submit Role'       , RaceEditSubmitRoleDescription),
