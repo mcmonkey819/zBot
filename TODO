@@ -6,25 +6,12 @@ General Stuff
     [ ] - Finish schedule state change (CMC TODO)
     [ ] - Need to deal with everything needing an interaction
     
-[X] - Mods can view leaderboard at any time
-[X] - Add command/button to randomly assign everyone with a role to "n" of the current races in a category
-[X] - Allow assigning racers in active state
-[ ] - Test delete, assign, view leaderbaord
-
 Testing
 -------------------------------------
-[X] - Basic overview
-    [X] - Recorded
-[X] - 40 Bonks workflow
-    [X] - Recorded
-[X] - Par time qualifiers
-    [X] - Recorded
-[X] - Mario Kart BR
-    [X] - Recorded
 [ ] - Fixed Scoring
-    [ ] - Recorded
+    [ ] - Record demo
 [ ] - Trueskill
-    [ ] - Recorded
+    [ ] - Record demo
 
 Future Work
 -------------------------------------------------------

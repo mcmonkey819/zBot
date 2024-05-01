@@ -78,7 +78,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 # Query for the moderator and admin roles and then create a DB entry for this server
                 admin_role = await prompt_for_role(interaction, placeholder="Select Race Admin Role...")
                 mod_role = await prompt_for_role(interaction, placeholder="Select Race Moderator Role...")
-                server = AsyncRaceServer(id=interaction.guild_id, admin_role=admin_role.id, mod_role=mod_role.id)
+                server = AsyncRaceServer(id=interaction.guild_id, admin_role=admin_role, mod_role=mod_role)
                 try:
                     server.save()
                 except:

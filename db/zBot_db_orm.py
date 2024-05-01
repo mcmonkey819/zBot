@@ -33,6 +33,7 @@ class AsyncRaceCategory(Model):
     pin_recent_race         = BooleanField(default=False)
     allow_completed_submit  = BooleanField(default=False)
     activate_new_races      = BooleanField(default=False)
+    mod_can_view_leaderboard= BooleanField(default=True)
 
     class Meta:
         table_name = 'async_race_categories'

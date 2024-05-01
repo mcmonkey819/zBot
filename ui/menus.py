@@ -416,6 +416,7 @@ class zCategoryPointsLeaderboardPageSource(menus.ListPageSource):
     def __init__(self, points_list, bot_client, per_page: int=10, title=None, body_text=None) -> None:
         self.title = title
         self.body_text = body_text
+        self.bot_client = bot_client
         super().__init__(entries=points_list, per_page=per_page)
     
     async def format_page(self, menu, points_list):

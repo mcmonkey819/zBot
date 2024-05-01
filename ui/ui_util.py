@@ -482,10 +482,17 @@ def can_view_race_leaderboard(server, race_id, user):
     # The user can view the leaderboard if the race is completed or if they have already submitted a time or they are
     # a moderator
     race = get_race(race_id)
-    can_view = user_is_mod(server, user)
-    if race is not None and race.state == RaceState.Completed:
-        can_view = True
     
+    if race is not None:
+        # Check if the category allows mods to view leaderboards
+        if race.category_id.mod_can_view_leaderboard:
+            can_view = user_is_mod(server, user)
+
+        # Can always view the leaderboard of a completed race
+        if race.state == RaceState.Completed:
+            can_view = True
+    
+    # Can also always view leaderboard if they've submitted a time
     if get_race_submission(user.id, race_id) is not None:
         can_view = True
 
