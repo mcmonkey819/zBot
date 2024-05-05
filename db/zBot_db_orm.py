@@ -20,20 +20,20 @@ class AsyncRaceServer(Model):
         database = db
 
 class AsyncRaceCategory(Model):
-    id                      = IntegerField(primary_key=True)
-    server_id               = ForeignKeyField(AsyncRaceServer, backref='categories')
-    name                    = CharField()
-    description             = CharField()
-    create_role             = IntegerField(null=True)
-    submit_role             = IntegerField(null=True)
-    points_type             = IntegerField(default=0)
-    leaderboard_type        = IntegerField(null=True, default=0)
-    active                  = BooleanField(default=True)
-    thumbnail_url           = CharField(null=True)
-    pin_recent_race         = BooleanField(default=False)
-    allow_completed_submit  = BooleanField(default=False)
-    activate_new_races      = BooleanField(default=False)
-    mod_can_view_leaderboard= BooleanField(default=True)
+    id                       = IntegerField(primary_key=True)
+    server_id                = ForeignKeyField(AsyncRaceServer, backref='categories')
+    name                     = CharField()
+    description              = CharField()
+    create_role              = IntegerField(null=True)
+    submit_role              = IntegerField(null=True)
+    points_type              = IntegerField(default=0)
+    leaderboard_type         = IntegerField(null=True, default=0)
+    active                   = BooleanField(default=True)
+    thumbnail_url            = CharField(null=True)
+    pin_recent_race          = BooleanField(default=False)
+    allow_completed_submit   = BooleanField(default=False)
+    activate_new_races       = BooleanField(default=False)
+    mod_can_view_leaderboard = BooleanField(default=True)
 
     class Meta:
         table_name = 'async_race_categories'
@@ -42,7 +42,7 @@ class AsyncRaceCategory(Model):
 class AsyncRace(Model):
     id                      = IntegerField(primary_key= True)
     server_id               = ForeignKeyField(AsyncRaceServer, backref='races')
-    create_datetime         = DateField(null=True)
+    create_datetime         = DateTimeField(null=True)
     seed                    = CharField()
     hash                    = CharField(null=True)
     description             = CharField(null=True)
@@ -59,7 +59,7 @@ class AsyncRaceRoster(Model):
     id                      = IntegerField(primary_key= True)
     race_id                 = ForeignKeyField(AsyncRace, backref='rosters')
     user_id                 = IntegerField()
-    seed_time               = DateField(null=True)
+    seed_time               = DateTimeField(null=True)
 
     class Meta:
         table_name = 'async_race_rosters'
@@ -69,7 +69,7 @@ class AsyncRaceSubmission(Model):
     id                      = IntegerField(primary_key= True)
     race_id                 = ForeignKeyField(AsyncRace, backref='submissions')
     user_id                 = IntegerField()
-    submit_datetime         = DateField(null=True)
+    submit_datetime         = DateTimeField(null=True)
     finish_time             = CharField()
     comment                 = CharField(null=True)
     points                  = FloatField(null=True)

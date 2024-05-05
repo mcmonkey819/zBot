@@ -31,6 +31,8 @@ ForfeitEmoji = '🏳️'
 TimeEmoji = '⏱️'
 ThumbnailEmoji = '🖼️'
 CalendarEmoji = '📅'
+QuestionEmoji = '❓'
+ConfirmEmoji = '✅'
 
 EmojiList = [
     "🐱", "🐵", "🦄", "🐼",
@@ -84,6 +86,7 @@ RaceEditLeaderboardChannelDescription = 'Allows you to select a channel to displ
 RaceAssignExtraInfoDescription = 'Allows you to assign a specific submission value to this race. Already assigned values are marked with a ✅, choosing an already assigned value will unassign it from this race.'
 RaceAssignRacerDescription = 'Allows you to assign a role or specific racers to this race. See the "Race Assignment" command under the Race Moderation Info embed to learn more about race assignments.'
 RaceEditSubmissionDescription = 'Allows you to modify a submission to this race. This is useful for correcting errors, fixing scoring errors or submitting on behalf of someone else.'
+RaceValidateSubmissionDescription = 'Allows you to validate a submission. This command will display the seed access date/time, the submit date/time and the submission info with buttons to mark the submission as verified or mark as problematic.'
 RaceScheduleOpDescription = 'Allows you to schedule an operation to be executed at a different time. Currently, this is only supported for race state changes.'
 RaceMiscToggleDescription = 'Allows configuration of various miscellaneous race data such as force removing the leaderboard and specifying which extra info fields are required.'
 
@@ -208,6 +211,8 @@ Use the buttons below to toggle the miscelaneous settings. Some of the buttons p
 SubmissionDetailsHelpText = "Shows all of the information about the chosen submission, including the finish time, comment and any extra info fields that were captured."
 CategoryAssignNoAvailableRacesText = "There are no valid races to assign to in this category. Races must be inactive or active with existing assignment or no submissions."
 
+ValidateSubmissionEmbedDescription = f"Use the {ConfirmEmoji} button to mark this submission as verified. Use the {CrossMarkEmoji} button to mark the submission as problematic. Use the {QuestionEmoji} to mark the submission as unverified."
+
 def get_race_leaderboard_title(race_id):
     return f"Leaderboard for Race ID `{race_id}`"
 
@@ -219,6 +224,7 @@ toggle_category_active_id = "toggle_category_active"
 toggle_category_pin_recent_id = "toggle_category_pin_recent"
 toggle_category_allow_completed_submit_id = "toggle_category_allow_completed_submit"
 toggle_category_activate_new_races_id = "toggle_category_activate_new_races"
+toggle_category_mod_view_leaderboard_id = 'toggle_category_mod_view_leaderboard_id'
 category_ping_assigned_id = "category_ping_assigned"
 remove_category_leaderboard_id = "remove_category_leaderboard"
 remove_race_leaderboard_id = "remove_race_leaderboard"

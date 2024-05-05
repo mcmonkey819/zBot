@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import copy
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from enum import Enum
 import logging
 import math
@@ -174,14 +174,45 @@ class zConfirmMenu(menus.ButtonMenu):
         await send_message(self.interaction, self.msg, view=self)
         return await self.interaction.original_message()
 
-    @nextcord.ui.button(emoji=PartialEmoji.from_str('✅'))
+    @nextcord.ui.button(emoji=PartialEmoji.from_str(ConfirmEmoji))
     async def on_confirm(self, button, interaction):
         self.result = True
         self.stop()
 
-    @nextcord.ui.button(emoji=PartialEmoji.from_str('❌'))
+    @nextcord.ui.button(emoji=PartialEmoji.from_str(CrossMarkEmoji))
     async def on_cancel(self, button, interaction):
         self.result = False
+        self.stop()
+
+    async def prompt(self, interaction: nextcord.Interaction):
+        await menus.Menu.start(self, interaction=interaction, wait=True)
+        return self.result
+    
+########################################################################################################################
+class zConfirmThreeOptionMenu(menus.ButtonMenu):
+    def __init__(self, msg: str = "", embed=None):
+        super().__init__(timeout=None, clear_buttons_after=True)
+        self.msg = msg
+        self.embed = embed
+        self.result = None
+
+    async def send_initial_message(self, ctx, channel):
+        await send_message(self.interaction, self.msg, embed=self.embed, view=self)
+        return await self.interaction.original_message()
+
+    @nextcord.ui.button(emoji=PartialEmoji.from_str(ConfirmEmoji))
+    async def on_confirm(self, button, interaction):
+        self.result = True
+        self.stop()
+
+    @nextcord.ui.button(emoji=PartialEmoji.from_str(CrossMarkEmoji))
+    async def on_cancel(self, button, interaction):
+        self.result = False
+        self.stop()
+
+    @nextcord.ui.button(emoji=PartialEmoji.from_str(QuestionEmoji))
+    async def on_question(self, button, interaction):
+        self.result = None
         self.stop()
 
     async def prompt(self, interaction: nextcord.Interaction):
@@ -443,6 +474,40 @@ class zRaceInfoButtonView(nextcord.ui.View):
             if race.state == RaceState.Completed and not race.category_id.allow_completed_submit:
                 await send_message(interaction, "The category for this race does not permit submitting to a completed race.")
                 return False
+            
+            # Check if the user has already submitted, if so they can edit that submission only for 4 hours after the intial submission
+            submission = get_race_submission(interaction.user.id, self.race_id)
+            if submission is not None:
+                delta = datetime.now() - submission.submit_datetime
+                edit_time_limit = timedelta(minutes=2) if bot_config.TEST_MODE else timedelta(hours=4)
+                if delta > edit_time_limit:
+                    await send_message(interaction, "It is past the window to edit your submission. Please contact a moderator if you need to make changes.")
+                    return False
+                
+            # If this is an assigned race make sure the user is assigned
+            if is_assigned_race(self.race_id):
+                roster = get_race_assignment(interaction.user.id, self.race_id)
+                if roster is None:
+                    await send_message(interaction, "Can't submit: This is an assigned race and you are not assigned to it")
+                    return False
+            
+                # The racer has 4 hours from getting the seed to submit a time. This limit can be made configurable in a future update if needed
+                if roster.seed_time is not None:
+                    delta = datetime.now() - roster.seed_time
+                    submit_time_limit = timedelta(minutes=2) if bot_config.TEST_MODE else timedelta(hours=4)
+                    # If we are outside that window let the racer know
+                    if delta > submit_time_limit:
+                        await send_message(interaction, "It is past the allowable window after getting the seed to submit. You have been forfeited from this race.")
+
+                        # And submit the forfeit for them
+                        sub = AsyncRaceSubmission()
+                        sub.race_id = self.race_id
+                        sub.user_id = interaction.user.id
+                        # We'll set the submit date/time as the seed access time so they can't just edit the forfeit
+                        sub.submit_datetime = roster.seed_time
+                        sub.finish_time = ForfeitFinishTime
+                        sub.save()
+                        return False
         return True
     
     @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str(TimeEmoji))
@@ -471,7 +536,7 @@ class zRaceInfoButtonView(nextcord.ui.View):
         if can_view_race_leaderboard(interaction.guild, self.race_id, interaction.user):
             await show_race_leaderboard(interaction, self.race_id)
         else:
-            await send_message(interaction, "You must submit a time, forfeit or wait for the race to be completd to view the leaderboard")
+            await send_message(interaction, "You must submit a time, forfeit or wait for the race to be completed to view the leaderboard")
 
     def add_static_embed_fields(embed: nextcord.Embed):
         embed.add_field(name=f"{TimeEmoji} - Submit/Edit Time", value="Submit a time for this race or edit an already submitted time.", inline=False)
@@ -1259,6 +1324,7 @@ async def category_misc_toggles(interaction, category):
     toggle_list.append(get_category_pin_recent_toggle_field(category))
     toggle_list.append(get_category_allow_completed_submit_toggle_field(category))
     toggle_list.append(get_category_activate_new_races_toggle_field(category))
+    toggle_list.append(get_category_mod_view_leaderboard_toggle_field(category))
     
     # Get extra info assignments for this category
     extra_infos = get_category_extra_info_assignments(category.id)
@@ -1329,6 +1395,18 @@ def get_category_activate_new_races_toggle_field(category):
         emoji=ChangeStateEmoji,
         embed_field=EmbedField(name=f"{ChangeStateEmoji} - Auto-Activate New Races",
                                value=bool_field_to_str(category.activate_new_races),
+                               inline=False))
+
+########################################################################################################################
+def get_category_mod_view_leaderboard_toggle_field(category):
+    return ToggleField(
+        toggle_func=toggle_category_mod_view_leaderboard,
+        payload=category,
+        button_style=bool_field_button_style(category.mod_can_view_leaderboard),
+        custom_id=toggle_category_mod_view_leaderboard_id,
+        emoji=EyesEmoji,
+        embed_field=EmbedField(name=f"{EyesEmoji} - Mods Can View Leaderboard",
+                               value=bool_field_to_str(category.mod_can_view_leaderboard),
                                inline=False))
 
 ########################################################################################################################
@@ -1628,7 +1706,6 @@ async def race_edit_submission(interaction, race):
         await send_message(interaction, "Cannot create submissions for an Inactive race.")
         return
     
-    # Get a list of submissions
     # Get a list of submissions for this race
     submissions = get_sorted_race_submissions(race.id)
 
@@ -1683,6 +1760,65 @@ async def on_select_user_edit_submission(select_data, interaction):
     submit_handler = zRaceSubmitHandler(race_id, submission, include_points=True, user_id=user.id)
     await submit_handler.send_submit_modal(interaction)
     pass
+
+########################################################################################################################
+async def race_validate_submission(interaction, race):
+    # Get a list of submissions for this race
+    submissions = get_sorted_race_submissions(race.id)
+
+    if submissions is not None:
+        # Create a select list from the submissions
+        select_list = [nextcord.SelectOption(label="Cancel...", value=0, description="Cancel the operation")]
+        for s in submissions:
+            user = await get_user_from_interaction(interaction, s.user_id)
+            user_name = get_user_name_str(s.user_id, user)
+            select_list.append(nextcord.SelectOption(label=f"{user_name} - {s.finish_time}", value=s.id, description=f"{user_name} - {s.finish_time}"))
+    
+        # Prompt the user to select a submission
+        submission_id = await zSingleSelectView(select_list, on_select_edit_submission, "Choose Submission To Edit..", payload=race.id).prompt()
+
+        if submission_id == 0:
+            await send_message(interaction, "Cancelled")
+            return
+        
+        # Get the submission
+        submission = get_race_submission_by_id(submission_id)
+        if submission is None:
+            await send_message(interaction, "**ERROR* Submission not found. Contact a bot admin.")
+            return
+        
+        # Get the roster entry (if it exists) to get the seed access time
+        roster = get_race_assignment(submission.user_id, race.id)
+        seed_access_time = None if roster is None else roster.seed_time
+
+        # Get validation status
+        validation_status = get_validation_status(submission.id)
+        
+        # Build an embed with the submission info
+        user_name = get_user_name_str(submission.user_id)
+        embed = nextcord.Embed(color=nextcord.Colour.random(), title=f"Validate Submission", description=ValidateSubmissionEmbedDescription)
+        embed.add_field(name=f"Racer Name", value=user_name, inline=False)
+        embed.add_field(name=f"Validation Status", value=get_validation_status_str(validation_status), inline=False)
+        embed.add_field(name=f"Seed Access Date/Time", value=seed_access_time, inline=False)
+        embed.add_field(name=f"Submit Date/Time", value=submission.submit_datetime, inline=False)
+        details = get_submission_details_dict(submission)
+        for k, v in details.items():
+            embed.add_field(name=k, value=v, inline=False)
+
+        # Send the embed to the user along with some buttons to choose the validation status
+        validation_selection = zConfirmThreeOptionMenu(msg="", embed=embed).prompt()
+
+        # Update the validation status based on the user selection
+        if validation_selection is None:
+            validation_status = ValidationStatus.Unverified
+        elif validation_selection:
+            validation_status = ValidationStatus.Verified
+        else:
+            validation_status = ValidationStatus.Rejected
+
+    else:
+        await send_message(interaction, "No submissions found for this race")
+        
 
 ########################################################################################################################
 async def race_schedule_op(interaction, race):
@@ -2523,6 +2659,27 @@ async def toggle_category_activate_new_races(interaction, payload):
     await update_menu_embed_field(menu, toggle_field)
 
 ########################################################################################################################
+async def toggle_category_mod_view_leaderboard(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+    
+    # ToggleField payload is the category
+    category = toggle_field.payload
+
+    category.mod_can_view_leaderboard = not category.mod_can_view_leaderboard
+    category.save()
+
+    # Then update the button style
+    toggle_field.button_style = bool_field_button_style(category.mod_can_view_leaderboard)
+
+    # Then update the embed field value
+    toggle_field.embed_field.value = bool_field_to_str(category.mod_can_view_leaderboard)
+
+    # Finally update the menu
+    await update_menu_embed_field(menu, toggle_field)
+
+########################################################################################################################
 async def update_menu_embed_field(menu, toggle_field: ToggleField):
     # Create a new embed copying the base data from the existing one
     embed = copy_embed(menu.embed)
@@ -2835,6 +2992,11 @@ async def do_post_submit_actions(interaction, race, user_id):
     await update_race_leaderboard(interaction, race)
 
 ########################################################################################################################
+def get_validation_status_str(validation_status):
+    ## CMC TODO ##
+    return f"{QuestionEmoji} Unverified"
+
+########################################################################################################################
 # Menu Static Data
 ########################################################################################################################
 ModeratorMenuItems = [
@@ -2867,8 +3029,9 @@ RaceButtonMenuItems = [
     MenuItem(ExtraInfoEmoji     , race_assign_extra_info       , 'race_assign_extra_info'       , 'Assign Submission Values' , RaceAssignExtraInfoDescription),
     MenuItem(AssignEmoji        , race_assign_racer            , 'race_assign_racer'            , 'Assign Racers'            , RaceAssignRacerDescription),
     MenuItem(EditSubmissionEmoji, race_edit_submission         , 'race_edit_submission'         , 'Modify Submission'        , RaceEditSubmissionDescription),
+    MenuItem(EditScoreEmoji     , race_validate_submission     , 'race_validate_submission'     , 'Validate Submission'      , RaceValidateSubmissionDescription),
     #MenuItem(CalendarEmoji      , race_schedule_op             , 'race_schedule_op'             , 'Schedule Operation'       , RaceScheduleOpDescription),
-    MenuItem(ToggleEmoji        , race_misc_toggles            , 'race_misc_toggles'            , 'Misc Race Config'         , RaceMiscToggleDescription),
+    MenuItem(ToggleEmoji         , race_misc_toggles            , 'race_misc_toggles'            , 'Misc Race Config'         , RaceMiscToggleDescription),
 ]
 
 RaceModerationHelpMenuItems = [

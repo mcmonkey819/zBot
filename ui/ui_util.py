@@ -351,8 +351,6 @@ def get_submission_details_dict(submission):
     details["Finish Time"] = "DNF" if submission.finish_time == ForfeitFinishTime else submission.finish_time
     if not is_value_empty(submission.comment):
         details["Comment"] = submission.comment
-    if not is_value_empty(submission.points):
-        details["Points"] = format_points_str(submission.points)
     
     # Get extra info types assigned to this race
     extra_info_assignments = AsyncRaceExtraInfoAssignment.select().where(AsyncRaceExtraInfoAssignment.race_id == submission.race_id)
@@ -363,6 +361,9 @@ def get_submission_details_dict(submission):
             info_type = get_extra_info_type(a.info_type_id)
             if not is_value_empty(info.data):
                 details[info_type.name] = value=info.data
+    
+    if not is_value_empty(submission.points):
+        details["Points"] = format_points_str(submission.points)
    
     return details
 
@@ -482,6 +483,7 @@ def can_view_race_leaderboard(server, race_id, user):
     # The user can view the leaderboard if the race is completed or if they have already submitted a time or they are
     # a moderator
     race = get_race(race_id)
+    can_view = False
     
     if race is not None:
         # Check if the category allows mods to view leaderboards

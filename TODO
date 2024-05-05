@@ -5,6 +5,10 @@ General Stuff
     [ ] - Test schedule race state update
     [ ] - Finish schedule state change (CMC TODO)
     [ ] - Need to deal with everything needing an interaction
+[X] - Lockout editing after 4 hours
+[ ] - Configurable time limit from seed access to submit
+    [ ] - Add category config button
+    [ ] - Check limit on submit and race completion. DNF if limit has elapsed
     
 Testing
 -------------------------------------

@@ -94,6 +94,21 @@ class VcChannelType:
             return "On Demand"
         else:
             return "Unknown"
+        
+class ValidationStatus:
+    Unverified = 0
+    Verified   = 1
+    Rejected   = 2
+
+    def to_str(validation_type: int):
+        if validation_type == ValidationStatus.Unverified:
+            return "Unverified"
+        elif validation_type == ValidationStatus.Verified:
+            return "Verified"
+        elif validation_type == ValidationStatus.Rejected:
+            return "Rejected"
+        else:
+            return "Unknown"
 
 ForfeitFinishTime = "23:59:59"
 ForfeitFinishTimeSeconds = (3600 * 23) + (60 * 59) + 59
@@ -847,6 +862,8 @@ def score_par_time_race(race):
     for s in submissions:
         # Score is calculated as (2 - (time_in_seconds / par_time)) * 100
         s.points = (2.0 - (float(finish_time_to_seconds(s.finish_time) / par_time_seconds))) * 100.0
+        if s.points > 105:
+            s.points = 105
         s.save()
 
         logging.info(f"Points for {s.finish_time}: {s.points}")
@@ -978,3 +995,6 @@ def get_messages_by_race_id(race_id, message_type=RaceMessageType.Leaderboard):
 def get_messages_by_category_id(category_id):
     return AsyncRaceMessage.select().where(AsyncRaceMessage.category_id == category_id)
 
+########################################################################################################################
+def get_validation_status(submission_id):
+    return None
