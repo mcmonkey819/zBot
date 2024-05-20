@@ -779,8 +779,10 @@ class zYesNoButtonView(nextcord.ui.View):
 
     @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str('✅'))
     async def yes_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await defer(interaction)
         await self.func(interaction, True, self.payload)
     
     @nextcord.ui.button(style=nextcord.ButtonStyle.grey, emoji=PartialEmoji.from_str('❌'))
     async def no_button(self, button: nextcord.ui.Button, interaction: nextcord.Interaction):
+        await defer(interaction)
         await self.func(interaction, False, self.payload)

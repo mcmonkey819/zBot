@@ -118,10 +118,8 @@ class ServerUtils(commands.Cog, name='ServerUtils'):
         join_channel = after.channel
         leave_channel = before.channel
         if join_channel is None and leave_channel is None:
-            logging.info("No channel change detected (before and after channels are both None)")
             return
         if join_channel == leave_channel:
-            logging.info("No channel change detected (before and after are the same)")
             return
         
         # Get the server from the database to make sure dynamic VC creation is enabled

@@ -478,7 +478,8 @@ class zRaceInfoButtonView(nextcord.ui.View):
             # Check if the user has already submitted, if so they can edit that submission only for 4 hours after the intial submission
             submission = get_race_submission(interaction.user.id, self.race_id)
             if submission is not None:
-                delta = datetime.now() - submission.submit_datetime
+                ts = datetime.fromisoformat(submission.submit_datetime) if type(submission.submit_datetime) is str else submission.submit_datetime
+                delta = datetime.now() - ts
                 edit_time_limit = timedelta(minutes=2) if bot_config.TEST_MODE else timedelta(hours=4)
                 if delta > edit_time_limit:
                     await send_message(interaction, "It is past the window to edit your submission. Please contact a moderator if you need to make changes.")
@@ -493,7 +494,8 @@ class zRaceInfoButtonView(nextcord.ui.View):
             
                 # The racer has 4 hours from getting the seed to submit a time. This limit can be made configurable in a future update if needed
                 if roster.seed_time is not None:
-                    delta = datetime.now() - roster.seed_time
+                    ts = datetime.fromisoformat(roster.seed_time) if type(roster.seed_time) is str else roster.seed_time
+                    delta = datetime.now() - ts
                     submit_time_limit = timedelta(minutes=2) if bot_config.TEST_MODE else timedelta(hours=4)
                     # If we are outside that window let the racer know
                     if delta > submit_time_limit:
@@ -1772,10 +1774,17 @@ async def race_validate_submission(interaction, race):
         for s in submissions:
             user = await get_user_from_interaction(interaction, s.user_id)
             user_name = get_user_name_str(s.user_id, user)
-            select_list.append(nextcord.SelectOption(label=f"{user_name} - {s.finish_time}", value=s.id, description=f"{user_name} - {s.finish_time}"))
+            r = get_race_assignment(s.user_id, race.id)
+            emoji = QuestionEmoji
+            if r is not None:
+                if r.validation_status == ValidationStatus.Verified:
+                    emoji = ConfirmEmoji
+                elif r.validation_status == ValidationStatus.Rejected:
+                    emoji = CrossMarkEmoji
+            select_list.append(nextcord.SelectOption(label=f"{emoji} {user_name} - {s.finish_time}", value=s.id, description=f"{user_name} - {s.finish_time}"))
     
         # Prompt the user to select a submission
-        submission_id = await zSingleSelectView(select_list, on_select_edit_submission, "Choose Submission To Edit..", payload=race.id).prompt()
+        submission_id = await zSingleSelectView(select_list, None, "Choose Submission To Edit..").prompt(interaction)
 
         if submission_id == 0:
             await send_message(interaction, "Cancelled")
@@ -1784,7 +1793,7 @@ async def race_validate_submission(interaction, race):
         # Get the submission
         submission = get_race_submission_by_id(submission_id)
         if submission is None:
-            await send_message(interaction, "**ERROR* Submission not found. Contact a bot admin.")
+            await send_message(interaction, f"**ERROR** Submission {submission_id} not found. Contact a bot admin.")
             return
         
         # Get the roster entry (if it exists) to get the seed access time
@@ -1792,10 +1801,12 @@ async def race_validate_submission(interaction, race):
         seed_access_time = None if roster is None else roster.seed_time
 
         # Get validation status
-        validation_status = get_validation_status(submission.id)
+        validation_status = roster.validation_status
         
         # Build an embed with the submission info
-        user_name = get_user_name_str(submission.user_id)
+        server = get_server_from_interaction(interaction)
+        user = await server.fetch_member(submission.user_id)
+        user_name = get_user_name_str(submission.user_id, user)
         embed = nextcord.Embed(color=nextcord.Colour.random(), title=f"Validate Submission", description=ValidateSubmissionEmbedDescription)
         embed.add_field(name=f"Racer Name", value=user_name, inline=False)
         embed.add_field(name=f"Validation Status", value=get_validation_status_str(validation_status), inline=False)
@@ -1806,7 +1817,7 @@ async def race_validate_submission(interaction, race):
             embed.add_field(name=k, value=v, inline=False)
 
         # Send the embed to the user along with some buttons to choose the validation status
-        validation_selection = zConfirmThreeOptionMenu(msg="", embed=embed).prompt()
+        validation_selection = await zConfirmThreeOptionMenu(msg="", embed=embed).prompt(interaction)
 
         # Update the validation status based on the user selection
         if validation_selection is None:
@@ -1815,6 +1826,10 @@ async def race_validate_submission(interaction, race):
             validation_status = ValidationStatus.Verified
         else:
             validation_status = ValidationStatus.Rejected
+
+        roster.validation_status = validation_status
+        roster.save()
+        await send_message(interaction, f"Submission marked as {ValidationStatus.to_str(validation_status)}")
 
     else:
         await send_message(interaction, "No submissions found for this race")

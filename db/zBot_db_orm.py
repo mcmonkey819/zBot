@@ -60,6 +60,7 @@ class AsyncRaceRoster(Model):
     race_id                 = ForeignKeyField(AsyncRace, backref='rosters')
     user_id                 = IntegerField()
     seed_time               = DateTimeField(null=True)
+    validation_status       = IntegerField()
 
     class Meta:
         table_name = 'async_race_rosters'
