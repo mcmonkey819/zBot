@@ -288,7 +288,7 @@ class zRaceListPageSource(menus.ListPageSource):
 
     def format_page(self, menu, races):
         random.shuffle(self.race_emojis)
-        menu.update_buttons(races, self.race_emojis)
+        menu.update_buttons(races)
 
         embed = nextcord.Embed(color=nextcord.Colour.random(), title=self.title, description=self.body_text)
         
@@ -356,7 +356,7 @@ class zCategoryListPageSource(menus.ListPageSource):
     
     def format_page(self, menu, categories):
         random.shuffle(self.category_emojis)
-        menu.update_buttons(categories, self.category_emojis)
+        menu.update_buttons(categories)
 
         embed = nextcord.Embed(color=nextcord.Colour.random(), title="Category List", description=f"Active Categories")
         for i, c in enumerate(categories):
@@ -1704,6 +1704,8 @@ async def prompt_for_assign_list(interaction):
     
 ########################################################################################################################
 async def race_edit_submission(interaction, race):
+    await defer(interaction)
+    
     if race.state == RaceState.Inactive:
         await send_message(interaction, "Cannot create submissions for an Inactive race.")
         return
@@ -1716,8 +1718,11 @@ async def race_edit_submission(interaction, race):
                    nextcord.SelectOption(label="Cancel...", value=0, description="Cancel the operation")]
     if submissions is not None:
         for s in submissions:
-            user = await get_user_from_interaction(interaction, s.user_id)
-            user_name = get_user_name_str(s.user_id, user)
+            try:
+                user = await get_user_from_interaction(interaction, s.user_id)
+                user_name = get_user_name_str(s.user_id, user)
+            except:
+                user_name = "Unknown"
             select_list.append(nextcord.SelectOption(label=f"{user_name} - {s.finish_time}", value=s.id, description=f"{user_name} - {s.finish_time}"))
     
     # Prompt the user to select a submission
@@ -1784,7 +1789,7 @@ async def race_validate_submission(interaction, race):
             select_list.append(nextcord.SelectOption(label=f"{emoji} {user_name} - {s.finish_time}", value=s.id, description=f"{user_name} - {s.finish_time}"))
     
         # Prompt the user to select a submission
-        submission_id = await zSingleSelectView(select_list, None, "Choose Submission To Edit..").prompt(interaction)
+        submission_id = await zSingleSelectView(select_list, None, "Choose Submission To Validate..").prompt(interaction)
 
         if submission_id == 0:
             await send_message(interaction, "Cancelled")

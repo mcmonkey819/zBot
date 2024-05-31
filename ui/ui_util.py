@@ -544,13 +544,13 @@ class zModal(nextcord.ui.Modal):
 # zSingleSelect will display the first 24 and a "Show More..." entry which, if selected, will create and show
 # another zSingleSelct with single_select[24:] slice of the list
 class zSingleSelect(nextcord.ui.Select):
-    def __init__(self, select_list: SelectList, submit_handler, placeholder, payload):
+    def __init__(self, select_list: SelectList, submit_handler, placeholder, payload, show_more_id=-1):
         self.timeout = None
         self.payload = payload
         if len(select_list) > 25:
             self.orig_placeholder = placeholder
             self.orig_select_list = select_list
-            self.show_more_id = -1
+            self.show_more_id = -9999
             option_list = select_list[:24]
             option_list.append(nextcord.SelectOption(
                 label="Show More...",
