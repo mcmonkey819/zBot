@@ -2033,6 +2033,9 @@ async def racer_info_show_open_races(interaction, payload):
 async def racer_info_show_assigned_races(interaction, payload):
     # Get the list of assigned races
     races = get_assigned_races(interaction.user.id, interaction.guild_id, states=[RaceState.Active])
+    user_name = get_user_name_str(interaction.user.id, interaction.user)
+    race_id_list = [r.id for r in races]
+    logging.info(f"User {user_name} used show assigned, got race list {race_id_list}")
 
     if races is None or len(races) == 0:
         await send_message(interaction, "You currently have no assigned races.")
