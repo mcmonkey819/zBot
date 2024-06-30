@@ -19,6 +19,19 @@ class AsyncRaceServer(Model):
         table_name = 'async_race_servers'
         database = db
 
+class AsyncRaceExtraInfoType(Model):
+    id                      = IntegerField(primary_key= True)
+    # If server_id is None, info type can be used anywhere
+    server_id               = IntegerField(null=True)
+    name                    = CharField()
+    description             = CharField()
+    var_type                = IntegerField()
+    default_value           = CharField(null=True)
+
+    class Meta:
+        table_name = 'async_race_extra_info_types'
+        database = db
+
 class AsyncRaceCategory(Model):
     id                       = IntegerField(primary_key=True)
     server_id                = ForeignKeyField(AsyncRaceServer, backref='categories')
@@ -50,6 +63,8 @@ class AsyncRace(Model):
     category_id             = ForeignKeyField(AsyncRaceCategory, backref='races')
     submission_role         = IntegerField(null=True)
     state                   = IntegerField()
+    is_team_race            = BooleanField(default=False)
+    team_name_info_id       = ForeignKeyField(AsyncRaceExtraInfoType, backref='team_name_info_id', null=True)
 
     class Meta:
         table_name = 'async_races'
@@ -74,6 +89,7 @@ class AsyncRaceSubmission(Model):
     finish_time             = CharField()
     comment                 = CharField(null=True)
     points                  = FloatField(null=True)
+    teammate_id             = IntegerField(null=True)
 
     class Meta:
         table_name = 'async_submissions'
@@ -90,19 +106,6 @@ class AsyncRaceMessage(Model):
 
     class Meta:
         table_name = 'async_race_messages'
-        database = db
-
-class AsyncRaceExtraInfoType(Model):
-    id                      = IntegerField(primary_key= True)
-    # If server_id is None, info type can be used anywhere
-    server_id               = IntegerField(null=True)
-    name                    = CharField()
-    description             = CharField()
-    var_type                = IntegerField()
-    default_value           = CharField(null=True)
-
-    class Meta:
-        table_name = 'async_race_extra_info_types'
         database = db
 
 class AsyncRaceExtraInfo(Model):

@@ -843,7 +843,7 @@ def score_par_time_race(race):
     last_finish_idx = 0
     for i, s in enumerate(submissions):
         # Anything longer than 4 hours we treat as the same as a DNF
-        if finish_time_seconds_to_str(s.finish_time) > finish_time_seconds_to_str("4:00:00"):
+        if finish_time_to_seconds(s.finish_time) > (4*60*60):
             last_finish_idx = i - 1
             break
     

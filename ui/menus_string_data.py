@@ -7,6 +7,7 @@ NextPageEmoji = '⬇️'
 PreviousPageEmoji = '⬆️'
 
 LeaderboardEmoji = '🥇'
+TrophyEmoji = '🏆'
 EditEmoji = '✏️'
 DeleteEmoji = '🗑️'
 CrossMarkEmoji = '❌'
@@ -228,3 +229,4 @@ toggle_category_mod_view_leaderboard_id = 'toggle_category_mod_view_leaderboard_
 category_ping_assigned_id = "category_ping_assigned"
 remove_category_leaderboard_id = "remove_category_leaderboard"
 remove_race_leaderboard_id = "remove_race_leaderboard"
+toggle_is_team_race_id = "toggle_is_team_race"

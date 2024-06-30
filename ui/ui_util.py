@@ -368,10 +368,9 @@ def get_submission_details_dict(submission):
     return details
 
 ########################################################################################################################
-async def get_race_leaderboard_embed(title, body_text, submissions, current_page, per_page, bot_client):
+async def get_race_leaderboard_embed(title, body_text, submissions, current_page, per_page, bot_client, show_details = True):
     embed = nextcord.Embed(color=nextcord.Colour.random(), title=title, description=body_text)
         
-    show_details = True
     for i, s in enumerate(submissions):
         place_num = (current_page * per_page) + i + 1
         user = await bot_client.fetch_user(s.user_id)
@@ -391,6 +390,28 @@ async def get_race_leaderboard_embed(title, body_text, submissions, current_page
         embed.add_field(name=f"{get_place_str(place_num)}", value=value_text, inline=False)
 
     return embed
+
+########################################################################################################################
+class TeamSubmissionData:
+    def __init__(self, team_name, user_names, team_finish_time, finish_times):
+        self.team_name = team_name
+        self.team_finish_time = team_finish_time
+        self.user_names = user_names
+        self.finish_times = finish_times
+
+def get_team_race_leaderboard_embed(title, body_text, team_submissions: list[TeamSubmissionData], current_page, per_page, bot_client, show_details = True):
+    embed = nextcord.Embed(color=nextcord.Colour.random(), title=title, description=body_text)
+
+    for i, s in enumerate(team_submissions):
+        place_num = (current_page * per_page) + i + 1
+        value_text = f"{s.team_finish_time} - {s.team_name}"
+        if show_details:
+            for i, u in enumerate(s.user_names):
+                value_text += f"\n--: {u} - {s.finish_times[i]}"
+        embed.add_field(name=f"{get_place_str(place_num)}", value=value_text, inline=False)
+
+    return embed
+
 
 ########################################################################################################################
 def format_points_str(points) -> str:

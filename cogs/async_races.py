@@ -171,61 +171,32 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     @async_admin.subcommand(description="Generate custom report")
     async def custom_report(
         self,
-        interaction):
+        interaction,
+        type: int):
 
         server = get_server_from_interaction(interaction)
-        #role_id = await prompt_for_role(interaction)
-        role_id = 1230196277279719445
-        role = interaction.guild.get_role(role_id)
-
         report_name = "custom_report.csv"
         f = open(report_name, "w", encoding="utf-8")
 
-        column_headings = '"username", "user_id", "Race ID", "Finish Time", "Comment", "CR", "VoD"\n'
-        f.write(column_headings)
-        no_race_doods = ""
-        
-        by_race_id = False
-        if by_race_id:
-            racers = []
-            for race_id in [367, 368, 369, 370, 371]:
-                submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id)
-                for s in submissions:
-                    logging.info(f"Handling Submission ID {s.id}")
-                    user = interaction.guild.get_member(s.user_id)
-                    username = get_user_name_str(user.id, user) if user is not None else "Unknown"
-                    user_data_str = f"{username}, {s.user_id},"
-                    line_str = user_data_str + f'{s.race_id}, {s.finish_time}, "{s.comment}",'
-                    try:
-                        db_cr = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 10)).get()
-                        cr = int(db_cr.data)
-                    except:
-                        cr = 0
-                    try:
-                        db_vod = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 11)).get()
-                        vod =  db_vod.data
-                    except:
-                        vod = "Forfeit"
-                    line_str += f"{cr}, {vod},"
-                    line_str += "\n"
-                    f.write(line_str)
-                    if s.id not in racers:
-                        racers.append(s.user_id)
-            for m in role.members:
-                if m.id not in racers:
-                    user = interaction.guild.get_member(m.id)
-                    username = get_user_name_str(m.id, user) if user is not None else "Unknown"
-                    f.write(f"{username}, {m.id},\n")
-        else:
-            for m in role.members:
-                username = get_user_name_str(m.id, m)
-                user_data_str = f"{username}, {m.id},"
-                submissions = AsyncRaceSubmission.select().where((AsyncRaceSubmission.race_id == 367) | (AsyncRaceSubmission.race_id == 368) | (AsyncRaceSubmission.race_id == 369) | (AsyncRaceSubmission.race_id == 370) | (AsyncRaceSubmission.race_id == 371))
-                submissions = list(filter(lambda s: s.user_id == m.id, submissions))
-                logging.info(f"Processing {len(submissions)} total submissions")
-                if submissions is not None and len(submissions) > 0:
+        if type == 1:
+            #role_id = await prompt_for_role(interaction)
+            role_id = 1230196277279719445
+            role = interaction.guild.get_role(role_id)
+
+            column_headings = '"username", "user_id", "Race ID", "Finish Time", "Comment", "CR", "VoD"\n'
+            f.write(column_headings)
+            no_race_doods = ""
+            
+            by_race_id = False
+            if by_race_id:
+                racers = []
+                for race_id in [367, 368, 369, 370, 371]:
+                    submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id)
                     for s in submissions:
                         logging.info(f"Handling Submission ID {s.id}")
+                        user = interaction.guild.get_member(s.user_id)
+                        username = get_user_name_str(user.id, user) if user is not None else "Unknown"
+                        user_data_str = f"{username}, {s.user_id},"
                         line_str = user_data_str + f'{s.race_id}, {s.finish_time}, "{s.comment}",'
                         try:
                             db_cr = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 10)).get()
@@ -240,11 +211,69 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                         line_str += f"{cr}, {vod},"
                         line_str += "\n"
                         f.write(line_str)
-                else:
-                    no_race_doods += user_data_str + "\n"
-            f.write(no_race_doods)
+                        if s.id not in racers:
+                            racers.append(s.user_id)
+                for m in role.members:
+                    if m.id not in racers:
+                        user = interaction.guild.get_member(m.id)
+                        username = get_user_name_str(m.id, user) if user is not None else "Unknown"
+                        f.write(f"{username}, {m.id},\n")
+            else:
+                for m in role.members:
+                    username = get_user_name_str(m.id, m)
+                    user_data_str = f"{username}, {m.id},"
+                    submissions = AsyncRaceSubmission.select().where((AsyncRaceSubmission.race_id == 367) | (AsyncRaceSubmission.race_id == 368) | (AsyncRaceSubmission.race_id == 369) | (AsyncRaceSubmission.race_id == 370) | (AsyncRaceSubmission.race_id == 371))
+                    submissions = list(filter(lambda s: s.user_id == m.id, submissions))
+                    logging.info(f"Processing {len(submissions)} total submissions")
+                    if submissions is not None and len(submissions) > 0:
+                        for s in submissions:
+                            logging.info(f"Handling Submission ID {s.id}")
+                            line_str = user_data_str + f'{s.race_id}, {s.finish_time}, "{s.comment}",'
+                            try:
+                                db_cr = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 10)).get()
+                                cr = int(db_cr.data)
+                            except:
+                                cr = 0
+                            try:
+                                db_vod = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 11)).get()
+                                vod =  db_vod.data
+                            except:
+                                vod = "Forfeit"
+                            line_str += f"{cr}, {vod},"
+                            line_str += "\n"
+                            f.write(line_str)
+                    else:
+                        no_race_doods += user_data_str + "\n"
+                f.write(no_race_doods)
+            
+        elif type == 2:
+            f.write("Race ID, Place, Racer Name, Finish Time, Par Time, Points, CR, VoD, Comment  \n")
+            for race_id in [367, 368, 369, 370, 371]:
+                f.write(",,,,,,\n")
+                submissions = get_sorted_race_submissions(race_id)
+                par_time_seconds = calculate_par_time(submissions)
+                par_time_str = finish_time_seconds_to_str(int(par_time_seconds))
+                for s in submissions:
+                    user = interaction.guild.get_member(s.user_id)
+                    username = get_user_name_str(s.user_id, user) if user is not None else "Unknown"
+                    points = (2.0 - (float(finish_time_to_seconds(s.finish_time) / par_time_seconds))) * 100.0
+                    if points > 105.0:
+                        points = 105.0
+                    logging.info(f"Submission ID: {s.id} - {points}")
+                    try:
+                        db_cr = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 10)).get()
+                        cr = int(db_cr.data)
+                    except:
+                        cr = 0
+                    try:
+                        db_vod = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 11)).get()
+                        vod =  db_vod.data
+                    except:
+                        vod = "Forfeit"
+                    f.write(f"{race_id}, , {username}, {s.finish_time}, {par_time_str}, {points}, {cr}, {vod}, {s.comment}\n")
         f.close()
         await send_message(interaction, "Done!")
+
 
 def setup(bot):
     bot.add_cog(AsyncRaces(bot))

@@ -1,14 +1,19 @@
 General Stuff
 -------------------------------------------------------
+[ ] - Debug announcement message failing
+[ ] - When "Team Name" is an extra info field include team leaderboard button
+[ ] - Implement team leaderboard
+    [ ] - Get list of team names in submissions (with fuzzy matching)
+    [ ] - For each team, average the time of all team members and add to leaderboard list
+    [ ] - Function to display team leaderboard
+
+
 [ ] - Rework VC creation to ignore any channels not marked as permanent or dynamically created (to avoid problem when channels are created I can't see as in GMP "Moderators")
 [ ] - Test scheduling something with an interaction that takes 24 hours
     [ ] - Test schedule race state update
     [ ] - Finish schedule state change (CMC TODO)
     [ ] - Need to deal with everything needing an interaction
-[X] - Lockout editing after 4 hours
-[ ] - Configurable time limit from seed access to submit
-    [ ] - Add category config button
-    [ ] - Check limit on submit and race completion. DNF if limit has elapsed
+[ ] - Handle extra info select with no items
     
 Testing
 -------------------------------------

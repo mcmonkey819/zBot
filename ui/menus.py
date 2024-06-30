@@ -410,16 +410,20 @@ class zCategoryListMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     
 ########################################################################################################################
 class zRaceLeaderboardPageSource(menus.ListPageSource):
-    def __init__(self, submission_list, server_id, bot_client, *, per_page: int=10, title=None, body_text=None) -> None:
+    def __init__(self, submission_list, server_id, bot_client, *, is_team_race = False, per_page: int=10, title=None, body_text=None) -> None:
         self.server_id = server_id
         self.bot_client = bot_client
         self.title = title
         self.body_text = body_text
+        self.is_team_race = is_team_race
 
         super().__init__(entries=submission_list, per_page=per_page)
 
     async def format_page(self, menu, submissions):
-        return await get_race_leaderboard_embed(self.title, self.body_text, submissions, menu.current_page, self.per_page, self.bot_client)
+        if self.is_team_race:
+            return get_team_race_leaderboard_embed(self.title, self.body_text, submissions, menu.current_page, self.per_page, self.bot_client)
+        else:
+            return await get_race_leaderboard_embed(self.title, self.body_text, submissions, menu.current_page, self.per_page, self.bot_client)
 
 class zRaceLeaderboardMenuPages(menus.ButtonMenuPages, inherit_buttons=False):
     def __init__(self, source: zRaceLeaderboardPageSource, *, style=ButtonStyle.secondary, timeout=None) -> None:
@@ -464,6 +468,15 @@ class zRaceInfoButtonView(nextcord.ui.View):
     def __init__(self, race_id):
         super().__init__(timeout=None)
         self.race_id = race_id
+        race = get_race(self.race_id)
+        self.is_team_race = False
+        if race is not None and race.is_team_race:
+            self.is_team_race = True
+            self.team_leaderboard_button = zButton(MenuItem(TrophyEmoji, show_team_leaderboard, "show_team_leaderboard", "Show Team Leaderboard", "View the team leaderboard"), 
+                                                   self.race_id,
+                                                   style=nextcord.ButtonStyle.grey)
+
+            self.add_item(self.team_leaderboard_button)
 
     async def check_can_submit(self, interaction):
         race = get_race(self.race_id)
@@ -540,10 +553,12 @@ class zRaceInfoButtonView(nextcord.ui.View):
         else:
             await send_message(interaction, "You must submit a time, forfeit or wait for the race to be completed to view the leaderboard")
 
-    def add_static_embed_fields(embed: nextcord.Embed):
+    def add_static_embed_fields(embed: nextcord.Embed, is_team_race=False):
         embed.add_field(name=f"{TimeEmoji} - Submit/Edit Time", value="Submit a time for this race or edit an already submitted time.", inline=False)
         embed.add_field(name=f"{ForfeitEmoji} - Forfeit", value="Forfeit from this race. Will submit a max time on your behalf and unlock the leaderboard.", inline=False)
         embed.add_field(name=f"{LeaderboardEmoji} - View Leaderboard", value="View the leaderboard for this race.", inline=False)
+        if is_team_race:
+            embed.add_field(name=f"{TrophyEmoji} - Show Team Leaderboard", value="View the team leaderboard.", inline=False)
 
 ########################################################################################################################
 # View which contains category info and buttons
@@ -665,7 +680,23 @@ class zRaceSubmitHandler():
                     if not success:
                         return
         
+        
+        if self.race.is_team_race:
+            # Prompt the user to select their teammate
+            teammate = await prompt_for_user(interaction, "Select your teammate")
+
+            # Check if the teammate has already submitted a time, and if so make sure they chose this user as their teammate
+            teammate_submission = get_race_submission(teammate.id, self.race.id)
+            if teammate_submission is not None and teammate_submission.teammate_id != self.submission.user.id:
+                await send_message(interaction, "**ERROR** Teammate has already submitted a time and selected a different teammate, make the correct teammate is selected")
+                # If this is a self submission we'll error out, but if it's a moderator edit we'll allow it to proceed in order to be able to untangle messes
+                if self.user_id is None:
+                    return
+
+            self.submission.teammate_id = teammate.id
+        
         self.submission.save()
+
         await send_message(interaction, "Race Submission Saved")
 
         await do_post_submit_actions(interaction, self.race, self.submission.user_id)
@@ -1315,6 +1346,37 @@ async def category_set_thumbnail(interaction, category):
         await send_message(interaction, "Invalid URL")
 
 ########################################################################################################################
+def get_leaderboard_type_button_style(leaderboard_type) -> nextcord.ButtonStyle:
+    if leaderboard_type == RaceLeaderboardType.RecentRace:
+        return nextcord.ButtonStyle.green
+    else:
+        return nextcord.ButtonStyle.blurple
+    
+########################################################################################################################
+def required_field_button_style(required) -> nextcord.ButtonStyle:
+    return nextcord.ButtonStyle.red if required else nextcord.ButtonStyle.grey
+
+########################################################################################################################
+def required_field_to_str(required) -> str:
+    return "Required" if required else "Optional"
+
+########################################################################################################################
+def active_field_button_style(active) -> nextcord.ButtonStyle:
+    return nextcord.ButtonStyle.green if active else nextcord.ButtonStyle.grey
+
+########################################################################################################################
+def active_field_to_str(active) -> str:
+    return "Active" if active else "Inactive"
+
+########################################################################################################################
+def bool_field_button_style(active) -> nextcord.ButtonStyle:
+    return nextcord.ButtonStyle.green if active else nextcord.ButtonStyle.grey
+
+########################################################################################################################
+def bool_field_to_str(bool_val) -> str:
+    return "True" if bool_val else "False"
+
+########################################################################################################################
 async def category_misc_toggles(interaction, category):
     # Build the list of toggle fields
     toggle_list = []
@@ -1884,6 +1946,7 @@ async def race_misc_toggles(interaction, race):
     toggle_list = []
     toggle_list.append(get_delete_race_field(race))
     toggle_list.append(get_remove_race_leaderboard_field(race))
+    toggle_list.append(get_is_team_race_field(race))
     
     # Get extra info assignments for this category
     extra_infos = get_race_extra_info_assignments(race.id)
@@ -1920,6 +1983,17 @@ def get_remove_race_leaderboard_field(race):
                                value="Button will remove any leaderboard channel assignment and delete leaderboard messages.",
                                inline=False))
         
+########################################################################################################################
+def get_is_team_race_field(race):
+    return ToggleField(
+        toggle_func=race_toggle_is_team_race,
+        payload=race,
+        button_style=bool_field_button_style(race.is_team_race),
+        custom_id=toggle_is_team_race_id,
+        emoji=TrophyEmoji,
+        embed_field=EmbedField(name=f"{TrophyEmoji} - Is Team Race",
+                               value=bool_field_to_str(race.is_team_race),
+                               inline=False))
 
 ########################################################################################################################
 async def create_edit_extra_info(interaction, payload):
@@ -2169,6 +2243,11 @@ async def prompt_for_channel(interaction, placeholder="Choose Channel..."):
         return None
     else:
         return interaction.guild.get_channel(selected_channel_id)
+    
+########################################################################################################################
+async def prompt_for_user(interaction, placeholder="Choose User..."):
+    selected_user = await zUserSelectView(None, placeholder=placeholder).prompt(interaction)
+    return selected_user
 
 ########################################################################################################################
 async def show_race_details(interaction, race_id):
@@ -2189,7 +2268,7 @@ async def show_race_details(interaction, race_id):
                 return
 
     seed_embed = get_race_info_message(race)
-    zRaceInfoButtonView.add_static_embed_fields(seed_embed)
+    zRaceInfoButtonView.add_static_embed_fields(seed_embed, race.is_team_race)
     await send_message(interaction, view=zRaceInfoButtonView(race.id), embed=seed_embed)
 
 ########################################################################################################################
@@ -2359,6 +2438,80 @@ async def post_channel_race_leaderboard(interaction, channel, race_id, bot_clien
             save_message(interaction.guild_id, channel.id, msg.id, race_id=race_id)
 
 ########################################################################################################################
+async def show_team_leaderboard(interaction, race_id):
+    submissions = get_sorted_race_submissions(race_id)
+    race = get_race(race_id)
+
+    sub_ids = {}
+    team_submissions = []
+    for s in submissions:
+        # If we've already handlled this submission, skip it
+        if s.id in sub_ids:
+            continue
+
+        # Find the matching submission from teammate
+        teammate_submission = None
+        sub_ids[s.id] = True
+        if s.teammate_id is not None:
+            for t in submissions:
+                if t.id not in sub_ids and t.user_id == s.teammate_id:
+                    teammate_submission = t
+                    if teammate_submission.teammate_id != s.user_id:
+                        logging.info(f"**ERROR** Teammate ID mismatch for submission {s.id}")
+                        teammate_submission = None
+                    else:
+                        sub_ids[t.id] = True
+                    break
+                
+        # Get the team name, if it exists. Faster teammate gets to pick the team name
+        team_name = get_extra_info(s.id, race.team_name_info_id)
+        team_name_str = None
+        if team_name is None:
+            # But if the faster teammate doesn't specify a team name, check the teammate's submission for a valid name
+            team_name = get_extra_info(teammate_submission.id, race.team_name_info_id)
+            
+        if team_name is not None:
+            team_name_str = team_name.data
+            
+
+        total_finish_time_sec = 0
+        # Get the username strings
+        user_names = []
+        user_names.append(get_user_name_str(s.user_id, interaction.guild.get_member(s.user_id)))
+        if teammate_submission is not None:
+            user_names.append(get_user_name_str(teammate_submission.user_id, interaction.guild.get_member(teammate_submission.user_id)))
+        # If we still don't have a team name, just combine the usernames
+        if team_name_str is None:
+            logging.info(f"**ERROR** Team name not found for submission {s.id}")
+            team_name_str = f"Team {user_names[0]}"
+            if teammate_submission is not None:
+                team_name_str += f" & {user_names[1]}"
+        # Calculate the average finish time
+        if teammate_submission is not None:
+            total_finish_time_sec = finish_time_to_seconds(s.finish_time) + finish_time_to_seconds(teammate_submission.finish_time)
+            avg_finish_time_sec = int(total_finish_time_sec / 2)
+        else:
+            avg_finish_time_sec = finish_time_to_seconds(s.finish_time)
+
+        logging.info(f"Team: {team_name_str}, Avg Finish Time Seconds: {avg_finish_time_sec}")
+        avg_finish_time = finish_time_seconds_to_str(avg_finish_time_sec) 
+        
+        # Finally construct and add the team submission data object
+        team_submissions.append(TeamSubmissionData(team_name_str, user_names, avg_finish_time, [s.finish_time, teammate_submission.finish_time]))
+
+    # Sort the list by finish time
+    team_submissions.sort(key=lambda x: finish_time_to_seconds(x.team_finish_time))
+    
+    # Finally show the team leaderboard menu
+    menu = zRaceLeaderboardMenuPages(source=zRaceLeaderboardPageSource(team_submissions, 
+                                                                       interaction.guild_id,
+                                                                       interaction.client,
+                                                                       title=get_race_leaderboard_title(race_id),
+                                                                       body_text=get_race_leaderboard_description(race_id),
+                                                                       is_team_race=True))
+    await menu.start(interaction=interaction, ephemeral=True)
+
+########################################################################################################################
 async def race_edit_leaderboard_channel(interaction, race):
     await defer(interaction)
 
@@ -2450,37 +2603,6 @@ async def show_category_leaderboard(interaction, category_id):
         await menu.start(interaction=interaction, ephemeral=True)
 
 ########################################################################################################################
-def get_leaderboard_type_button_style(leaderboard_type) -> nextcord.ButtonStyle:
-    if leaderboard_type == RaceLeaderboardType.RecentRace:
-        return nextcord.ButtonStyle.green
-    else:
-        return nextcord.ButtonStyle.blurple
-    
-########################################################################################################################
-def required_field_button_style(required) -> nextcord.ButtonStyle:
-    return nextcord.ButtonStyle.red if required else nextcord.ButtonStyle.grey
-
-########################################################################################################################
-def required_field_to_str(required) -> str:
-    return "Required" if required else "Optional"
-
-########################################################################################################################
-def active_field_button_style(active) -> nextcord.ButtonStyle:
-    return nextcord.ButtonStyle.green if active else nextcord.ButtonStyle.grey
-
-########################################################################################################################
-def active_field_to_str(active) -> str:
-    return "Active" if active else "Inactive"
-
-########################################################################################################################
-def bool_field_button_style(active) -> nextcord.ButtonStyle:
-    return nextcord.ButtonStyle.green if active else nextcord.ButtonStyle.grey
-
-########################################################################################################################
-def bool_field_to_str(bool_val) -> str:
-    return "True" if bool_val else "False"
-
-########################################################################################################################
 async def toggle_category_leaderboard_type(interaction, payload):
     # The button payload is a tuple with the menu and ToggleField
     menu = payload[0]
@@ -2567,6 +2689,45 @@ async def race_remove_channel_leaderboard(interaction, payload):
 
     await send_message(interaction, f"Leaderboard channel removed for race {race.id}")
 
+########################################################################################################################
+async def race_toggle_is_team_race(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+    
+    # ToggleField payload is the race
+    race = toggle_field.payload
+
+    race.is_team_race = not race.is_team_race
+    select_list = []
+    if race.is_team_race:
+        # If the race is being toggled to a team race, prompt for the extra info type to use for team names
+        extra_infos = get_race_extra_info_assignments(race.id)
+        for a in extra_infos:
+            select_list.append(nextcord.SelectOption(label=a.info_type_id.name, value=a.info_type_id.id, description=a.info_type_id.description))
+
+        if len(select_list) == 0:
+            await send_message(interaction, "No extra info types assigned to this race, you must assign an extra info type to use for team names first.")
+            race.is_team_race = False
+    race.save()
+
+    # Update the button style
+    toggle_field.button_style = bool_field_button_style(race.is_team_race)
+
+    # Update the embed field value
+    toggle_field.embed_field.value = bool_field_to_str(race.is_team_race)
+
+    # Update the menu
+    await update_menu_embed_field(menu, toggle_field)
+
+    # If we've just set this as a team race, prompt for the extra info type to use for team names
+    if race.is_team_race:
+        team_name_info_id = await zSingleSelectView(select_list, None, "Select Team Name Field").prompt(interaction)
+        if team_name_info_id is not None:
+            race.team_name_info_id = team_name_info_id
+            race.save()
+            await send_message(interaction, f"Team Name Field {get_extra_info_type(team_name_info_id).name} saved")
+                                                 
 ########################################################################################################################
 async def toggle_required_extra_info(interaction, payload):
     # The button payload is a tuple with the menu and ToggleField
@@ -2827,7 +2988,7 @@ async def pin_race_info(channel_id, race, interaction):
 ####################################################################################################################
 async def post_race_info_message(race, channel, for_category=False):
     seed_embed = get_race_info_message(race)
-    zRaceInfoButtonView.add_static_embed_fields(seed_embed)
+    zRaceInfoButtonView.add_static_embed_fields(seed_embed, race.is_team_race)
     msg = await channel.send("", view=zRaceInfoButtonView(race.id), embed=seed_embed)
     category_id = None
     if for_category:
