@@ -687,7 +687,7 @@ class zRaceSubmitHandler():
 
             # Check if the teammate has already submitted a time, and if so make sure they chose this user as their teammate
             teammate_submission = get_race_submission(teammate.id, self.race.id)
-            if teammate_submission is not None and teammate_submission.teammate_id != self.submission.user.id:
+            if teammate_submission is not None and teammate_submission.teammate_id != self.submission.user_id:
                 await send_message(interaction, "**ERROR** Teammate has already submitted a time and selected a different teammate, make the correct teammate is selected")
                 # If this is a self submission we'll error out, but if it's a moderator edit we'll allow it to proceed in order to be able to untangle messes
                 if self.user_id is None:

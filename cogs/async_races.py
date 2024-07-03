@@ -88,7 +88,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 await send_message(interaction, "**ERROR** This server is not setup for use with this bot, please contact the bot owner")
                 return
 
-        if not user_is_admin(server, interaction.user):
+        if not user_is_admin(interaction.guild, interaction.user):
             await send_message(interaction, "Only Race Admins can use this command", ephemeral=True)
             return
 
@@ -114,7 +114,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         # Check if this server is in the DB and that the user is an admin
         server = self.get_server(interaction)
         if server is not None:
-            if not user_is_admin(server, interaction.user):
+            if not user_is_admin(interaction.guild, interaction.user):
                 await send_message(interaction, "Only Race Admins can use this command", ephemeral=True)
                 return
 
