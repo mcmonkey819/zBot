@@ -2497,7 +2497,7 @@ async def show_team_leaderboard(interaction, race_id):
         avg_finish_time = finish_time_seconds_to_str(avg_finish_time_sec) 
         
         # Finally construct and add the team submission data object
-        team_submissions.append(TeamSubmissionData(team_name_str, user_names, avg_finish_time, [s.finish_time, teammate_submission.finish_time]))
+        team_submissions.append(TeamSubmissionData(team_name_str, user_names, avg_finish_time, [s.finish_time, teammate_submission.finish_time if teammate_submission is not None else None]))
 
     # Sort the list by finish time
     team_submissions.sort(key=lambda x: finish_time_to_seconds(x.team_finish_time))
