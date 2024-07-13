@@ -2466,7 +2466,7 @@ async def show_team_leaderboard(interaction, race_id):
         # Get the team name, if it exists. Faster teammate gets to pick the team name
         team_name = get_extra_info(s.id, race.team_name_info_id)
         team_name_str = None
-        if team_name is None:
+        if team_name is None and teammate_submission is not None:
             # But if the faster teammate doesn't specify a team name, check the teammate's submission for a valid name
             team_name = get_extra_info(teammate_submission.id, race.team_name_info_id)
             
