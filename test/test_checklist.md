@@ -14,7 +14,10 @@ Pure functions with deterministic outputs and no external dependencies.
   - Test 1st, 2nd, 3rd, 11th, 12th, 13th, 21st, etc.
   - Edge case: 0 (error case)
   - *Requires: Basic pytest setup[1]*
-    - Fixed handling of larger teen numbers (e.g. 111th)
+  - **COMPLETED**: 26 tests passing, **1 critical bug fixed!**
+    - Fixed modulo logic for "teens" pattern (11th, 12th, 13th)
+    - Bug caused incorrect suffixes for 111th→"111st", 112th→"112nd", 113th→"113rd"
+    - Now correctly handles all numbers ending in 11/12/13 (e.g., 211th, 1011th)
 
 - [x] `format_points_str()` - `ui/ui_util.py:418` ✅
   - Test integer points (100.000 → "100")
@@ -51,26 +54,22 @@ Pure functions with deterministic outputs and no external dependencies.
 
 ### Validation Functions
 
-- [ ] `game_time_is_valid()` - `db/db_util.py` (referenced)
-  - Test valid formats: "1:23:45", "0:05:30"
-  - Test invalid formats: "invalid", "99:99:99"
-  - Edge cases: empty string, None
-
-- [ ] `datetime_is_valid()` - `db/db_util.py` (referenced)
-  - Test valid formats per docstring
-  - Test invalid formats
-  - *Requires: DB utility mocks[3]*
+- [ ] ~~`game_time_is_valid()` - `db/db_util.py`~~ **SKIPPED** (DB utility, low priority)
+- [ ] ~~`datetime_is_valid()` - `db/db_util.py`~~ **SKIPPED** (DB utility, low priority)
 
 ### Simple Data Transformation
 
-- [ ] `get_race_embed_field_value()` - `ui/ui_util.py:333`
+- [x] `get_race_embed_field_value()` - `ui/ui_util.py:344` ✅
   - Test with user_id provided (shows place)
   - Test without user_id (shows description)
   - Test with different submission counts
   - *Requires: Race model fixtures[4]*
-
-- [ ] `get_place_str()` edge cases verification - `ui/ui_util.py:145`
-  - Comprehensive edge case testing (110th, 111th, 112th, 113th, 114th)
+  - **COMPLETED**: 10 tests passing
+    - Created database fixtures in `test/test_utils/db_fixtures.py`
+    - Mock factories for Race, Category, Submission, ExtraInfo objects
+    - Tests use `@patch` decorator to mock database query functions
+    - Verified proper handling of user place display vs race description
+    - Unicode/emoji support verified in category names
 
 ---
 
@@ -422,17 +421,22 @@ pytest -v test/
 
 ## Progress Tracking
 
-- **Phase 1**: ✅ 4/11 tests implemented (36%)
+- **Phase 1**: ✅ 5/9 tests implemented (56%) - 2 items skipped
   - ✅ get_place_str (26 tests, 1 bug fixed)
   - ✅ format_points_str (11 tests)
   - ✅ build_response_message_list (13 tests, 2 bugs fixed, refactored to snake_case)
   - ✅ get_user_name_str (29 tests, Discord mock factory created, Unicode/emoji support verified)
+  - ✅ get_race_embed_field_value (10 tests, database fixtures created)
+  - ⏭️ game_time_is_valid (SKIPPED - DB utility)
+  - ⏭️ datetime_is_valid (SKIPPED - DB utility)
 - **Phase 2**: ☐ 0/24 tests implemented  
 - **Phase 3**: ☐ 0/21 tests implemented
-- **Total**: ✅ 4/56 tests implemented (7%)
-- **Total Tests Written**: 79 tests passing ✅
+- **Total**: ✅ 5/56 tests implemented (9%)
+- **Total Tests Written**: 89 tests passing ✅
 - **Bugs Found**: 3 bugs caught and fixed by tests! 🎯
-- **Test Infrastructure**: Discord mock factory created (`test/test_utils/discord_mocks.py`)
+- **Test Infrastructure Created**:
+  - Discord mock factory (`test/test_utils/discord_mocks.py`)
+  - Database fixtures (`test/test_utils/db_fixtures.py`)
 
-**Last Updated**: Unicode/emoji tests added to get_user_name_str (79 total tests)
+**Last Updated**: get_race_embed_field_value completed with DB fixtures (89 total tests)
 

@@ -4,8 +4,10 @@ Unit tests for UI utility formatting functions.
 Tests pure functions from ui/ui_util.py with no external dependencies.
 """
 import pytest
-from ui.ui_util import get_place_str, format_points_str, build_response_message_list, get_user_name_str
+from unittest.mock import patch, MagicMock
+from ui.ui_util import get_place_str, format_points_str, build_response_message_list, get_user_name_str, get_race_embed_field_value
 from test.test_utils.discord_mocks import create_mock_user
+from test.test_utils.db_fixtures import create_mock_race, create_mock_category
 
 
 @pytest.mark.unit
@@ -487,4 +489,201 @@ class TestGetUserNameStr:
         assert result == name
         # Verify the string isn't mangled
         assert len(result) > 0
+
+
+@pytest.mark.unit
+class TestGetRaceEmbedFieldValue:
+    """Tests for get_race_embed_field_value() function - ui/ui_util.py:344"""
+
+    @patch('ui.ui_util.get_num_submissions')
+    def test_without_user_id_shows_description(self, mock_get_num_submissions):
+        """Test that when no user_id is provided, the race description is shown."""
+        # Setup
+        mock_get_num_submissions.return_value = 5
+        category = create_mock_category(name="Test Category")
+        race = create_mock_race(race_id=1, category_id=category, description="Epic Race Description")
+        
+        # Execute
+        result = get_race_embed_field_value(race, user_id=None)
+        
+        # Verify
+        assert "**Category:**" in result
+        assert "Test Category" in result
+        assert "**Submissions:** 5" in result
+        assert "**Description:**" in result
+        assert "Epic Race Description" in result
+        # Should NOT contain place info
+        assert "**Place:**" not in result
+        
+        # Verify the mock was called correctly
+        mock_get_num_submissions.assert_called_once_with(1)
+
+    @patch('ui.ui_util.get_user_place')
+    @patch('ui.ui_util.get_num_submissions')
+    def test_with_user_id_shows_place(self, mock_get_num_submissions, mock_get_user_place):
+        """Test that when user_id is provided, the user's place is shown."""
+        # Setup
+        mock_get_num_submissions.return_value = 10
+        mock_get_user_place.return_value = 3  # User is in 3rd place
+        category = create_mock_category(name="Speedrun Category")
+        race = create_mock_race(race_id=2, category_id=category, description="Should not appear")
+        user_id = 123456789
+        
+        # Execute
+        result = get_race_embed_field_value(race, user_id=user_id)
+        
+        # Verify
+        assert "**Category:**" in result
+        assert "Speedrun Category" in result
+        assert "**Submissions:** 10" in result
+        assert "**Place:** 3rd" in result  # Should show ordinal place
+        # Should NOT contain description
+        assert "**Description:**" not in result
+        assert "Should not appear" not in result
+        
+        # Verify the mocks were called correctly
+        mock_get_num_submissions.assert_called_once_with(2)
+        mock_get_user_place.assert_called_once_with(2, user_id)
+
+    @patch('ui.ui_util.get_user_place')
+    @patch('ui.ui_util.get_num_submissions')
+    def test_with_user_id_but_no_place(self, mock_get_num_submissions, mock_get_user_place):
+        """Test when user_id is provided but user has no place (no submission yet)."""
+        # Setup
+        mock_get_num_submissions.return_value = 5
+        mock_get_user_place.return_value = None  # User hasn't submitted
+        category = create_mock_category(name="Test Category")
+        race = create_mock_race(race_id=3, category_id=category)
+        user_id = 999888777
+        
+        # Execute
+        result = get_race_embed_field_value(race, user_id=user_id)
+        
+        # Verify
+        assert "**Category:**" in result
+        assert "**Submissions:** 5" in result
+        # Should NOT show place if user hasn't submitted
+        assert "**Place:**" not in result
+
+    @patch('ui.ui_util.get_num_submissions')
+    def test_with_zero_submissions(self, mock_get_num_submissions):
+        """Test field value when race has no submissions yet."""
+        # Setup
+        mock_get_num_submissions.return_value = 0
+        category = create_mock_category(name="New Category")
+        race = create_mock_race(race_id=4, category_id=category, description="Brand new race")
+        
+        # Execute
+        result = get_race_embed_field_value(race, user_id=None)
+        
+        # Verify
+        assert "**Submissions:** 0" in result
+        assert "New Category" in result
+        assert "Brand new race" in result
+
+    @patch('ui.ui_util.get_user_place')
+    @patch('ui.ui_util.get_num_submissions')
+    def test_first_place_user(self, mock_get_num_submissions, mock_get_user_place):
+        """Test displaying 1st place for a user."""
+        # Setup
+        mock_get_num_submissions.return_value = 20
+        mock_get_user_place.return_value = 1
+        category = create_mock_category(name="Competitive Category")
+        race = create_mock_race(race_id=5, category_id=category)
+        
+        # Execute
+        result = get_race_embed_field_value(race, user_id=123)
+        
+        # Verify
+        assert "**Place:** 1st" in result
+        assert "**Submissions:** 20" in result
+
+    @patch('ui.ui_util.get_user_place')
+    @patch('ui.ui_util.get_num_submissions')
+    def test_various_user_places(self, mock_get_num_submissions, mock_get_user_place):
+        """Test that place ordinals are formatted correctly for various positions."""
+        mock_get_num_submissions.return_value = 100
+        category = create_mock_category(name="Big Race")
+        race = create_mock_race(race_id=6, category_id=category)
+        
+        # Test various places
+        test_cases = [
+            (1, "1st"),
+            (2, "2nd"),
+            (3, "3rd"),
+            (11, "11th"),
+            (21, "21st"),
+            (42, "42nd"),
+        ]
+        
+        for place, expected_str in test_cases:
+            mock_get_user_place.return_value = place
+            result = get_race_embed_field_value(race, user_id=999)
+            assert f"**Place:** {expected_str}" in result
+
+    @patch('ui.ui_util.get_num_submissions')
+    def test_multiline_description_preserved(self, mock_get_num_submissions):
+        """Test that multiline descriptions are preserved in the output."""
+        # Setup
+        mock_get_num_submissions.return_value = 3
+        category = create_mock_category(name="Test Category")
+        multiline_desc = "Line 1 of description\nLine 2 of description\nLine 3 of description"
+        race = create_mock_race(race_id=7, category_id=category, description=multiline_desc)
+        
+        # Execute
+        result = get_race_embed_field_value(race, user_id=None)
+        
+        # Verify
+        assert "Line 1 of description" in result
+        assert "Line 2 of description" in result
+        assert "Line 3 of description" in result
+        # Newlines should be preserved
+        assert "\n" in result
+
+    @patch('ui.ui_util.get_num_submissions')
+    def test_category_name_with_emoji(self, mock_get_num_submissions):
+        """Test that emoji in category names are handled correctly."""
+        # Setup
+        mock_get_num_submissions.return_value = 8
+        category = create_mock_category(name="🏆 Championship 🏆")
+        race = create_mock_race(race_id=8, category_id=category, description="Test race")
+        
+        # Execute
+        result = get_race_embed_field_value(race, user_id=None)
+        
+        # Verify
+        assert "🏆 Championship 🏆" in result
+        assert "**Category:**" in result
+
+    @patch('ui.ui_util.get_num_submissions')
+    def test_large_submission_count(self, mock_get_num_submissions):
+        """Test handling of large submission counts."""
+        # Setup
+        mock_get_num_submissions.return_value = 9999
+        category = create_mock_category(name="Popular Category")
+        race = create_mock_race(race_id=9, category_id=category)
+        
+        # Execute
+        result = get_race_embed_field_value(race, user_id=None)
+        
+        # Verify
+        assert "**Submissions:** 9999" in result
+
+    @patch('ui.ui_util.get_user_place')
+    @patch('ui.ui_util.get_num_submissions')
+    def test_format_structure(self, mock_get_num_submissions, mock_get_user_place):
+        """Test the overall format structure of the field value."""
+        # Test without user_id
+        mock_get_num_submissions.return_value = 5
+        category = create_mock_category(name="Test Cat")
+        race = create_mock_race(race_id=10, category_id=category, description="Test Desc")
+        
+        result = get_race_embed_field_value(race, user_id=None)
+        
+        # Verify structure order
+        category_pos = result.find("**Category:**")
+        submissions_pos = result.find("**Submissions:**")
+        description_pos = result.find("**Description:**")
+        
+        assert category_pos < submissions_pos < description_pos
 
