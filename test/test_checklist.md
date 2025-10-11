@@ -79,21 +79,42 @@ Functions with business logic requiring mocked Discord objects or database model
 
 ### Permission & Access Control (HIGH PRIORITY)
 
-- [ ] `user_has_role()` - `ui/ui_util.py:39`
+- [x] `user_has_role()` - `ui/ui_util.py:39` ✅
   - Test user with specified role
   - Test user without role
   - *Requires: Server/Role mock factory[2]*
+  - **COMPLETED**: 11 tests passing
+    - Tests cover role presence/absence scenarios
+    - Edge cases: role not found on server, user with no roles
+    - Verified role check uses ID not name (important security check!)
+    - Multiple users with same role verified
+    - Emoji in role names handled correctly
 
-- [ ] `user_is_admin()` - `ui/ui_util.py:45`
+- [x] `user_is_admin()` - `ui/ui_util.py:45` ✅
   - Test bot owner (CoolestGuy)
   - Test user with admin role
   - Test regular user
   - *Requires: Server model mock[3]*
+  - **COMPLETED**: 6 tests passing
+    - Bot owner check with `@patch('config.bot_config.CoolestGuy')`
+    - Database server mock for admin_role_id lookup
+    - Verified early return optimization for bot owner
+    - Non-owner with admin role tested
+    - Wrong admin role edge case (security check!)
+    - Regular user and no-role scenarios
 
-- [ ] `user_is_mod()` - `ui/ui_util.py:54`
+- [x] `user_is_mod()` - `ui/ui_util.py:54` ✅
   - Test admin (inherits mod permissions)
   - Test user with mod role
   - Test regular user
+  - **COMPLETED**: 9 tests passing
+    - Verified inheritance: Admin → Mod → Regular hierarchy
+    - Bot owner is mod (via admin inheritance)
+    - Mod role grants mod permissions
+    - Admin doesn't need mod role (inheritance tested)
+    - Permission hierarchy test: Owner > Admin > Mod > Regular
+    - User with both admin and mod roles
+    - Mod-only users are mod but not admin
 
 - [ ] `can_view_race_leaderboard()` - `ui/ui_util.py:504`
   - Test completed race (always viewable)
@@ -421,7 +442,7 @@ pytest -v test/
 
 ## Progress Tracking
 
-- **Phase 1**: ✅ 5/9 tests implemented (56%) - 2 items skipped
+- **Phase 1**: ✅ 5/5 tests implemented (100%) ✨ **PHASE COMPLETE!** - 2 items skipped
   - ✅ get_place_str (26 tests, 1 bug fixed)
   - ✅ format_points_str (11 tests)
   - ✅ build_response_message_list (13 tests, 2 bugs fixed, refactored to snake_case)
@@ -429,14 +450,18 @@ pytest -v test/
   - ✅ get_race_embed_field_value (10 tests, database fixtures created)
   - ⏭️ game_time_is_valid (SKIPPED - DB utility)
   - ⏭️ datetime_is_valid (SKIPPED - DB utility)
-- **Phase 2**: ☐ 0/24 tests implemented  
+- **Phase 2**: ✅ 3/24 tests implemented (13%)
+  - ✅ user_has_role (11 tests, permission checking)
+  - ✅ user_is_admin (6 tests, bot owner + role-based admin)
+  - ✅ user_is_mod (9 tests, inheritance hierarchy verified)
 - **Phase 3**: ☐ 0/21 tests implemented
-- **Total**: ✅ 5/56 tests implemented (9%)
-- **Total Tests Written**: 89 tests passing ✅
+- **Total**: ✅ 8/54 tests implemented (15%) - 2 items skipped from total
+- **Total Tests Written**: 115 tests passing ✅ 🎯
 - **Bugs Found**: 3 bugs caught and fixed by tests! 🎯
 - **Test Infrastructure Created**:
   - Discord mock factory (`test/test_utils/discord_mocks.py`)
   - Database fixtures (`test/test_utils/db_fixtures.py`)
+  - Permission tests (`test/unit/test_ui_util_permissions.py`)
 
-**Last Updated**: get_race_embed_field_value completed with DB fixtures (89 total tests)
+**Last Updated**: user_is_admin & user_is_mod completed (117 total tests)
 
