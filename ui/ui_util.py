@@ -149,25 +149,19 @@ def get_place_str(place):
         place_str = "Worst"
     else:
         place_str += str(place)
-        tens = 0
-        while (tens + 10) < place:
-            tens += 10
-        ones_digit = place - tens
-        if ones_digit == 1:
-            if tens == 10:
-                place_str += "th"
-            else:
-                place_str += "st"
+        # Check the last two digits to handle teens (11, 12, 13, 111, 112, 113, etc.)
+        last_two_digits = place % 100
+        ones_digit = place % 10
+        
+        # Special case: if the last two digits are 11, 12, or 13, always use "th"
+        if 11 <= last_two_digits <= 13:
+            place_str += "th"
+        elif ones_digit == 1:
+            place_str += "st"
         elif ones_digit == 2:
-            if tens == 10:
-                place_str += "th"
-            else:
-                place_str += "nd"
+            place_str += "nd"
         elif ones_digit == 3:
-            if tens == 10:
-                place_str += "th"
-            else:
-                place_str += "rd"
+            place_str += "rd"
         else:
             place_str += "th"
 
