@@ -221,52 +221,69 @@ async def display_ephemeral_leaderboard(interaction, race_id):
 
 ####################################################################################################################
 # This function breaks a response into multiple messages that meet the Discord API character limit
-def buildResponseMessageList(message):
+def build_response_message_list(message):
+    """
+    Splits a message into multiple parts to comply with Discord's character limit.
+    
+    Args:
+        message: String message to split, or None
+        
+    Returns:
+        List of message strings, each under Discord's character limit (1990 chars)
+    """
     if message is None:
+        logging.debug("build_response_message_list called with None message")
         return [""]
     
-    DiscordApiCharLimit = 2000 - 10
+    discord_api_char_limit = 2000 - 10  # Discord limit with safety buffer
     message_list = []
 
     # If we're under the character limit, just send the message
-    if len(message) <= DiscordApiCharLimit:
-        message_list.append(message)
-    else:
-        # Otherwise we'll build a list of lines, then build messages from that list
-        # until we hit the message limit.
-        line_list = message.split("\n")
-        if line_list is not None:
-            curr_message = ""
-            curr_message_len = 0
+    if len(message) <= discord_api_char_limit:
+        return [message]
+    
+    logging.info(f"Message exceeds character limit ({len(message)} chars), splitting into multiple messages")
+    
+    # Build a list of lines, then build messages from that list until we hit the message limit
+    line_list = message.split("\n")
+    curr_message = ""
+    curr_message_len = 0
 
-            for line in line_list:
-                # If adding this line would put us over the limit, add the current message to the list and start over
-                if curr_message_len + len(line) > DiscordApiCharLimit:
+    for line_idx, line in enumerate(line_list):
+        # First check if this single line is > limit and needs sentence splitting
+        if len(line) > discord_api_char_limit:
+            logging.warning(f"Line {line_idx} exceeds character limit ({len(line)} chars), attempting sentence split")
+            sentences = re.split('[.?!;]', line)
+            for sentence_idx, sentence in enumerate(sentences):
+                if curr_message_len + len(sentence) > discord_api_char_limit:
                     if curr_message == "":
-                        logging.error("ERROR in buildResponseMessageList")
+                        logging.error(f"Sentence {sentence_idx} in line {line_idx} is too long to fit in a single message ({len(sentence)} chars). This content will be skipped.")
                         continue
                     message_list.append(curr_message)
+                    logging.debug(f"Created message part {len(message_list)} ({curr_message_len} chars)")
                     curr_message = ""
                     curr_message_len = 0
-
-                # If this single line is > 2000 characters, break it into sentences.
-                if len(line) > DiscordApiCharLimit:
-                    sentences = re.split('[.?!;]', line)
-                    for s in sentences:
-                        if curr_message_len + len(s) > charLimit:
-                            if curr_message == "":
-                                logging.error("ERROR in buildResponseMessageList")
-                                continue
-                            message_list.append(curr_message)
-                            curr_message = ""
-                            curr_message_len = 0
-                        curr_message += s
-                        curr_message_len += len(s)
-                else:
-                    curr_message += line + "\n"
-                    curr_message_len += len(line) + 1
-            if curr_message != "":
-                message_list.append(curr_message)
+                curr_message += sentence
+                curr_message_len += len(sentence)
+        else:
+            # Check if adding this line would put us over the limit
+            if curr_message_len + len(line) + 1 > discord_api_char_limit:  # +1 for the newline
+                if curr_message != "":
+                    message_list.append(curr_message)
+                    logging.debug(f"Created message part {len(message_list)} ({curr_message_len} chars)")
+                    curr_message = ""
+                    curr_message_len = 0
+            
+            # Only add newline back if the line isn't empty (empty line comes from trailing newline in split)
+            if line:  # Skip empty strings from trailing newlines
+                curr_message += line + "\n"
+                curr_message_len += len(line) + 1
+                
+    if curr_message != "":
+        message_list.append(curr_message)
+        logging.debug(f"Created final message part {len(message_list)} ({curr_message_len} chars)")
+    
+    logging.info(f"Split message into {len(message_list)} parts")
     return message_list
 
 #####################################################################################################################
@@ -303,14 +320,14 @@ async def defer(interaction):
 
 #####################################################################################################################
 async def send_message(interaction, msg="", ephemeral=True, codeblock=False, view=None, embed=None):
-    msgList = buildResponseMessageList(msg)
+    msg_list = build_response_message_list(msg)
 
-    for m in msgList:
+    for m in msg_list:
         if codeblock:
             m = f"```\n{m}\n```"
 
         # Add the embed and view to the last message if there is one provided
-        if m == msgList[-1]:
+        if m == msg_list[-1]:
             if view is not None and embed is not None:
                 await interaction.send(m, ephemeral=ephemeral, view=view, embed=embed)
             elif view is not None:

@@ -4,7 +4,7 @@ Unit tests for UI utility formatting functions.
 Tests pure functions from ui/ui_util.py with no external dependencies.
 """
 import pytest
-from ui.ui_util import get_place_str, format_points_str
+from ui.ui_util import get_place_str, format_points_str, build_response_message_list
 
 
 @pytest.mark.unit
@@ -150,4 +150,148 @@ class TestFormatPointsStr:
     def test_format_points_parametrized(self, points, expected):
         """Parametrized test for various point values."""
         assert format_points_str(points) == expected
+
+
+@pytest.mark.unit
+class TestBuildResponseMessageList:
+    """Tests for build_response_message_list() function - ui/ui_util.py:224"""
+
+    # Discord's character limit used in the function
+    CHAR_LIMIT = 2000 - 10  # 1990
+
+    def test_none_input(self):
+        """Test that None input returns a list with empty string."""
+        result = build_response_message_list(None)
+        assert result == [""]
+
+    def test_empty_string(self):
+        """Test that empty string returns a list with empty string."""
+        result = build_response_message_list("")
+        assert result == [""]
+
+    def test_under_character_limit(self):
+        """Test message under the character limit returns single-item list."""
+        message = "This is a short message."
+        result = build_response_message_list(message)
+        assert len(result) == 1
+        assert result[0] == message
+
+    def test_exactly_at_limit(self):
+        """Test message exactly at the character limit."""
+        message = "A" * self.CHAR_LIMIT
+        result = build_response_message_list(message)
+        assert len(result) == 1
+        assert result[0] == message
+
+    def test_simple_split_over_limit(self):
+        """Test message just over limit gets split into two messages."""
+        # Create a message with two lines, where combined they exceed the limit
+        line1 = "A" * 1000 + "\n"
+        line2 = "B" * 1000 + "\n"
+        message = line1 + line2
+        result = build_response_message_list(message)
+        
+        assert len(result) == 2
+        assert result[0] == line1
+        assert result[1] == line2
+
+    def test_multiple_line_split(self):
+        """Test message that requires splitting into multiple messages."""
+        # Create 5 lines, each 500 chars - should split into 3 messages
+        # Message 1: lines 1-3 (1500 chars), Message 2: lines 4-5 (1000 chars)
+        lines = [f"Line {i}: " + "X" * 490 + "\n" for i in range(1, 6)]
+        message = "".join(lines)
+        result = build_response_message_list(message)
+        
+        # Should be split into at least 2 messages
+        assert len(result) >= 2
+        # Each result should be under the limit
+        for msg in result:
+            assert len(msg) <= self.CHAR_LIMIT
+
+    def test_very_long_single_line_with_sentences(self):
+        """Test a single line over the limit that needs sentence splitting."""
+        # Create a long line with multiple sentences
+        sentence = "This is a sentence. "
+        # Make enough sentences to exceed the limit
+        num_sentences = (self.CHAR_LIMIT // len(sentence)) + 10
+        long_line = sentence * num_sentences
+        
+        result = build_response_message_list(long_line)
+        
+        # Should be split into multiple messages
+        assert len(result) >= 2
+        # Each result should be under the limit
+        for msg in result:
+            assert len(msg) <= self.CHAR_LIMIT
+
+    def test_message_with_newlines_preserved(self):
+        """Test that newlines are preserved in the split messages."""
+        line1 = "First line\n"
+        line2 = "Second line\n"
+        line3 = "Third line\n"
+        message = line1 + line2 + line3
+        
+        result = build_response_message_list(message)
+        
+        assert len(result) == 1
+        assert result[0] == message
+        # Verify newlines are preserved
+        assert result[0].count("\n") == 3
+
+    def test_lines_near_limit_boundary(self):
+        """Test splitting behavior when lines are close to the limit."""
+        # Create lines where adding one more would exceed the limit
+        line = "X" * 900 + "\n"
+        # Two lines fit (1800 + 2 newlines = 1802), three don't (2700)
+        message = line * 3
+        
+        result = build_response_message_list(message)
+        
+        assert len(result) == 2
+        assert len(result[0]) <= self.CHAR_LIMIT
+        assert len(result[1]) <= self.CHAR_LIMIT
+
+    def test_single_line_no_newline(self):
+        """Test message with no newlines under the limit."""
+        message = "This is a single line message with no newlines at all."
+        result = build_response_message_list(message)
+        
+        assert len(result) == 1
+        assert result[0] == message
+
+    def test_many_short_lines(self):
+        """Test message with many short lines that fit in one message."""
+        lines = [f"Line {i}\n" for i in range(50)]  # 50 short lines
+        message = "".join(lines)
+        
+        # Should fit in one message since total is under limit
+        result = build_response_message_list(message)
+        
+        assert len(result) == 1
+        assert result[0] == message
+
+    def test_mixed_line_lengths(self):
+        """Test message with varying line lengths."""
+        short_line = "Short\n"
+        medium_line = "Medium length line here\n"
+        long_line = "X" * 500 + "\n"
+        
+        message = short_line + medium_line + long_line * 3
+        result = build_response_message_list(message)
+        
+        # Should split appropriately
+        assert len(result) >= 1
+        # All results should be under limit
+        for msg in result:
+            assert len(msg) <= self.CHAR_LIMIT
+
+    def test_message_with_multiple_newlines(self):
+        """Test message with consecutive newlines (blank lines)."""
+        message = "Line 1\n\n\nLine 2 after blank lines\n"
+        result = build_response_message_list(message)
+        
+        assert len(result) == 1
+        # Blank lines should be preserved
+        assert result[0] == message
 
