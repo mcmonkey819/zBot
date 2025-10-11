@@ -1,17 +1,20 @@
 General Stuff
 -------------------------------------------------------
 [ ] - Debug announcement message failing
-[ ] - Team Scoring
-[ ] - When "Team Name" is an extra info field include team leaderboard button
-[ ] - Implement team leaderboard
-    [ ] - Get list of team names in submissions (with fuzzy matching)
-    [ ] - For each team, average the time of all team members and add to leaderboard list
-    [ ] - Function to display team leaderboard
+[X] - Allow race to be pinned in multiple channels
+[X] - CSV race export function
+    [X] - to file
+    [X] - command and attach to message response
+    [X] - Co-op support
+[ ] - Allow validate for non-assigned races
+    [ ] - Have to move validate field to submission table
 [ ] - Make auto-forfeit for assigned races optional
+[ ] - Team Scoring
+
 
 [ ] - Backup production DB
 [ ] - Update production DB fields
-    [ ] - 
+    [ ] - Category - add submit_time_limit_hours
 
 
 [ ] - Rework VC creation to ignore any channels not marked as permanent or dynamically created (to avoid problem when channels are created I can't see as in GMP "Moderators")

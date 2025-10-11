@@ -1,0 +1,5 @@
+# -*- coding: utf-8 -*-
+"""
+Test package for zBot async races.
+"""
+

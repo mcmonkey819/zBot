@@ -393,9 +393,10 @@ async def get_race_leaderboard_embed(title, body_text, submissions, current_page
 
 ########################################################################################################################
 class TeamSubmissionData:
-    def __init__(self, team_name, user_names, team_finish_time, finish_times):
+    def __init__(self, team_name, user_ids, user_names, team_finish_time, finish_times):
         self.team_name = team_name
         self.team_finish_time = team_finish_time
+        self.user_ids = user_ids
         self.user_names = user_names
         self.finish_times = finish_times
 
@@ -537,6 +538,142 @@ async def remove_role_from_members(guild, role):
         for m in guild.members:
             if role in m.roles:
                 await m.remove_roles(role)
+
+########################################################################################################################
+def get_sorted_team_submissions(interaction, race_id):
+    race = get_race(race_id)
+    if not race.is_team_race:
+        return None
+
+    submissions = get_sorted_race_submissions(race_id)
+
+    sub_ids = {}
+    team_submissions = []
+    for s in submissions:
+        # If we've already handlled this submission, skip it
+        if s.id in sub_ids:
+            continue
+
+        # Find the matching submission from teammate
+        teammate_submission = None
+        sub_ids[s.id] = True
+        user_ids = [s.user_id]
+        if s.teammate_id is not None:
+            for t in submissions:
+                if t.id not in sub_ids and t.user_id == s.teammate_id:
+                    teammate_submission = t
+                    if teammate_submission.teammate_id != s.user_id:
+                        logging.info(f"**ERROR** Teammate ID mismatch for submission {s.id}")
+                        teammate_submission = None
+                    else:
+                        sub_ids[t.id] = True
+                        user_ids.append(t.user_id)
+                    break
+                
+        # Get the team name, if it exists. Faster teammate gets to pick the team name
+        team_name = get_extra_info(s.id, race.team_name_info_id)
+        team_name_str = None
+        if team_name is None and teammate_submission is not None:
+            # But if the faster teammate doesn't specify a team name, check the teammate's submission for a valid name
+            team_name = get_extra_info(teammate_submission.id, race.team_name_info_id)
+            
+        if team_name is not None:
+            team_name_str = team_name.data
+
+        total_finish_time_sec = 0
+        # Get the username strings
+        user_names = []
+        user_names.append(get_user_name_str(s.user_id, interaction.guild.get_member(s.user_id)))
+        if teammate_submission is not None:
+            user_names.append(get_user_name_str(teammate_submission.user_id, interaction.guild.get_member(teammate_submission.user_id)))
+        # If we still don't have a team name, just combine the usernames
+        if team_name_str is None:
+            team_name_str = f"Team {user_names[0]}"
+            if teammate_submission is not None:
+                team_name_str += f" & {user_names[1]}"
+        # Calculate the average finish time
+        if teammate_submission is not None:
+            total_finish_time_sec = finish_time_to_seconds(s.finish_time) + finish_time_to_seconds(teammate_submission.finish_time)
+            avg_finish_time_sec = int(total_finish_time_sec / 2)
+        else:
+            avg_finish_time_sec = finish_time_to_seconds(s.finish_time)
+
+        avg_finish_time = finish_time_seconds_to_str(avg_finish_time_sec) 
+        
+        # Finally construct and add the team submission data object
+        team_submissions.append(TeamSubmissionData(team_name_str, user_ids, user_names, avg_finish_time, [s.finish_time, teammate_submission.finish_time if teammate_submission is not None else None]))
+
+    # Sort the list by finish time
+    team_submissions.sort(key=lambda x: finish_time_to_seconds(x.team_finish_time))
+    return team_submissions
+
+########################################################################################################################
+def export_race(interaction, race_id, filepath):
+    race = get_race(race_id)
+    subs = get_sorted_race_submissions(race_id)
+    team_subs = None
+
+    if race is None or subs is None or len(subs) == 0:
+        if race is None:
+            logging.error(f"Could not find race {race_id}")
+        else:
+            logging.error(f"No submissions for race {race_id}")
+        return False
+    
+    # Get the extra info assignments for this race
+    extra_info_assigns = get_race_extra_info_assignments(race_id)
+    extra_info_types = [get_extra_info_type(e.info_type_id) for e in extra_info_assigns]
+
+    include_points = race.state == RaceState.Completed and \
+                     race.category_id.points_type != PointsType.NoScoring
+
+    with open(filepath, 'w', newline='') as csvfile:
+        csvwriter = csv.writer(csvfile)
+
+        # Create the header row
+        header = ["User ID", "Username", "Finish Time"]
+        header += [e.name for e in extra_info_types]
+        if include_points:
+            header += ["Points"]
+        header += ["Comment"]
+        if race.is_team_race:
+            header += ["Teammate ID", "Teammate Username", "Team Finish Time (Avg)"]
+            team_subs = get_sorted_team_submissions(interaction, race_id)
+        csvwriter.writerow(header)
+
+        # Create the data rows
+        for s in subs:
+            username = "Unknown"
+            if interaction is not None:
+                user = interaction.guild.get_member(s.user_id)
+                username = get_user_name_str(user.id, user) if user is not None else "Unknown"
+            data_row = [s.user_id, username, str(s.finish_time)]
+            for e in extra_info_types:
+                info = get_extra_info(s.id, e.id)
+                if info is not None:
+                    if e.var_type == VarType.Int:
+                        data_row.append(int(info.data))
+                    elif e.var_type == VarType.Float:
+                        data_row.append(float(info.data))
+                    else:
+                        data_row.append(str(info.data))
+                else:
+                    data_row.append("")
+            if include_points:
+                data_row.append(s.points)
+            data_row.append(s.comment)
+
+            if race.is_team_race:
+                # search the team submissions for the matching team
+                for t in team_subs:
+                    if s.user_id in t.user_ids:
+                        idx = t.user_ids.index(s.user_id)
+                        data_row += [t.user_ids[idx-1], t.user_names[idx-1], str(t.team_finish_time)]
+                        break   
+
+            csvwriter.writerow(data_row)
+
+    return True
 
 ########################################################################################################################
 # BASE CLASSES
@@ -703,7 +840,7 @@ class zUserSelectView(nextcord.ui.View):
         self.submit_handler = submit_handler
         self.user_select = zUserSelect(self.on_select, placeholder, payload=payload)
         self.add_item(self.user_select)
-        selected_user = None
+        self.selected_user = None
 
     async def on_select(self, user, interaction: nextcord.Interaction):
         self.selected_user = user

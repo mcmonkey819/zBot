@@ -49,6 +49,38 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 ########################################################################################################################
 
 ########################################################################################################################
+# ASYNC_RACE
+########################################################################################################################
+# This is the main slash command that will be the prefix of all of the bot slash commands below
+    @nextcord.slash_command()
+    async def async_race(self, interaction):
+        pass
+
+    ####################################################################################################################
+    @async_race.subcommand(description="Exports a race leaderboard to a CSV file")
+    async def export_race(
+        self,
+        interaction,
+        race_id: int = nextcord.SlashOption(
+            description="ID of the race to export.",
+            required=True)):
+        self.log_command(interaction.user, "EXPORT_RACE")
+
+        await interaction.response.defer()
+
+        # Determine if the user has access to this race leaderboard
+        if can_view_race_leaderboard(interaction.guild, race_id, interaction.user):
+            # If they do generate the CSV file and attach it to a response message
+            file_path = f"./race_{race_id}.csv"
+            file_created = export_race(interaction, race_id, file_path)
+            if file_created:
+                await interaction.send(f"Export of Race #{race_id}", file=nextcord.File(file_path))
+            else:
+                await interaction.send("Error exporting Race")
+        else:
+            await interaction.send(f"You do not have permission to view leaderboard of race #{race_id}")
+
+########################################################################################################################
 # ASYNC_ADMIN
 ########################################################################################################################
 # This is the main slash command that will be the prefix of all of the bot admin commands below
@@ -72,15 +104,23 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         await interaction.response.defer(ephemeral=True)
 
         # Check if this server is in the DB and that the user is an admin
-        server = self.get_server(interaction)
-        if server is None:
+        db_server = self.get_server(interaction)
+        if db_server is None:
             if interaction.user.id == bot_config.CoolestGuy:
                 # Query for the moderator and admin roles and then create a DB entry for this server
                 admin_role = await prompt_for_role(interaction, placeholder="Select Race Admin Role...")
                 mod_role = await prompt_for_role(interaction, placeholder="Select Race Moderator Role...")
-                server = AsyncRaceServer(id=interaction.guild_id, admin_role=admin_role, mod_role=mod_role)
+                db_server = AsyncRaceServer()
+                
+                db_server.id = interaction.guild.id
+                db_server.admin_role_id = admin_role
+                db_server.mod_role_id = mod_role
+                db_server.name = interaction.guild.name
+                db_server.enable_vc_create = False
                 try:
-                    server.save()
+                    logging.info(f"Saving server [{db_server.id}] {db_server.name} to DB")
+                    # Need to do a force insert since the primary key is the server ID which is not an auto-incrementing ID
+                    db_server.save(force_insert=True)
                 except:
                     await send_message(interaction, "**ERROR** Could not save server information")
                     return

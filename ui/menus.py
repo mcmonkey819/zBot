@@ -510,6 +510,9 @@ class zRaceInfoButtonView(nextcord.ui.View):
                     ts = datetime.fromisoformat(roster.seed_time) if type(roster.seed_time) is str else roster.seed_time
                     delta = datetime.now() - ts
                     submit_time_limit = timedelta(minutes=2) if bot_config.TEST_MODE else timedelta(hours=4)
+                    if race.category_id.submit_time_limit_hours is not None:
+                        submit_time_limit = timedelta(hours=race.category_id.submit_time_limit_hours)
+
                     # If we are outside that window let the racer know
                     if delta > submit_time_limit:
                         await send_message(interaction, "It is past the allowable window after getting the seed to submit. You have been forfeited from this race.")
@@ -858,7 +861,7 @@ class zRaceAddEditModal(zModal):
                     recent_race.state = RaceState.Completed
                     recent_race.save()
                     score_race(recent_race)
-                    update_race_leaderboard(interaction, recent_race)
+                    await update_race_leaderboard(interaction, recent_race)
 
                 self.race.state = RaceState.Active
                 self.race.save()
@@ -1684,14 +1687,7 @@ async def race_pin(interaction, race):
     if channel is None:
         return
 
-    # Delete any existing race info messages
-    msg_list = get_messages_by_race_id(race.id, RaceMessageType.RaceInfo)
-    if msg_list is not None:
-        for m in msg_list:
-            if m.message_id is not None:
-                await delete_message(get_server_from_interaction(interaction), m.id)
-
-    # Then post the new race info message
+    # Then post the race info message
     succcess = await pin_race_info(channel.id, race, interaction)
     if succcess:
         await send_message(interaction, f"Race #{race.id} pinned to channel ID {channel.name}")
@@ -2439,77 +2435,18 @@ async def post_channel_race_leaderboard(interaction, channel, race_id, bot_clien
 
 ########################################################################################################################
 async def show_team_leaderboard(interaction, race_id):
-    submissions = get_sorted_race_submissions(race_id)
-    race = get_race(race_id)
-
-    sub_ids = {}
-    team_submissions = []
-    for s in submissions:
-        # If we've already handlled this submission, skip it
-        if s.id in sub_ids:
-            continue
-
-        # Find the matching submission from teammate
-        teammate_submission = None
-        sub_ids[s.id] = True
-        if s.teammate_id is not None:
-            for t in submissions:
-                if t.id not in sub_ids and t.user_id == s.teammate_id:
-                    teammate_submission = t
-                    if teammate_submission.teammate_id != s.user_id:
-                        logging.info(f"**ERROR** Teammate ID mismatch for submission {s.id}")
-                        teammate_submission = None
-                    else:
-                        sub_ids[t.id] = True
-                    break
-                
-        # Get the team name, if it exists. Faster teammate gets to pick the team name
-        team_name = get_extra_info(s.id, race.team_name_info_id)
-        team_name_str = None
-        if team_name is None and teammate_submission is not None:
-            # But if the faster teammate doesn't specify a team name, check the teammate's submission for a valid name
-            team_name = get_extra_info(teammate_submission.id, race.team_name_info_id)
-            
-        if team_name is not None:
-            team_name_str = team_name.data
-            
-
-        total_finish_time_sec = 0
-        # Get the username strings
-        user_names = []
-        user_names.append(get_user_name_str(s.user_id, interaction.guild.get_member(s.user_id)))
-        if teammate_submission is not None:
-            user_names.append(get_user_name_str(teammate_submission.user_id, interaction.guild.get_member(teammate_submission.user_id)))
-        # If we still don't have a team name, just combine the usernames
-        if team_name_str is None:
-            logging.info(f"**ERROR** Team name not found for submission {s.id}")
-            team_name_str = f"Team {user_names[0]}"
-            if teammate_submission is not None:
-                team_name_str += f" & {user_names[1]}"
-        # Calculate the average finish time
-        if teammate_submission is not None:
-            total_finish_time_sec = finish_time_to_seconds(s.finish_time) + finish_time_to_seconds(teammate_submission.finish_time)
-            avg_finish_time_sec = int(total_finish_time_sec / 2)
-        else:
-            avg_finish_time_sec = finish_time_to_seconds(s.finish_time)
-
-        logging.info(f"Team: {team_name_str}, Avg Finish Time Seconds: {avg_finish_time_sec}")
-        avg_finish_time = finish_time_seconds_to_str(avg_finish_time_sec) 
-        
-        # Finally construct and add the team submission data object
-        team_submissions.append(TeamSubmissionData(team_name_str, user_names, avg_finish_time, [s.finish_time, teammate_submission.finish_time if teammate_submission is not None else None]))
-
-    # Sort the list by finish time
-    team_submissions.sort(key=lambda x: finish_time_to_seconds(x.team_finish_time))
-    
-    # Finally show the team leaderboard menu
-    menu = zRaceLeaderboardMenuPages(source=zRaceLeaderboardPageSource(team_submissions, 
-                                                                       interaction.guild_id,
-                                                                       interaction.client,
-                                                                       title=get_race_leaderboard_title(race_id),
-                                                                       body_text=get_race_leaderboard_description(race_id),
-                                                                       is_team_race=True))
-    await menu.start(interaction=interaction, ephemeral=True)
+    team_submissions = get_sorted_team_submissions(interaction, race_id)
+    if team_submissions is not None and len(team_submissions) > 0:
+        # Show the team leaderboard menu
+        menu = zRaceLeaderboardMenuPages(source=zRaceLeaderboardPageSource(team_submissions, 
+                                                                        interaction.guild_id,
+                                                                        interaction.client,
+                                                                        title=get_race_leaderboard_title(race_id),
+                                                                        body_text=get_race_leaderboard_description(race_id),
+                                                                        is_team_race=True))
+        await menu.start(interaction=interaction, ephemeral=True)
+    else:
+        await send_message(interaction, f"**ERROR** could not generate list of team submissions for race {race_id}")
 
 ########################################################################################################################
 async def race_edit_leaderboard_channel(interaction, race):
