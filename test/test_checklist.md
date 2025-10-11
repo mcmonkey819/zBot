@@ -10,7 +10,7 @@ Pure functions with deterministic outputs and no external dependencies.
 
 ### String & Formatting Functions
 
-- [X] `get_place_str()` - `ui/ui_util.py:145`
+- [X] `get_place_str()` - `ui/ui_util.py:145` ✅
   - Test 1st, 2nd, 3rd, 11th, 12th, 13th, 21st, etc.
   - Edge case: 0 (error case)
   - *Requires: Basic pytest setup[1]*
@@ -33,11 +33,21 @@ Pure functions with deterministic outputs and no external dependencies.
     - Fixed double newline issue with trailing newlines
   - **REFACTORED**: Function renamed to snake_case, improved logging with proper levels and context
 
-- [ ] `get_user_name_str()` - `ui/ui_util.py:526`
+- [x] `get_user_name_str()` - `ui/ui_util.py:537` ✅
   - Test with valid user having global_name
   - Test with valid user having only display_name
   - Test with None user (fallback to user_id)
   - *Requires: Discord mock factory[2]*
+  - **COMPLETED**: 29 tests passing
+    - Created Discord mock factory in `test/test_utils/discord_mocks.py`
+    - Tests cover all name preference scenarios including edge case of "None" string
+    - **Unicode/Emoji tests added**: 17 additional tests for international characters
+      - Emoji support (😎🎮🏎️💨🔥🎭🎪🎨🏆👑♠️♥️♣️♦️)
+      - Japanese (さくら桜子, チャンピオン)
+      - Chinese (用户名), Korean (사용자), Thai (ผู้ใช้)
+      - Cyrillic (Александр), Arabic (محمد), Greek (Αλέξανδρος)
+      - European special chars (Ñoño, Müller, Søren)
+      - Special Unicode symbols (★彡[ᴜsᴇʀ]彡★)
 
 ### Validation Functions
 
@@ -412,14 +422,17 @@ pytest -v test/
 
 ## Progress Tracking
 
-- **Phase 1**: ✅ 3/11 tests implemented (27%)
+- **Phase 1**: ✅ 4/11 tests implemented (36%)
   - ✅ get_place_str (26 tests, 1 bug fixed)
   - ✅ format_points_str (11 tests)
   - ✅ build_response_message_list (13 tests, 2 bugs fixed, refactored to snake_case)
+  - ✅ get_user_name_str (29 tests, Discord mock factory created, Unicode/emoji support verified)
 - **Phase 2**: ☐ 0/24 tests implemented  
 - **Phase 3**: ☐ 0/21 tests implemented
-- **Total**: ✅ 3/56 tests implemented (5%)
+- **Total**: ✅ 4/56 tests implemented (7%)
+- **Total Tests Written**: 79 tests passing ✅
 - **Bugs Found**: 3 bugs caught and fixed by tests! 🎯
+- **Test Infrastructure**: Discord mock factory created (`test/test_utils/discord_mocks.py`)
 
-**Last Updated**: Testing session - buildResponseMessageList completed
+**Last Updated**: Unicode/emoji tests added to get_user_name_str (79 total tests)
 

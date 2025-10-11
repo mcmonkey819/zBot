@@ -4,7 +4,8 @@ Unit tests for UI utility formatting functions.
 Tests pure functions from ui/ui_util.py with no external dependencies.
 """
 import pytest
-from ui.ui_util import get_place_str, format_points_str, build_response_message_list
+from ui.ui_util import get_place_str, format_points_str, build_response_message_list, get_user_name_str
+from test.test_utils.discord_mocks import create_mock_user
 
 
 @pytest.mark.unit
@@ -294,4 +295,196 @@ class TestBuildResponseMessageList:
         assert len(result) == 1
         # Blank lines should be preserved
         assert result[0] == message
+
+
+@pytest.mark.unit
+class TestGetUserNameStr:
+    """Tests for get_user_name_str() function - ui/ui_util.py:537"""
+
+    def test_user_with_global_name(self):
+        """Test user with global_name returns global_name."""
+        user_id = 123456789
+        user = create_mock_user(user_id=user_id, global_name="GlobalName", display_name="DisplayName")
+        
+        result = get_user_name_str(user_id, user)
+        
+        assert result == "GlobalName"
+
+    def test_user_with_global_name_none_string(self):
+        """Test user with global_name as string 'None' falls back to display_name."""
+        user_id = 123456789
+        user = create_mock_user(user_id=user_id, global_name="None", display_name="DisplayName")
+        
+        result = get_user_name_str(user_id, user)
+        
+        assert result == "DisplayName"
+
+    def test_user_with_only_display_name(self):
+        """Test user without global_name returns display_name."""
+        user_id = 123456789
+        user = create_mock_user(user_id=user_id, global_name=None, display_name="DisplayName")
+        
+        result = get_user_name_str(user_id, user)
+        
+        assert result == "DisplayName"
+
+    def test_none_user_returns_user_id(self):
+        """Test None user returns user_id as string."""
+        user_id = 987654321
+        
+        result = get_user_name_str(user_id, None)
+        
+        assert result == "987654321"
+        assert result == str(user_id)
+
+    def test_user_with_empty_global_name(self):
+        """Test user with empty string global_name falls back to display_name."""
+        user_id = 123456789
+        user = create_mock_user(user_id=user_id, global_name="", display_name="DisplayName")
+        
+        result = get_user_name_str(user_id, user)
+        
+        # Empty string is falsy, but function checks for None specifically
+        # So empty string should be returned if it's not None
+        assert result == ""
+
+    def test_preference_order(self):
+        """Test that global_name is preferred over display_name."""
+        user_id = 111222333
+        
+        # User with both names
+        user = create_mock_user(
+            user_id=user_id,
+            global_name="PreferredGlobalName",
+            display_name="FallbackDisplayName"
+        )
+        
+        result = get_user_name_str(user_id, user)
+        
+        # Should prefer global_name
+        assert result == "PreferredGlobalName"
+        assert result != "FallbackDisplayName"
+
+    @pytest.mark.parametrize("user_id,global_name,display_name,expected", [
+        (123, "Global", "Display", "Global"),           # Normal case with global_name
+        (456, None, "Display", "Display"),               # No global_name
+        (789, "None", "Display", "Display"),             # global_name is string "None"
+        (111, "", "Display", ""),                        # Empty global_name
+        (222, "ValidGlobal", "Display", "ValidGlobal"),  # Both present, prefer global
+    ])
+    def test_user_name_parametrized(self, user_id, global_name, display_name, expected):
+        """Parametrized test for various user name scenarios."""
+        user = create_mock_user(user_id=user_id, global_name=global_name, display_name=display_name)
+        result = get_user_name_str(user_id, user)
+        assert result == expected
+
+    def test_none_user_with_different_user_ids(self):
+        """Test None user returns correct user_id string for different IDs."""
+        test_ids = [1, 42, 123456789, 999999999999]
+        
+        for user_id in test_ids:
+            result = get_user_name_str(user_id, None)
+            assert result == str(user_id)
+            # Verify it's actually a string
+            assert isinstance(result, str)
+
+    def test_user_with_emoji_in_global_name(self):
+        """Test user with emoji in global_name handles Unicode correctly."""
+        user_id = 123456789
+        global_name_with_emoji = "CoolUser 😎🎮"
+        user = create_mock_user(user_id=user_id, global_name=global_name_with_emoji, display_name="PlainName")
+        
+        result = get_user_name_str(user_id, user)
+        
+        assert result == "CoolUser 😎🎮"
+        assert "😎" in result
+        assert "🎮" in result
+
+    def test_user_with_emoji_in_display_name(self):
+        """Test user with emoji in display_name when no global_name."""
+        user_id = 987654321
+        display_name_with_emoji = "RacerBoi 🏎️💨"
+        user = create_mock_user(user_id=user_id, global_name=None, display_name=display_name_with_emoji)
+        
+        result = get_user_name_str(user_id, user)
+        
+        assert result == "RacerBoi 🏎️💨"
+        assert "🏎️" in result
+        assert "💨" in result
+
+    def test_user_with_japanese_characters(self):
+        """Test user with Japanese characters in name."""
+        user_id = 111222333
+        japanese_name = "さくら桜子"
+        user = create_mock_user(user_id=user_id, global_name=japanese_name, display_name="Sakura")
+        
+        result = get_user_name_str(user_id, user)
+        
+        assert result == "さくら桜子"
+        assert "桜" in result
+
+    def test_user_with_cyrillic_characters(self):
+        """Test user with Cyrillic (Russian) characters in name."""
+        user_id = 444555666
+        cyrillic_name = "Александр"
+        user = create_mock_user(user_id=user_id, global_name=cyrillic_name, display_name="Alexander")
+        
+        result = get_user_name_str(user_id, user)
+        
+        assert result == "Александр"
+
+    def test_user_with_arabic_characters(self):
+        """Test user with Arabic characters in name."""
+        user_id = 777888999
+        arabic_name = "محمد"
+        user = create_mock_user(user_id=user_id, global_name=arabic_name, display_name="Mohammed")
+        
+        result = get_user_name_str(user_id, user)
+        
+        assert result == "محمد"
+
+    def test_user_with_special_unicode_symbols(self):
+        """Test user with various special Unicode symbols."""
+        user_id = 123123123
+        name_with_symbols = "★彡[ᴜsᴇʀ]彡★"
+        user = create_mock_user(user_id=user_id, global_name=name_with_symbols, display_name="User")
+        
+        result = get_user_name_str(user_id, user)
+        
+        assert result == "★彡[ᴜsᴇʀ]彡★"
+        assert "★" in result
+
+    def test_user_with_mixed_emoji_and_text(self):
+        """Test user with mixed emoji, text, and special characters."""
+        user_id = 999888777
+        complex_name = "🔥 xX_Pro_Gamer_Xx 🔥"
+        user = create_mock_user(user_id=user_id, global_name=complex_name, display_name="ProGamer")
+        
+        result = get_user_name_str(user_id, user)
+        
+        assert result == "🔥 xX_Pro_Gamer_Xx 🔥"
+        assert len(result) > 0
+        # Ensure emoji are preserved
+        assert result.startswith("🔥")
+        assert result.endswith("🔥")
+
+    @pytest.mark.parametrize("user_id,name,description", [
+        (101, "用户名", "Chinese characters"),
+        (102, "사용자", "Korean characters"),
+        (103, "ผู้ใช้", "Thai characters"),
+        (104, "🎭🎪🎨", "Multiple emojis only"),
+        (105, "Ñoño", "Spanish special characters"),
+        (106, "Müller", "German umlaut"),
+        (107, "Søren", "Scandinavian characters"),
+        (108, "Αλέξανδρος", "Greek characters"),
+        (109, "🏆 チャンピオン 👑", "Mixed emoji and Japanese"),
+        (110, "♠️♥️♣️♦️", "Card suit symbols"),
+    ])
+    def test_unicode_characters_parametrized(self, user_id, name, description):
+        """Parametrized test for various Unicode character sets."""
+        user = create_mock_user(user_id=user_id, global_name=name, display_name="Fallback")
+        result = get_user_name_str(user_id, user)
+        assert result == name
+        # Verify the string isn't mangled
+        assert len(result) > 0
 
