@@ -133,10 +133,19 @@ Functions with business logic requiring mocked Discord objects or database model
 
 ### Submission & Race Management (HIGH PRIORITY)
 
-- [ ] `forfeit_race()` - `ui/ui_util.py:132`
+- [x] `forfeit_race()` - `ui/ui_util.py:132` ✅
   - Test forfeit creates submission with ForfeitFinishTime
   - Test proper timestamp setting
   - *Requires: DB mock/patch[3]*
+  - **COMPLETED**: 10 tests passing
+    - Created new test file: `test/unit/test_ui_util_race_logic.py`
+    - Added ForfeitFinishTime constants to db_fixtures.py
+    - Mocked AsyncRaceSubmission class creation and save()
+    - Mocked zBot_now() for timestamp control
+    - Verified submission fields: race_id, user_id, submit_datetime, finish_time
+    - Edge case: nonexistent race handled gracefully (no exception)
+    - Multiple users can forfeit same race tested
+    - Same user can forfeit different races tested
 
 - [ ] `get_submission_details_dict()` - `ui/ui_util.py:349`
   - Test with complete submission data
@@ -458,19 +467,21 @@ pytest -v test/
   - ✅ get_race_embed_field_value (10 tests, database fixtures created)
   - ⏭️ game_time_is_valid (SKIPPED - DB utility)
   - ⏭️ datetime_is_valid (SKIPPED - DB utility)
-- **Phase 2**: ✅ 4/24 tests implemented (17%)
+- **Phase 2**: ✅ 5/24 tests implemented (21%)
   - ✅ user_has_role (11 tests, permission checking)
   - ✅ user_is_admin (6 tests, bot owner + role-based admin)
   - ✅ user_is_mod (9 tests, inheritance hierarchy verified)
   - ✅ can_view_race_leaderboard (13 tests, complex OR logic with multiple conditions)
+  - ✅ forfeit_race (10 tests, database submission mocking)
 - **Phase 3**: ☐ 0/21 tests implemented
-- **Total**: ✅ 9/54 tests implemented (17%) - 2 items skipped from total
-- **Total Tests Written**: 128 tests passing ✅ 🎯
+- **Total**: ✅ 10/54 tests implemented (19%) - 2 items skipped from total
+- **Total Tests Written**: 138 tests passing ✅ 🎯
 - **Bugs Found**: 3 bugs caught and fixed by tests! 🎯
 - **Test Infrastructure Created**:
   - Discord mock factory (`test/test_utils/discord_mocks.py`)
-  - Database fixtures (`test/test_utils/db_fixtures.py`)
+  - Database fixtures (`test/test_utils/db_fixtures.py` + RaceState + ForfeitFinishTime)
   - Permission tests (`test/unit/test_ui_util_permissions.py`)
+  - Race logic tests (`test/unit/test_ui_util_race_logic.py`)
 
-**Last Updated**: can_view_race_leaderboard completed (128 total tests)
+**Last Updated**: forfeit_race completed (138 total tests)
 

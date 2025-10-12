@@ -5,14 +5,8 @@ Mock factories and fixtures for database models used in testing.
 from unittest.mock import Mock, MagicMock, patch
 from datetime import datetime
 
-
-# Race state constants (from db.db_util.RaceState)
-class RaceState:
-    """Mock RaceState enum for testing."""
-    Inactive = 0
-    Active = 1
-    Completed = 2
-
+# Import constants directly from the actual code (no side effects)
+from db.db_util import RaceState, ForfeitFinishTime, ForfeitFinishTimeSeconds
 
 def create_mock_category(
     category_id=1,
