@@ -6,14 +6,15 @@ Tests race and submission logic from ui/ui_util.py with mocked database operatio
 import pytest
 from unittest.mock import patch, Mock, MagicMock, call
 from datetime import datetime
-from ui.ui_util import forfeit_race, get_submission_details_dict
+from ui.ui_util import forfeit_race, get_submission_details_dict, save_message
 from test.test_utils.db_fixtures import (
     create_mock_race, 
     create_mock_submission, 
     create_mock_extra_info,
     create_mock_extra_info_type,
     create_mock_extra_info_assignment,
-    ForfeitFinishTime
+    ForfeitFinishTime,
+    RaceMessageType
 )
 
 
@@ -624,4 +625,280 @@ class TestGetSubmissionDetailsDict:
         assert "🎉" in result["Comment"]
         assert "🏆" in result["Comment"]
         assert "🎮" in result["Comment"]
+
+
+@pytest.mark.unit
+class TestSaveMessage:
+    """Tests for save_message() function in ui/ui_util.py"""
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    def test_save_message_with_default_type(self, mock_message_class):
+        """Test save_message with default message type (Leaderboard)."""
+        # Setup
+        server_id = 111222333
+        channel_id = 444555666
+        message_id = 777888999
+        
+        mock_message = Mock()
+        mock_message_class.return_value = mock_message
+        
+        # Execute
+        save_message(server_id, channel_id, message_id)
+        
+        # Verify message was created with correct values
+        mock_message_class.assert_called_once_with(
+            server_id=server_id,
+            channel_id=channel_id,
+            message_id=message_id,
+            message_type=RaceMessageType.Leaderboard,
+            category_id=None,
+            race_id=None
+        )
+        mock_message.save.assert_called_once()
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    def test_save_message_with_race_id(self, mock_message_class):
+        """Test save_message with race_id specified."""
+        # Setup
+        server_id = 111222333
+        channel_id = 444555666
+        message_id = 777888999
+        race_id = 42
+        
+        mock_message = Mock()
+        mock_message_class.return_value = mock_message
+        
+        # Execute
+        save_message(server_id, channel_id, message_id, race_id=race_id)
+        
+        # Verify
+        mock_message_class.assert_called_once_with(
+            server_id=server_id,
+            channel_id=channel_id,
+            message_id=message_id,
+            message_type=RaceMessageType.Leaderboard,
+            category_id=None,
+            race_id=race_id
+        )
+        mock_message.save.assert_called_once()
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    def test_save_message_with_category_id(self, mock_message_class):
+        """Test save_message with category_id specified."""
+        # Setup
+        server_id = 111222333
+        channel_id = 444555666
+        message_id = 777888999
+        category_id = 10
+        
+        mock_message = Mock()
+        mock_message_class.return_value = mock_message
+        
+        # Execute
+        save_message(server_id, channel_id, message_id, category_id=category_id)
+        
+        # Verify
+        mock_message_class.assert_called_once_with(
+            server_id=server_id,
+            channel_id=channel_id,
+            message_id=message_id,
+            message_type=RaceMessageType.Leaderboard,
+            category_id=category_id,
+            race_id=None
+        )
+        mock_message.save.assert_called_once()
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    def test_save_message_with_menu_type(self, mock_message_class):
+        """Test save_message with Menu message type."""
+        # Setup
+        server_id = 111222333
+        channel_id = 444555666
+        message_id = 777888999
+        
+        mock_message = Mock()
+        mock_message_class.return_value = mock_message
+        
+        # Execute
+        save_message(server_id, channel_id, message_id, message_type=RaceMessageType.Menu)
+        
+        # Verify
+        mock_message_class.assert_called_once_with(
+            server_id=server_id,
+            channel_id=channel_id,
+            message_id=message_id,
+            message_type=RaceMessageType.Menu,
+            category_id=None,
+            race_id=None
+        )
+        mock_message.save.assert_called_once()
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    def test_save_message_with_race_info_type(self, mock_message_class):
+        """Test save_message with RaceInfo message type."""
+        # Setup
+        server_id = 111222333
+        channel_id = 444555666
+        message_id = 777888999
+        race_id = 5
+        
+        mock_message = Mock()
+        mock_message_class.return_value = mock_message
+        
+        # Execute
+        save_message(server_id, channel_id, message_id, message_type=RaceMessageType.RaceInfo, race_id=race_id)
+        
+        # Verify
+        mock_message_class.assert_called_once_with(
+            server_id=server_id,
+            channel_id=channel_id,
+            message_id=message_id,
+            message_type=RaceMessageType.RaceInfo,
+            category_id=None,
+            race_id=race_id
+        )
+        mock_message.save.assert_called_once()
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    def test_save_message_with_announcement_type(self, mock_message_class):
+        """Test save_message with Announcement message type."""
+        # Setup
+        server_id = 111222333
+        channel_id = 444555666
+        message_id = 777888999
+        category_id = 3
+        
+        mock_message = Mock()
+        mock_message_class.return_value = mock_message
+        
+        # Execute
+        save_message(server_id, channel_id, message_id, 
+                    message_type=RaceMessageType.Announcement, 
+                    category_id=category_id)
+        
+        # Verify
+        mock_message_class.assert_called_once_with(
+            server_id=server_id,
+            channel_id=channel_id,
+            message_id=message_id,
+            message_type=RaceMessageType.Announcement,
+            category_id=category_id,
+            race_id=None
+        )
+        mock_message.save.assert_called_once()
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    def test_save_message_with_both_race_and_category(self, mock_message_class):
+        """Test save_message with both race_id and category_id."""
+        # Setup
+        server_id = 111222333
+        channel_id = 444555666
+        message_id = 777888999
+        race_id = 15
+        category_id = 8
+        
+        mock_message = Mock()
+        mock_message_class.return_value = mock_message
+        
+        # Execute
+        save_message(server_id, channel_id, message_id, race_id=race_id, category_id=category_id)
+        
+        # Verify both IDs are saved
+        mock_message_class.assert_called_once_with(
+            server_id=server_id,
+            channel_id=channel_id,
+            message_id=message_id,
+            message_type=RaceMessageType.Leaderboard,
+            category_id=category_id,
+            race_id=race_id
+        )
+        mock_message.save.assert_called_once()
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    def test_save_message_handles_save_exception(self, mock_message_class):
+        """Test save_message handles exceptions during save gracefully."""
+        # Setup
+        server_id = 111222333
+        channel_id = 444555666
+        message_id = 777888999
+        
+        mock_message = Mock()
+        mock_message.save.side_effect = Exception("Database error")
+        mock_message_class.return_value = mock_message
+        
+        # Execute - should not raise exception
+        try:
+            save_message(server_id, channel_id, message_id)
+        except Exception as e:
+            pytest.fail(f"save_message raised exception: {e}")
+        
+        # Verify save was attempted
+        mock_message.save.assert_called_once()
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    @pytest.mark.parametrize("message_type", [
+        RaceMessageType.Leaderboard,
+        RaceMessageType.RaceInfo,
+        RaceMessageType.Menu,
+        RaceMessageType.Announcement,
+    ])
+    def test_save_message_all_message_types(self, mock_message_class, message_type):
+        """Parametrized test for all message types."""
+        # Setup
+        server_id = 111
+        channel_id = 222
+        message_id = 333
+        
+        mock_message = Mock()
+        mock_message_class.return_value = mock_message
+        
+        # Execute
+        save_message(server_id, channel_id, message_id, message_type=message_type)
+        
+        # Verify
+        assert mock_message_class.call_args[1]['message_type'] == message_type
+        mock_message.save.assert_called_once()
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    def test_save_message_with_large_ids(self, mock_message_class):
+        """Test save_message handles large Discord ID values."""
+        # Setup - Discord IDs can be very large
+        server_id = 999999999999999999
+        channel_id = 888888888888888888
+        message_id = 777777777777777777
+        
+        mock_message = Mock()
+        mock_message_class.return_value = mock_message
+        
+        # Execute
+        save_message(server_id, channel_id, message_id)
+        
+        # Verify
+        assert mock_message_class.call_args[1]['server_id'] == server_id
+        assert mock_message_class.call_args[1]['channel_id'] == channel_id
+        assert mock_message_class.call_args[1]['message_id'] == message_id
+        mock_message.save.assert_called_once()
+
+    @patch('ui.ui_util.AsyncRaceMessage')
+    def test_save_message_keyword_only_arguments(self, mock_message_class):
+        """Test that message_type, category_id, and race_id are keyword-only."""
+        # Setup
+        server_id = 111
+        channel_id = 222
+        message_id = 333
+        
+        mock_message = Mock()
+        mock_message_class.return_value = mock_message
+        
+        # Execute with keyword arguments
+        save_message(server_id, channel_id, message_id, 
+                    message_type=RaceMessageType.RaceInfo,
+                    category_id=5,
+                    race_id=10)
+        
+        # Verify all parameters passed correctly
+        call_kwargs = mock_message_class.call_args[1]
+        assert call_kwargs['message_type'] == RaceMessageType.RaceInfo
+        assert call_kwargs['category_id'] == 5
+        assert call_kwargs['race_id'] == 10
 

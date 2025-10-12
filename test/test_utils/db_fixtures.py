@@ -6,7 +6,7 @@ from unittest.mock import Mock, MagicMock, patch
 from datetime import datetime
 
 # Import constants and simple utility functions directly from the actual code (no side effects)
-from db.db_util import RaceState, ForfeitFinishTime, ForfeitFinishTimeSeconds, is_value_empty
+from db.db_util import RaceState, ForfeitFinishTime, ForfeitFinishTimeSeconds, is_value_empty, RaceMessageType, PointsType
 
 def create_mock_category(
     category_id=1,

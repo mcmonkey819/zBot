@@ -162,21 +162,44 @@ Functions with business logic requiring mocked Discord objects or database model
     - Multiple extra infos (Collection Rate, VoD Link) tested
     - Unicode/emoji in comments preserved
 
-- [ ] `save_message()` - `ui/ui_util.py:71`
+- [x] `save_message()` - `ui/ui_util.py:71` ✅
   - Test successful save
   - Test save with different message types
   - Test save with category_id vs race_id
   - Test error handling on failed save
+  - **COMPLETED**: 14 tests passing (includes 4 parametrized tests)
+    - Added RaceMessageType to db_fixtures imports
+    - Default message type (Leaderboard) tested
+    - All 4 message types tested: Leaderboard, RaceInfo, Menu, Announcement
+    - Race ID and Category ID handling tested independently and together
+    - Exception handling verified (doesn't crash on save failure)
+    - Large Discord ID values tested (18+ digit IDs)
+    - Keyword-only arguments verified
 
 ### Race State & Scoring (HIGH PRIORITY)
 
-- [ ] `race_change_state()` - `ui/menus.py:1627`
+- [x] `race_change_state()` - `ui/menus.py:1627` ✅
   - Test Inactive → Active transition
   - Test Active → Completed transition with scoring
   - Test invalid transition (Completed → Inactive with points)
   - Test confirmation prompts for edge cases
   - Test post-state-change actions (leaderboard updates)
   - *Requires: Interaction mock with response capability[5]*
+  - **COMPLETED**: 22 integration tests passing
+    - Created first integration test file: `test/integration/test_race_state_flows.py`
+    - Mocked nextcord.ext.menus module to enable ui.menus imports
+    - **All state transitions tested**:
+      - ✅ Inactive → Active (valid)
+      - ✅ Inactive → Completed (valid with confirmation)
+      - ✅ Active → Inactive (invalid with submissions, valid without)
+      - ✅ Active → Completed (valid, with assigned racer confirmation logic)
+      - ✅ Completed → Active (invalid with scoring, valid with NoScoring)
+      - ✅ Completed → Inactive (invalid - has submissions)
+    - Confirmation prompt logic tested (user accepts/rejects)
+    - Assigned racers submission checking tested
+    - Post-transition actions verified (scoring, leaderboard updates, handle_activate_race)
+    - All 5 PointsType values tested for Completed → Active transition
+    - Success message sending verified
 
 - [ ] `handle_activate_race()` - `ui/menus.py:3074`
   - Test announcement message sending (open races)
@@ -476,22 +499,24 @@ pytest -v test/
   - ✅ get_race_embed_field_value (10 tests, database fixtures created)
   - ⏭️ game_time_is_valid (SKIPPED - DB utility)
   - ⏭️ datetime_is_valid (SKIPPED - DB utility)
-- **Phase 2**: ✅ 6/24 tests implemented (25%)
+- **Phase 2**: ✅ 8/24 tests implemented (33%)
   - ✅ user_has_role (11 tests, permission checking)
   - ✅ user_is_admin (6 tests, bot owner + role-based admin)
   - ✅ user_is_mod (9 tests, inheritance hierarchy verified)
   - ✅ can_view_race_leaderboard (13 tests, complex OR logic with multiple conditions)
   - ✅ forfeit_race (10 tests, database submission mocking)
   - ✅ get_submission_details_dict (15 tests, extra info handling, syntax error fixed)
+  - ✅ save_message (14 tests, all message types covered)
+  - ✅ race_change_state (22 tests, all state transitions covered)
 - **Phase 3**: ☐ 0/21 tests implemented
-- **Total**: ✅ 11/54 tests implemented (20%) - 2 items skipped from total
-- **Total Tests Written**: 153 tests passing ✅ 🎯
+- **Total**: ✅ 13/54 tests implemented (24%) - 2 items skipped from total
+- **Total Tests Written**: 189 tests passing ✅ 🎯
 - **Bugs Found**: 4 bugs caught and fixed by tests! 🎯
 - **Test Infrastructure Created**:
   - Discord mock factory (`test/test_utils/discord_mocks.py`)
-  - Database fixtures (`test/test_utils/db_fixtures.py` + RaceState + ForfeitFinishTime)
-  - Permission tests (`test/unit/test_ui_util_permissions.py`)
-  - Race logic tests (`test/unit/test_ui_util_race_logic.py`)
+  - Database fixtures (`test/test_utils/db_fixtures.py` + PointsType)
+  - Unit tests: Formatters (89), Permissions (39), Race Logic (39)
+  - Integration tests: Race State Flows (22) NEW!
 
-**Last Updated**: get_submission_details_dict completed - syntax error fixed! (153 total tests)
+**Last Updated**: race_change_state completed - first integration tests! (189 total tests)
 
