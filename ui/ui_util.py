@@ -371,7 +371,7 @@ def get_submission_details_dict(submission):
         if info is not None:
             info_type = get_extra_info_type(a.info_type_id)
             if not is_value_empty(info.data):
-                details[info_type.name] = value=info.data
+                details[info_type.name] = info.data
     
     if not is_value_empty(submission.points):
         details["Points"] = format_points_str(submission.points)

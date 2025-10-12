@@ -5,8 +5,8 @@ Mock factories and fixtures for database models used in testing.
 from unittest.mock import Mock, MagicMock, patch
 from datetime import datetime
 
-# Import constants directly from the actual code (no side effects)
-from db.db_util import RaceState, ForfeitFinishTime, ForfeitFinishTimeSeconds
+# Import constants and simple utility functions directly from the actual code (no side effects)
+from db.db_util import RaceState, ForfeitFinishTime, ForfeitFinishTimeSeconds, is_value_empty
 
 def create_mock_category(
     category_id=1,
@@ -220,6 +220,41 @@ def create_mock_extra_info(
     info.info_type_id = info_type_id
     info.data = data
     return info
+
+
+def create_mock_extra_info_assignment(
+    assignment_id=1,
+    race_id=1,
+    info_type_id=1,
+    category_id=None,
+    required=False
+):
+    """
+    Creates a mock AsyncRaceExtraInfoAssignment object.
+    
+    Args:
+        assignment_id: Assignment ID
+        race_id: Race ID (None for category assignment)
+        info_type_id: Info type ID or object
+        category_id: Category ID (None for race assignment)
+        required: Whether this field is required
+    
+    Returns:
+        Mock AsyncRaceExtraInfoAssignment object
+    """
+    assignment = Mock()
+    assignment.id = assignment_id
+    assignment.race_id = race_id
+    assignment.category_id = category_id
+    assignment.required = required
+    
+    # Handle info_type_id being either an ID or an object
+    if isinstance(info_type_id, int):
+        assignment.info_type_id = info_type_id
+    else:
+        assignment.info_type_id = info_type_id
+    
+    return assignment
 
 
 def create_race_with_submissions(race_id=1, num_submissions=3, category_name="Test Category"):

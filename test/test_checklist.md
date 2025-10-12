@@ -147,11 +147,20 @@ Functions with business logic requiring mocked Discord objects or database model
     - Multiple users can forfeit same race tested
     - Same user can forfeit different races tested
 
-- [ ] `get_submission_details_dict()` - `ui/ui_util.py:349`
+- [x] `get_submission_details_dict()` - `ui/ui_util.py:360` ✅
   - Test with complete submission data
   - Test with minimal data (optional fields empty)
   - Test with extra info assignments
   - Test points formatting
+  - **COMPLETED**: 15 tests passing, **1 syntax error fixed!**
+    - Fixed invalid syntax: `details[name] = value=data` → `details[name] = data`
+    - Created mock_extra_info_assignment() in db_fixtures.py
+    - DNF display for forfeit times verified ("23:59:59" → "DNF")
+    - Empty/None comment handling tested
+    - Points formatting via format_points_str() verified
+    - Extra info with empty data excluded correctly
+    - Multiple extra infos (Collection Rate, VoD Link) tested
+    - Unicode/emoji in comments preserved
 
 - [ ] `save_message()` - `ui/ui_util.py:71`
   - Test successful save
@@ -467,21 +476,22 @@ pytest -v test/
   - ✅ get_race_embed_field_value (10 tests, database fixtures created)
   - ⏭️ game_time_is_valid (SKIPPED - DB utility)
   - ⏭️ datetime_is_valid (SKIPPED - DB utility)
-- **Phase 2**: ✅ 5/24 tests implemented (21%)
+- **Phase 2**: ✅ 6/24 tests implemented (25%)
   - ✅ user_has_role (11 tests, permission checking)
   - ✅ user_is_admin (6 tests, bot owner + role-based admin)
   - ✅ user_is_mod (9 tests, inheritance hierarchy verified)
   - ✅ can_view_race_leaderboard (13 tests, complex OR logic with multiple conditions)
   - ✅ forfeit_race (10 tests, database submission mocking)
+  - ✅ get_submission_details_dict (15 tests, extra info handling, syntax error fixed)
 - **Phase 3**: ☐ 0/21 tests implemented
-- **Total**: ✅ 10/54 tests implemented (19%) - 2 items skipped from total
-- **Total Tests Written**: 138 tests passing ✅ 🎯
-- **Bugs Found**: 3 bugs caught and fixed by tests! 🎯
+- **Total**: ✅ 11/54 tests implemented (20%) - 2 items skipped from total
+- **Total Tests Written**: 153 tests passing ✅ 🎯
+- **Bugs Found**: 4 bugs caught and fixed by tests! 🎯
 - **Test Infrastructure Created**:
   - Discord mock factory (`test/test_utils/discord_mocks.py`)
   - Database fixtures (`test/test_utils/db_fixtures.py` + RaceState + ForfeitFinishTime)
   - Permission tests (`test/unit/test_ui_util_permissions.py`)
   - Race logic tests (`test/unit/test_ui_util_race_logic.py`)
 
-**Last Updated**: forfeit_race completed (138 total tests)
+**Last Updated**: get_submission_details_dict completed - syntax error fixed! (153 total tests)
 
