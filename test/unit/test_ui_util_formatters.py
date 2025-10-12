@@ -12,7 +12,7 @@ from test.test_utils.db_fixtures import create_mock_race, create_mock_category
 
 @pytest.mark.unit
 class TestGetPlaceStr:
-    """Tests for get_place_str() function - ui/ui_util.py:145"""
+    """Tests for get_place_str() function in ui/ui_util.py"""
 
     def test_first_place(self):
         """Test 1st place formatting."""
@@ -114,7 +114,7 @@ class TestGetPlaceStr:
 
 @pytest.mark.unit
 class TestFormatPointsStr:
-    """Tests for format_points_str() function - ui/ui_util.py:418"""
+    """Tests for format_points_str() function in ui/ui_util.py"""
 
     def test_integer_points(self):
         """Test points with no decimal value."""
@@ -157,7 +157,7 @@ class TestFormatPointsStr:
 
 @pytest.mark.unit
 class TestBuildResponseMessageList:
-    """Tests for build_response_message_list() function - ui/ui_util.py:224"""
+    """Tests for build_response_message_list() function in ui/ui_util.py"""
 
     # Discord's character limit used in the function
     CHAR_LIMIT = 2000 - 10  # 1990
@@ -301,7 +301,7 @@ class TestBuildResponseMessageList:
 
 @pytest.mark.unit
 class TestGetUserNameStr:
-    """Tests for get_user_name_str() function - ui/ui_util.py:537"""
+    """Tests for get_user_name_str() function in ui/ui_util.py"""
 
     def test_user_with_global_name(self):
         """Test user with global_name returns global_name."""
@@ -493,7 +493,7 @@ class TestGetUserNameStr:
 
 @pytest.mark.unit
 class TestGetRaceEmbedFieldValue:
-    """Tests for get_race_embed_field_value() function - ui/ui_util.py:344"""
+    """Tests for get_race_embed_field_value() function in ui/ui_util.py"""
 
     @patch('ui.ui_util.get_num_submissions')
     def test_without_user_id_shows_description(self, mock_get_num_submissions):

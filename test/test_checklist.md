@@ -116,12 +116,20 @@ Functions with business logic requiring mocked Discord objects or database model
     - User with both admin and mod roles
     - Mod-only users are mod but not admin
 
-- [ ] `can_view_race_leaderboard()` - `ui/ui_util.py:504`
+- [x] `can_view_race_leaderboard()` - `ui/ui_util.py:515` ✅
   - Test completed race (always viewable)
   - Test active race with user submission
   - Test active race without submission (mod can view if enabled)
   - Test active race without submission (regular user cannot view)
   - *Requires: Race submission fixtures[4]*
+  - **COMPLETED**: 13 tests passing
+    - Added RaceState constants to db_fixtures.py
+    - Tests cover all three viewing conditions (completed, submission, mod permission)
+    - OR logic verified: any single condition allows viewing
+    - Edge cases: race not found, all conditions true, all conditions false
+    - Different race states tested (Inactive, Active, Completed)
+    - Bot owner can view via mod permission
+    - Category setting mod_can_view_leaderboard respected
 
 ### Submission & Race Management (HIGH PRIORITY)
 
@@ -450,18 +458,19 @@ pytest -v test/
   - ✅ get_race_embed_field_value (10 tests, database fixtures created)
   - ⏭️ game_time_is_valid (SKIPPED - DB utility)
   - ⏭️ datetime_is_valid (SKIPPED - DB utility)
-- **Phase 2**: ✅ 3/24 tests implemented (13%)
+- **Phase 2**: ✅ 4/24 tests implemented (17%)
   - ✅ user_has_role (11 tests, permission checking)
   - ✅ user_is_admin (6 tests, bot owner + role-based admin)
   - ✅ user_is_mod (9 tests, inheritance hierarchy verified)
+  - ✅ can_view_race_leaderboard (13 tests, complex OR logic with multiple conditions)
 - **Phase 3**: ☐ 0/21 tests implemented
-- **Total**: ✅ 8/54 tests implemented (15%) - 2 items skipped from total
-- **Total Tests Written**: 115 tests passing ✅ 🎯
+- **Total**: ✅ 9/54 tests implemented (17%) - 2 items skipped from total
+- **Total Tests Written**: 128 tests passing ✅ 🎯
 - **Bugs Found**: 3 bugs caught and fixed by tests! 🎯
 - **Test Infrastructure Created**:
   - Discord mock factory (`test/test_utils/discord_mocks.py`)
   - Database fixtures (`test/test_utils/db_fixtures.py`)
   - Permission tests (`test/unit/test_ui_util_permissions.py`)
 
-**Last Updated**: user_is_admin & user_is_mod completed (117 total tests)
+**Last Updated**: can_view_race_leaderboard completed (128 total tests)
 

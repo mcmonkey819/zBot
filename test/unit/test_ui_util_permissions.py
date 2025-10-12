@@ -5,13 +5,14 @@ Tests permission checking logic from ui/ui_util.py with mocked Discord objects.
 """
 import pytest
 from unittest.mock import patch, Mock
-from ui.ui_util import user_has_role, user_is_admin, user_is_mod
+from ui.ui_util import user_has_role, user_is_admin, user_is_mod, can_view_race_leaderboard
 from test.test_utils.discord_mocks import create_mock_user, create_mock_member, create_mock_role, create_mock_guild
+from test.test_utils.db_fixtures import create_mock_race, create_mock_category, create_mock_submission, RaceState
 
 
 @pytest.mark.unit
 class TestUserHasRole:
-    """Tests for user_has_role() function - ui/ui_util.py:39"""
+    """Tests for user_has_role() function in ui/ui_util.py"""
 
     def test_user_has_role_returns_true(self):
         """Test user with the specified role returns True."""
@@ -180,7 +181,7 @@ class TestUserHasRole:
 
 @pytest.mark.unit
 class TestUserIsAdmin:
-    """Tests for user_is_admin() function - ui/ui_util.py:45"""
+    """Tests for user_is_admin() function in ui/ui_util.py"""
 
     @patch('ui.ui_util.get_server')
     @patch('config.bot_config.CoolestGuy', 999999999)
@@ -319,7 +320,7 @@ class TestUserIsAdmin:
 
 @pytest.mark.unit
 class TestUserIsMod:
-    """Tests for user_is_mod() function - ui/ui_util.py:54"""
+    """Tests for user_is_mod() function in ui/ui_util.py"""
 
     @patch('ui.ui_util.get_server')
     @patch('config.bot_config.CoolestGuy', 999999999)
@@ -544,4 +545,303 @@ class TestUserIsMod:
         
         # Verify - admin should be mod without mod role
         assert result is True
+
+
+@pytest.mark.unit
+class TestCanViewRaceLeaderboard:
+    """Tests for can_view_race_leaderboard() function in ui/ui_util.py"""
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    def test_completed_race_always_viewable(self, mock_get_race, mock_get_race_submission):
+        """Test that completed races can always be viewed by anyone."""
+        # Setup
+        category = create_mock_category(mod_can_view_leaderboard=False)
+        race = create_mock_race(race_id=1, category_id=category, state=RaceState.Completed)
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = None  # User hasn't submitted
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 1, user)
+        
+        # Verify
+        assert result is True
+        mock_get_race.assert_called_once_with(1)
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    def test_user_with_submission_can_view(self, mock_get_race, mock_get_race_submission):
+        """Test user who has submitted can view leaderboard."""
+        # Setup
+        category = create_mock_category(mod_can_view_leaderboard=False)
+        race = create_mock_race(race_id=2, category_id=category, state=RaceState.Active)
+        submission = create_mock_submission(submission_id=1, race_id=2, user_id=123456789)
+        
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = submission  # User HAS submitted
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 2, user)
+        
+        # Verify
+        assert result is True
+        mock_get_race_submission.assert_called_once_with(user.id, 2)
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    @patch('ui.ui_util.user_is_mod')
+    def test_mod_can_view_when_category_allows(self, mock_user_is_mod, mock_get_race, mock_get_race_submission):
+        """Test moderator can view when category.mod_can_view_leaderboard is True."""
+        # Setup
+        category = create_mock_category(mod_can_view_leaderboard=True)
+        race = create_mock_race(race_id=3, category_id=category, state=RaceState.Active)
+        
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = None  # User hasn't submitted
+        mock_user_is_mod.return_value = True  # User is a mod
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 3, user)
+        
+        # Verify
+        assert result is True
+        mock_user_is_mod.assert_called_once_with(server, user)
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    @patch('ui.ui_util.user_is_mod')
+    def test_mod_cannot_view_when_category_disallows(self, mock_user_is_mod, mock_get_race, mock_get_race_submission):
+        """Test moderator cannot view when category.mod_can_view_leaderboard is False."""
+        # Setup
+        category = create_mock_category(mod_can_view_leaderboard=False)
+        race = create_mock_race(race_id=4, category_id=category, state=RaceState.Active)
+        
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = None  # User hasn't submitted
+        mock_user_is_mod.return_value = True  # User is a mod but category doesn't allow
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 4, user)
+        
+        # Verify
+        assert result is False  # Mod permission doesn't help if category disallows
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    @patch('ui.ui_util.user_is_mod')
+    def test_regular_user_cannot_view_active_race(self, mock_user_is_mod, mock_get_race, mock_get_race_submission):
+        """Test regular user cannot view active race without submission."""
+        # Setup
+        category = create_mock_category(mod_can_view_leaderboard=False)
+        race = create_mock_race(race_id=5, category_id=category, state=RaceState.Active)
+        
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = None  # User hasn't submitted
+        mock_user_is_mod.return_value = False  # User is not a mod
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 5, user)
+        
+        # Verify
+        assert result is False
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    def test_inactive_race_with_submission_can_view(self, mock_get_race, mock_get_race_submission):
+        """Test user who submitted to inactive race can still view it."""
+        # Setup
+        category = create_mock_category(mod_can_view_leaderboard=False)
+        race = create_mock_race(race_id=6, category_id=category, state=RaceState.Inactive)
+        submission = create_mock_submission(submission_id=1, race_id=6, user_id=123456789)
+        
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = submission
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 6, user)
+        
+        # Verify
+        assert result is True
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    def test_race_not_found_returns_false(self, mock_get_race, mock_get_race_submission):
+        """Test that if race doesn't exist, returns False."""
+        # Setup
+        mock_get_race.return_value = None  # Race doesn't exist
+        mock_get_race_submission.return_value = None
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 999, user)
+        
+        # Verify
+        assert result is False
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    @patch('ui.ui_util.user_is_mod')
+    def test_completed_race_overrides_all_checks(self, mock_user_is_mod, mock_get_race, mock_get_race_submission):
+        """Test completed race is viewable even if other conditions would deny."""
+        # Setup
+        category = create_mock_category(mod_can_view_leaderboard=False)
+        race = create_mock_race(race_id=7, category_id=category, state=RaceState.Completed)
+        
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = None  # No submission
+        mock_user_is_mod.return_value = False  # Not a mod
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 7, user)
+        
+        # Verify
+        assert result is True  # Completed race overrides everything
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    @patch('ui.ui_util.user_is_mod')
+    def test_submission_overrides_mod_setting(self, mock_user_is_mod, mock_get_race, mock_get_race_submission):
+        """Test having submission allows viewing even if mod viewing disabled."""
+        # Setup
+        category = create_mock_category(mod_can_view_leaderboard=False)
+        race = create_mock_race(race_id=8, category_id=category, state=RaceState.Active)
+        submission = create_mock_submission(submission_id=1, race_id=8, user_id=123456789)
+        
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = submission  # Has submission
+        mock_user_is_mod.return_value = False
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 8, user)
+        
+        # Verify
+        assert result is True
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    @patch('ui.ui_util.user_is_mod')
+    def test_all_three_conditions_true(self, mock_user_is_mod, mock_get_race, mock_get_race_submission):
+        """Test when all three conditions allow viewing (completed + mod + submission)."""
+        # Setup
+        category = create_mock_category(mod_can_view_leaderboard=True)
+        race = create_mock_race(race_id=9, category_id=category, state=RaceState.Completed)
+        submission = create_mock_submission(submission_id=1, race_id=9, user_id=123456789)
+        
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = submission
+        mock_user_is_mod.return_value = True
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 9, user)
+        
+        # Verify
+        assert result is True
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    @patch('ui.ui_util.user_is_mod')
+    @patch('config.bot_config.CoolestGuy', 999999999)
+    def test_bot_owner_can_view_via_mod_permission(self, mock_user_is_mod, mock_get_race, mock_get_race_submission):
+        """Test bot owner can view via mod permission when category allows."""
+        # Setup
+        category = create_mock_category(mod_can_view_leaderboard=True)
+        race = create_mock_race(race_id=10, category_id=category, state=RaceState.Active)
+        
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = None
+        mock_user_is_mod.return_value = True  # Bot owner is always mod
+        
+        server = create_mock_guild()
+        user = create_mock_member(user_id=999999999, roles=[])
+        
+        # Execute
+        result = can_view_race_leaderboard(server, 10, user)
+        
+        # Verify
+        assert result is True
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    @patch('ui.ui_util.user_is_mod')
+    def test_different_race_states(self, mock_user_is_mod, mock_get_race, mock_get_race_submission):
+        """Test viewing permissions across different race states."""
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        
+        mock_get_race_submission.return_value = None  # No submission
+        mock_user_is_mod.return_value = False  # Not a mod
+        
+        # Inactive race - cannot view
+        category = create_mock_category(mod_can_view_leaderboard=False)
+        race_inactive = create_mock_race(race_id=11, category_id=category, state=RaceState.Inactive)
+        mock_get_race.return_value = race_inactive
+        assert can_view_race_leaderboard(server, 11, user) is False
+        
+        # Active race - cannot view
+        race_active = create_mock_race(race_id=12, category_id=category, state=RaceState.Active)
+        mock_get_race.return_value = race_active
+        assert can_view_race_leaderboard(server, 12, user) is False
+        
+        # Completed race - can view!
+        race_completed = create_mock_race(race_id=13, category_id=category, state=RaceState.Completed)
+        mock_get_race.return_value = race_completed
+        assert can_view_race_leaderboard(server, 13, user) is True
+
+    @patch('ui.ui_util.get_race_submission')
+    @patch('ui.ui_util.get_race')
+    @patch('ui.ui_util.user_is_mod')
+    def test_multiple_view_conditions(self, mock_user_is_mod, mock_get_race, mock_get_race_submission):
+        """Test the OR logic - any condition being true allows viewing."""
+        server = create_mock_guild()
+        user = create_mock_member(user_id=123456789, roles=[])
+        category = create_mock_category(mod_can_view_leaderboard=True)
+        race = create_mock_race(race_id=14, category_id=category, state=RaceState.Active)
+        
+        # Test 1: Only mod permission
+        mock_get_race.return_value = race
+        mock_get_race_submission.return_value = None
+        mock_user_is_mod.return_value = True
+        assert can_view_race_leaderboard(server, 14, user) is True
+        
+        # Test 2: Only submission (mod false)
+        submission = create_mock_submission(submission_id=1, race_id=14, user_id=123456789)
+        mock_get_race_submission.return_value = submission
+        mock_user_is_mod.return_value = False
+        assert can_view_race_leaderboard(server, 14, user) is True
+        
+        # Test 3: Only completed state
+        race_completed = create_mock_race(race_id=14, category_id=category, state=RaceState.Completed)
+        mock_get_race.return_value = race_completed
+        mock_get_race_submission.return_value = None
+        mock_user_is_mod.return_value = False
+        assert can_view_race_leaderboard(server, 14, user) is True
 
