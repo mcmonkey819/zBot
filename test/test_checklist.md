@@ -201,18 +201,25 @@ Functions with business logic requiring mocked Discord objects or database model
     - All 5 PointsType values tested for Completed → Active transition
     - Success message sending verified
 
-- [ ] `handle_activate_race()` - `ui/menus.py:3074`
+- [x] `handle_activate_race()` - `ui/menus.py:3074` - **COMPLETED** - 11 integration tests covering open/assigned races, role removal scenarios, retry logic, error handling, and function call ordering
   - Test announcement message sending (open races)
   - Test role removal logic
   - Test race pinning when category specifies
   - Test leaderboard update trigger
   - *Requires: Guild mock with members/roles[2]*
 
-- [ ] `do_post_submit_actions()` - `ui/menus.py:3096`
+- [x] `do_post_submit_actions()` - `ui/menus.py:3096` ✅
   - Test role application on submission
   - Test leaderboard update trigger
   - Test with category submit role
   - Test with race-specific submit role
+  - **COMPLETED**: 9 tests passing
+    - Created comprehensive test suite covering all role application scenarios
+    - Tests cover category submit role, race-specific submit role, and both together
+    - Edge cases: no submit roles, user not found, roles not found, mixed availability
+    - Verified leaderboard always updates regardless of role application success
+    - Proper async mocking with AsyncMock for user.add_roles method
+    - Tests verify function logic: only checks category.submit_role, then tries both roles
 
 ### Leaderboard & Display Logic (MEDIUM PRIORITY)
 
@@ -499,7 +506,7 @@ pytest -v test/
   - ✅ get_race_embed_field_value (10 tests, database fixtures created)
   - ⏭️ game_time_is_valid (SKIPPED - DB utility)
   - ⏭️ datetime_is_valid (SKIPPED - DB utility)
-- **Phase 2**: ✅ 8/24 tests implemented (33%)
+- **Phase 2**: ✅ 10/24 tests implemented (42%)
   - ✅ user_has_role (11 tests, permission checking)
   - ✅ user_is_admin (6 tests, bot owner + role-based admin)
   - ✅ user_is_mod (9 tests, inheritance hierarchy verified)
@@ -508,15 +515,17 @@ pytest -v test/
   - ✅ get_submission_details_dict (15 tests, extra info handling, syntax error fixed)
   - ✅ save_message (14 tests, all message types covered)
   - ✅ race_change_state (22 tests, all state transitions covered)
+  - ✅ handle_activate_race (11 tests, race activation actions with role removal retry logic)
+  - ✅ do_post_submit_actions (9 tests, role application and leaderboard update)
 - **Phase 3**: ☐ 0/21 tests implemented
-- **Total**: ✅ 13/54 tests implemented (24%) - 2 items skipped from total
-- **Total Tests Written**: 189 tests passing ✅ 🎯
+- **Total**: ✅ 15/54 tests implemented (28%) - 2 items skipped from total
+- **Total Tests Written**: 209 tests passing ✅ 🎯
 - **Bugs Found**: 4 bugs caught and fixed by tests! 🎯
 - **Test Infrastructure Created**:
   - Discord mock factory (`test/test_utils/discord_mocks.py`)
   - Database fixtures (`test/test_utils/db_fixtures.py` + PointsType)
-  - Unit tests: Formatters (89), Permissions (39), Race Logic (39)
+  - Unit tests: Formatters (89), Permissions (39), Race Logic (48)
   - Integration tests: Race State Flows (22) NEW!
 
-**Last Updated**: race_change_state completed - first integration tests! (189 total tests)
+**Last Updated**: do_post_submit_actions completed - role application and leaderboard update logic! (209 total tests)
 

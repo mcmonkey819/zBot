@@ -21,8 +21,24 @@ sys.modules['nextcord.ext.menus'] = MagicMock()
 from test.test_utils.discord_mocks import create_mock_interaction, create_mock_guild
 from test.test_utils.db_fixtures import create_mock_race, create_mock_category, RaceState, PointsType
 
-# Now we can import the function
-from ui.menus import race_change_state
+# Now we can import the functions
+from ui.menus import race_change_state, handle_activate_race
+
+
+@pytest.fixture
+def sample_interaction():
+    """Create a sample interaction for testing"""
+    interaction = create_mock_interaction()
+    # Make guild.get_role a proper mock
+    interaction.guild.get_role = MagicMock()
+    return interaction
+
+
+@pytest.fixture
+def sample_race():
+    """Create a sample race for testing"""
+    category = create_mock_category()
+    return create_mock_race(race_id=1, category_id=category, state=RaceState.Inactive)
 
 
 @pytest.mark.integration
@@ -510,4 +526,308 @@ class TestRaceChangeState:
             # Should fail for all other scoring types
             assert race.state == RaceState.Completed
             race.save.assert_not_called()
+
+
+########################################################################################################################
+# Tests for handle_activate_race()
+########################################################################################################################
+
+class TestHandleActivateRace:
+    """Test handle_activate_race() function - handles race activation actions"""
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_open_race_with_submit_role(self, sample_interaction, sample_race):
+        """Test handle_activate_race for open race with submit role"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=False) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement') as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race with submit role
+            sample_race.category_id.submit_role = 12345
+            mock_role = MagicMock()
+            sample_interaction.guild.get_role.return_value = mock_role
+            sample_interaction.guild.members = [MagicMock(roles=[mock_role])]
+            
+            # Call function
+            await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify calls
+            mock_is_assigned.assert_called_once_with(sample_race.id)
+            mock_send_announcement.assert_called_once_with(sample_interaction, sample_race)
+            sample_interaction.guild.get_role.assert_called_once_with(12345)
+            assert mock_remove_role.call_count == 2  # Called twice due to retry logic
+            mock_pin_race.assert_called_once_with(sample_interaction, sample_race)
+            mock_update_leaderboard.assert_called_once_with(sample_interaction, sample_race)
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_assigned_race_with_submit_role(self, sample_interaction, sample_race):
+        """Test handle_activate_race for assigned race with submit role"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=True) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement') as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race with submit role
+            sample_race.category_id.submit_role = 12345
+            mock_role = MagicMock()
+            sample_interaction.guild.get_role.return_value = mock_role
+            sample_interaction.guild.members = [MagicMock(roles=[mock_role])]
+            
+            # Call function
+            await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify calls
+            mock_is_assigned.assert_called_once_with(sample_race.id)
+            mock_send_announcement.assert_not_called()  # Should not be called for assigned races
+            sample_interaction.guild.get_role.assert_called_once_with(12345)
+            assert mock_remove_role.call_count == 2  # Called twice due to retry logic
+            mock_pin_race.assert_called_once_with(sample_interaction, sample_race)
+            mock_update_leaderboard.assert_called_once_with(sample_interaction, sample_race)
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_open_race_no_submit_role(self, sample_interaction, sample_race):
+        """Test handle_activate_race for open race without submit role"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=False) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement') as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race without submit role
+            sample_race.category_id.submit_role = None
+            
+            # Call function
+            await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify calls
+            mock_is_assigned.assert_called_once_with(sample_race.id)
+            mock_send_announcement.assert_called_once_with(sample_interaction, sample_race)
+            sample_interaction.guild.get_role.assert_not_called()
+            mock_remove_role.assert_not_called()
+            mock_pin_race.assert_called_once_with(sample_interaction, sample_race)
+            mock_update_leaderboard.assert_called_once_with(sample_interaction, sample_race)
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_submit_role_removal_success_first_attempt(self, sample_interaction, sample_race):
+        """Test handle_activate_race when role removal succeeds on first attempt"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=False) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement') as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race with submit role
+            sample_race.category_id.submit_role = 12345
+            mock_role = MagicMock()
+            sample_interaction.guild.get_role.return_value = mock_role
+            # No members have the role after first removal
+            sample_interaction.guild.members = [MagicMock(roles=[])]
+            
+            # Call function
+            await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify calls - only called once since no members have the role after first call
+            mock_remove_role.assert_called_once_with(sample_interaction.guild, mock_role)
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_submit_role_removal_retry_success(self, sample_interaction, sample_race):
+        """Test handle_activate_race when role removal succeeds on retry"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=False) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement') as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race with submit role
+            sample_race.category_id.submit_role = 12345
+            mock_role = MagicMock()
+            sample_interaction.guild.get_role.return_value = mock_role
+            
+            # Member still has role after first removal (simulating retry scenario)
+            member_with_role = MagicMock(roles=[mock_role])
+            sample_interaction.guild.members = [member_with_role]
+            
+            # Call function
+            await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify calls - called once initially, then once more for the member that still had the role
+            assert mock_remove_role.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_submit_role_removal_retry_fails(self, sample_interaction, sample_race):
+        """Test handle_activate_race when role removal fails even after retry"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=False) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement') as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race with submit role
+            sample_race.category_id.submit_role = 12345
+            mock_role = MagicMock()
+            sample_interaction.guild.get_role.return_value = mock_role
+            
+            # Member always has role (removal always fails)
+            member_with_role = MagicMock(roles=[mock_role])
+            sample_interaction.guild.members = [member_with_role]
+            
+            # Call function
+            await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify calls
+            assert mock_remove_role.call_count == 2  # Called twice due to retry logic
+            # Other functions should still be called
+            mock_send_announcement.assert_called_once_with(sample_interaction, sample_race)
+            mock_pin_race.assert_called_once_with(sample_interaction, sample_race)
+            mock_update_leaderboard.assert_called_once_with(sample_interaction, sample_race)
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_submit_role_not_found(self, sample_interaction, sample_race):
+        """Test handle_activate_race when submit role is not found in guild"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=False) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement') as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race with submit role
+            sample_race.category_id.submit_role = 12345
+            sample_interaction.guild.get_role.return_value = None  # Role not found
+            
+            # Call function
+            await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify calls
+            mock_is_assigned.assert_called_once_with(sample_race.id)
+            mock_send_announcement.assert_called_once_with(sample_interaction, sample_race)
+            sample_interaction.guild.get_role.assert_called_once_with(12345)
+            mock_remove_role.assert_called_once_with(sample_interaction.guild, None)  # Called with None role
+            mock_pin_race.assert_called_once_with(sample_interaction, sample_race)
+            mock_update_leaderboard.assert_called_once_with(sample_interaction, sample_race)
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_all_functions_called_in_order(self, sample_interaction, sample_race):
+        """Test handle_activate_race calls all functions in correct order"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=False) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement') as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race with submit role
+            sample_race.category_id.submit_role = 12345
+            mock_role = MagicMock()
+            sample_interaction.guild.get_role.return_value = mock_role
+            sample_interaction.guild.members = [MagicMock(roles=[])]
+            
+            # Call function
+            await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify call order
+            call_args_list = [
+                (mock_is_assigned, [(sample_race.id,)]),
+                (mock_send_announcement, [(sample_interaction, sample_race)]),
+                (sample_interaction.guild.get_role, [(12345,)]),
+                (mock_remove_role, [(sample_interaction.guild, mock_role)]),
+                (mock_pin_race, [(sample_interaction, sample_race)]),
+                (mock_update_leaderboard, [(sample_interaction, sample_race)])
+            ]
+            
+            for mock_func, expected_args in call_args_list:
+                mock_func.assert_called_once_with(*expected_args[0])
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_exception_propagation(self, sample_interaction, sample_race):
+        """Test handle_activate_race propagates exceptions from dependencies"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=False) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement', side_effect=Exception("Test error")) as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race without submit role to avoid role removal logic
+            sample_race.category_id.submit_role = None
+            
+            # Call function - should raise exception
+            with pytest.raises(Exception, match="Test error"):
+                await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify calls
+            mock_is_assigned.assert_called_once_with(sample_race.id)
+            mock_send_announcement.assert_called_once_with(sample_interaction, sample_race)
+            # Other functions should not be called due to exception
+            mock_pin_race.assert_not_called()
+            mock_update_leaderboard.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_multiple_members_with_role(self, sample_interaction, sample_race):
+        """Test handle_activate_race with multiple members having the submit role"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=False) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement') as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race with submit role
+            sample_race.category_id.submit_role = 12345
+            mock_role = MagicMock()
+            sample_interaction.guild.get_role.return_value = mock_role
+            
+            # Multiple members with role - they still have role after first removal
+            member1 = MagicMock(roles=[mock_role])
+            member2 = MagicMock(roles=[mock_role])
+            member3 = MagicMock(roles=[])  # No role
+            sample_interaction.guild.members = [member1, member2, member3]
+            
+            # Call function
+            await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify calls
+            mock_is_assigned.assert_called_once_with(sample_race.id)
+            mock_send_announcement.assert_called_once_with(sample_interaction, sample_race)
+            sample_interaction.guild.get_role.assert_called_once_with(12345)
+            # Called once initially, then once for each member that still has the role (2 members)
+            assert mock_remove_role.call_count == 3  # 1 initial + 2 retries
+            mock_pin_race.assert_called_once_with(sample_interaction, sample_race)
+            mock_update_leaderboard.assert_called_once_with(sample_interaction, sample_race)
+
+    @pytest.mark.asyncio
+    async def test_handle_activate_race_empty_guild_members(self, sample_interaction, sample_race):
+        """Test handle_activate_race with empty guild members list"""
+        # Mock dependencies
+        with patch('ui.menus.is_assigned_race', return_value=False) as mock_is_assigned, \
+             patch('ui.menus.send_race_announcement') as mock_send_announcement, \
+             patch('ui.menus.remove_role_from_members') as mock_remove_role, \
+             patch('ui.menus.pin_race_for_category') as mock_pin_race, \
+             patch('ui.menus.update_category_leaderboard') as mock_update_leaderboard:
+            
+            # Setup race with submit role
+            sample_race.category_id.submit_role = 12345
+            mock_role = MagicMock()
+            sample_interaction.guild.get_role.return_value = mock_role
+            sample_interaction.guild.members = []  # Empty members list
+            
+            # Call function
+            await handle_activate_race(sample_interaction, sample_race)
+            
+            # Verify calls
+            mock_is_assigned.assert_called_once_with(sample_race.id)
+            mock_send_announcement.assert_called_once_with(sample_interaction, sample_race)
+            sample_interaction.guild.get_role.assert_called_once_with(12345)
+            mock_remove_role.assert_called_once_with(sample_interaction.guild, mock_role)  # Called once, no retry needed
+            mock_pin_race.assert_called_once_with(sample_interaction, sample_race)
+            mock_update_leaderboard.assert_called_once_with(sample_interaction, sample_race)
 

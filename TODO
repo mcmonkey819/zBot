@@ -1,18 +1,15 @@
 General Stuff
 -------------------------------------------------------
-[ ] - Debug announcement message failing
-[X] - Allow race to be pinned in multiple channels
-[X] - CSV race export function
-    [X] - to file
-    [X] - command and attach to message response
-    [X] - Co-op support
+[ ] - Change "Hash" label to "Hash / Flagstring"
+[ ] - Save pin channel ID for category, auto-pin races on startup and on toggling category pin option on/off (or add manual pin option to category)
+[ ] - Debug - Announcement message failing
 [ ] - Allow validate for non-assigned races
     [ ] - Have to move validate field to submission table
 [ ] - Make auto-forfeit for assigned races optional
 [ ] - Team Scoring
 
 
-[ ] - Backup production DB
+[X] - Backup production DB
 [ ] - Update production DB fields
     [ ] - Category - add submit_time_limit_hours
 
@@ -26,16 +23,12 @@ General Stuff
     
 Testing
 -------------------------------------
-[ ] - Fixed Scoring
-    [ ] - Record demo
-[ ] - Trueskill
-    [ ] - Record demo
+[ ] - See test checklist
 
 Future Work
 -------------------------------------------------------
 [ ] - Add auto-complete option when all assigned racers have submitted
 [ ] - Buttons for seeing per-race details on points category leaderboard
-[ ] - Remove server_id field from extra_info_assignments?
 [ ] - Add optional calculated category leaderboard fields (high/low score, average time, num races)
 [ ] - `rescore_race` when a submission is edited and as a manual option
 [ ] - Racetime data import

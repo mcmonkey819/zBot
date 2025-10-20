@@ -4,9 +4,15 @@ Unit tests for UI utility race management and submission functions.
 Tests race and submission logic from ui/ui_util.py with mocked database operations.
 """
 import pytest
-from unittest.mock import patch, Mock, MagicMock, call
+import sys
+from unittest.mock import patch, Mock, MagicMock, call, AsyncMock
 from datetime import datetime
+
+# Mock nextcord.ext.menus before importing ui.menus to avoid import errors
+sys.modules['nextcord.ext.menus'] = MagicMock()
+
 from ui.ui_util import forfeit_race, get_submission_details_dict, save_message
+from ui.menus import do_post_submit_actions
 from test.test_utils.db_fixtures import (
     create_mock_race, 
     create_mock_submission, 
@@ -902,3 +908,240 @@ class TestSaveMessage:
         assert call_kwargs['category_id'] == 5
         assert call_kwargs['race_id'] == 10
 
+
+@pytest.mark.unit
+class TestDoPostSubmitActions:
+    """Tests for do_post_submit_actions() function in ui/menus.py"""
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.update_race_leaderboard')
+    @patch('ui.menus.get_user_from_interaction')
+    async def test_do_post_submit_actions_with_category_submit_role(self, mock_get_user, mock_update_leaderboard):
+        """Test role application when category has submit_role."""
+        # Setup
+        race = create_mock_race(race_id=1, category_id=1)
+        race.category_id.submit_role = 123456789  # Category submit role
+        race.submission_role = 987654321  # Race-specific submit role
+        
+        user_id = 555666777
+        mock_user = Mock()
+        mock_user.add_roles = AsyncMock()
+        mock_get_user.return_value = mock_user
+        
+        mock_guild = Mock()
+        mock_cat_role = Mock()
+        mock_race_role = Mock()
+        mock_guild.get_role.side_effect = lambda role_id: mock_cat_role if role_id == 123456789 else mock_race_role
+        
+        mock_interaction = Mock()
+        mock_interaction.guild = mock_guild
+        
+        # Execute
+        await do_post_submit_actions(mock_interaction, race, user_id)
+        
+        # Verify
+        mock_get_user.assert_called_once_with(mock_interaction, user_id)
+        mock_guild.get_role.assert_any_call(123456789)  # Category role
+        mock_guild.get_role.assert_any_call(987654321)  # Race role
+        mock_user.add_roles.assert_any_call(mock_cat_role)
+        mock_user.add_roles.assert_any_call(mock_race_role)
+        mock_update_leaderboard.assert_called_once_with(mock_interaction, race)
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.update_race_leaderboard')
+    @patch('ui.menus.get_user_from_interaction')
+    async def test_do_post_submit_actions_no_submit_roles(self, mock_get_user, mock_update_leaderboard):
+        """Test behavior when category has no submit_role."""
+        # Setup
+        race = create_mock_race(race_id=1, category_id=1)
+        race.category_id.submit_role = None  # No submit role
+        race.submission_role = None
+        
+        user_id = 555666777
+        mock_interaction = Mock()
+        
+        # Execute
+        await do_post_submit_actions(mock_interaction, race, user_id)
+        
+        # Verify
+        mock_get_user.assert_not_called()  # Should not try to get user
+        mock_interaction.guild.get_role.assert_not_called()  # Should not try to get roles
+        mock_update_leaderboard.assert_called_once_with(mock_interaction, race)
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.update_race_leaderboard')
+    @patch('ui.menus.get_user_from_interaction')
+    async def test_do_post_submit_actions_only_category_role(self, mock_get_user, mock_update_leaderboard):
+        """Test behavior when only category has submit_role."""
+        # Setup
+        race = create_mock_race(race_id=1, category_id=1)
+        race.category_id.submit_role = 123456789  # Category submit role
+        race.submission_role = None  # No race-specific role
+        
+        user_id = 555666777
+        mock_user = Mock()
+        mock_user.add_roles = AsyncMock()
+        mock_get_user.return_value = mock_user
+        
+        mock_guild = Mock()
+        mock_cat_role = Mock()
+        mock_guild.get_role.side_effect = lambda role_id: mock_cat_role if role_id == 123456789 else None
+        
+        mock_interaction = Mock()
+        mock_interaction.guild = mock_guild
+        
+        # Execute
+        await do_post_submit_actions(mock_interaction, race, user_id)
+        
+        # Verify
+        mock_get_user.assert_called_once_with(mock_interaction, user_id)
+        mock_guild.get_role.assert_any_call(123456789)  # Category role
+        mock_guild.get_role.assert_any_call(None)  # Race role (None)
+        assert mock_guild.get_role.call_count == 2  # Called twice
+        mock_user.add_roles.assert_called_once_with(mock_cat_role)  # Only category role added
+        mock_update_leaderboard.assert_called_once_with(mock_interaction, race)
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.update_race_leaderboard')
+    @patch('ui.menus.get_user_from_interaction')
+    async def test_do_post_submit_actions_only_race_role(self, mock_get_user, mock_update_leaderboard):
+        """Test behavior when only race has submission_role but category has no submit_role."""
+        # Setup
+        race = create_mock_race(race_id=1, category_id=1)
+        race.category_id.submit_role = None  # No category role
+        race.submission_role = 987654321  # Race-specific submit role
+        
+        user_id = 555666777
+        mock_interaction = Mock()
+        
+        # Execute
+        await do_post_submit_actions(mock_interaction, race, user_id)
+        
+        # Verify - since category.submit_role is None, no role logic should execute
+        mock_get_user.assert_not_called()  # Should not try to get user
+        mock_interaction.guild.get_role.assert_not_called()  # Should not try to get roles
+        mock_update_leaderboard.assert_called_once_with(mock_interaction, race)
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.update_race_leaderboard')
+    @patch('ui.menus.get_user_from_interaction')
+    async def test_do_post_submit_actions_user_not_found(self, mock_get_user, mock_update_leaderboard):
+        """Test behavior when user cannot be found."""
+        # Setup
+        race = create_mock_race(race_id=1, category_id=1)
+        race.category_id.submit_role = 123456789
+        race.submission_role = 987654321
+        
+        user_id = 555666777
+        mock_get_user.return_value = None  # User not found
+        
+        mock_guild = Mock()
+        mock_interaction = Mock()
+        mock_interaction.guild = mock_guild
+        
+        # Execute
+        await do_post_submit_actions(mock_interaction, race, user_id)
+        
+        # Verify
+        mock_get_user.assert_called_once_with(mock_interaction, user_id)
+        mock_guild.get_role.assert_not_called()  # Should not try to get roles
+        mock_update_leaderboard.assert_called_once_with(mock_interaction, race)
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.update_race_leaderboard')
+    @patch('ui.menus.get_user_from_interaction')
+    async def test_do_post_submit_actions_role_not_found(self, mock_get_user, mock_update_leaderboard):
+        """Test behavior when roles don't exist on server."""
+        # Setup
+        race = create_mock_race(race_id=1, category_id=1)
+        race.category_id.submit_role = 123456789  # Role doesn't exist
+        race.submission_role = 987654321  # Role doesn't exist
+        
+        user_id = 555666777
+        mock_user = Mock()
+        mock_user.add_roles = AsyncMock()
+        mock_get_user.return_value = mock_user
+        
+        mock_guild = Mock()
+        mock_guild.get_role.return_value = None  # Role not found
+        
+        mock_interaction = Mock()
+        mock_interaction.guild = mock_guild
+        
+        # Execute
+        await do_post_submit_actions(mock_interaction, race, user_id)
+        
+        # Verify
+        mock_get_user.assert_called_once_with(mock_interaction, user_id)
+        mock_guild.get_role.assert_any_call(123456789)  # Should try to get category role
+        mock_guild.get_role.assert_any_call(987654321)  # Should try to get race role
+        mock_user.add_roles.assert_not_called()  # Should not try to add None roles
+        mock_update_leaderboard.assert_called_once_with(mock_interaction, race)
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.update_race_leaderboard')
+    @patch('ui.menus.get_user_from_interaction')
+    async def test_do_post_submit_actions_mixed_role_availability(self, mock_get_user, mock_update_leaderboard):
+        """Test behavior when one role exists and one doesn't."""
+        # Setup
+        race = create_mock_race(race_id=1, category_id=1)
+        race.category_id.submit_role = 123456789  # Exists
+        race.submission_role = 987654321  # Doesn't exist
+        
+        user_id = 555666777
+        mock_user = Mock()
+        mock_user.add_roles = AsyncMock()
+        mock_get_user.return_value = mock_user
+        
+        mock_guild = Mock()
+        mock_cat_role = Mock()
+        mock_guild.get_role.side_effect = lambda role_id: mock_cat_role if role_id == 123456789 else None
+        
+        mock_interaction = Mock()
+        mock_interaction.guild = mock_guild
+        
+        # Execute
+        await do_post_submit_actions(mock_interaction, race, user_id)
+        
+        # Verify
+        mock_get_user.assert_called_once_with(mock_interaction, user_id)
+        mock_guild.get_role.assert_any_call(123456789)  # Category role
+        mock_guild.get_role.assert_any_call(987654321)  # Race role
+        mock_user.add_roles.assert_called_once_with(mock_cat_role)  # Only category role added
+        mock_update_leaderboard.assert_called_once_with(mock_interaction, race)
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.update_race_leaderboard')
+    @patch('ui.menus.get_user_from_interaction')
+    async def test_do_post_submit_actions_always_updates_leaderboard(self, mock_get_user, mock_update_leaderboard):
+        """Test that leaderboard is always updated regardless of role application."""
+        # Setup
+        race = create_mock_race(race_id=1, category_id=1)
+        race.category_id.submit_role = None  # No roles to apply
+        
+        user_id = 555666777
+        mock_interaction = Mock()
+        
+        # Execute
+        await do_post_submit_actions(mock_interaction, race, user_id)
+        
+        # Verify
+        mock_update_leaderboard.assert_called_once_with(mock_interaction, race)
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.update_race_leaderboard')
+    @patch('ui.menus.get_user_from_interaction')
+    async def test_do_post_submit_actions_with_none_race(self, mock_get_user, mock_update_leaderboard):
+        """Test behavior when race is None."""
+        # Setup
+        race = None
+        user_id = 555666777
+        mock_interaction = Mock()
+        
+        # Execute
+        await do_post_submit_actions(mock_interaction, race, user_id)
+        
+        # Verify - should return early and not do anything
+        mock_get_user.assert_not_called()
+        mock_interaction.guild.get_role.assert_not_called()
+        mock_update_leaderboard.assert_not_called()
