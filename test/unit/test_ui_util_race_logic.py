@@ -11,8 +11,8 @@ from datetime import datetime
 # Mock nextcord.ext.menus before importing ui.menus to avoid import errors
 sys.modules['nextcord.ext.menus'] = MagicMock()
 
-from ui.ui_util import forfeit_race, get_submission_details_dict, save_message, get_race_leaderboard_table, get_sorted_team_submissions, export_race, get_race_info_message, get_race_leaderboard_embed, get_category_leaderboard_embed
-from ui.menus import do_post_submit_actions
+from ui.ui_util import forfeit_race, get_submission_details_dict, save_message, get_race_leaderboard_table, get_sorted_team_submissions, export_race, get_race_info_message, get_race_leaderboard_embed, get_category_leaderboard_embed, zField, zMultiPageModalSender
+from ui.menus import do_post_submit_actions, zRaceSubmitHandler
 from test.test_utils.db_fixtures import (
     create_mock_race, 
     create_mock_submission, 
@@ -2579,3 +2579,545 @@ class TestGetCategoryLeaderboardEmbed:
         assert result.title == title
         assert result.description == body_text
         assert len(result.fields) == 0  # No fields for empty list
+
+
+@pytest.mark.unit
+class TestZRaceSubmitHandler:
+    """Tests for zRaceSubmitHandler class in ui/menus.py"""
+
+    @patch('ui.menus.get_race')
+    def test_zRaceSubmitHandler_constructor_new_submission(self, mock_get_race):
+        """Test zRaceSubmitHandler constructor for new submission."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id, description="Test Race")
+        race.category_id.points_type = PointsType.NoScoring
+        race.state = RaceState.Active
+        mock_get_race.return_value = race
+        
+        # Execute
+        handler = zRaceSubmitHandler(race_id)
+        
+        # Verify
+        assert handler.race == race
+        assert handler.submission is None
+        assert handler.include_points is False
+        assert handler.user_id is None
+        assert handler.finish_time_id == "finish_time"
+        assert handler.comment_id == "comment"
+        assert handler.points_id == "points"
+        
+        # Check fields
+        assert len(handler.fields) == 2  # finish_time and comment
+        assert handler.fields[0].custom_id == "finish_time"
+        assert handler.fields[0].label == "Enter finish time in format `H:MM:SS`"
+        assert handler.fields[0].default_value is None
+        assert handler.fields[0].required is True
+        
+        assert handler.fields[1].custom_id == "comment"
+        assert handler.fields[1].label == "Comment"
+        assert handler.fields[1].default_value is None
+        assert handler.fields[1].required is False
+
+    @patch('ui.menus.get_race')
+    def test_zRaceSubmitHandler_constructor_edit_submission(self, mock_get_race):
+        """Test zRaceSubmitHandler constructor for editing existing submission."""
+        # Setup
+        race_id = 456
+        race = create_mock_race(race_id=race_id, description="Edit Race")
+        race.category_id.points_type = PointsType.NoScoring
+        race.state = RaceState.Active
+        mock_get_race.return_value = race
+        
+        submission = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, 
+            finish_time="1:23:45", comment="Great run!"
+        )
+        
+        # Execute
+        handler = zRaceSubmitHandler(race_id, submission=submission, user_id=111)
+        
+        # Verify
+        assert handler.race == race
+        assert handler.submission == submission
+        assert handler.include_points is False
+        assert handler.user_id == 111
+        
+        # Check fields have default values from submission
+        assert len(handler.fields) == 2
+        assert handler.fields[0].default_value == "1:23:45"
+        assert handler.fields[1].default_value == "Great run!"
+
+    @patch('ui.menus.get_race')
+    def test_zRaceSubmitHandler_constructor_with_points(self, mock_get_race):
+        """Test zRaceSubmitHandler constructor with points field."""
+        # Setup
+        race_id = 789
+        race = create_mock_race(race_id=race_id, description="Points Race")
+        race.category_id.points_type = PointsType.MarioKart
+        race.state = RaceState.Completed
+        mock_get_race.return_value = race
+        
+        submission = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, 
+            finish_time="1:23:45", points=100
+        )
+        
+        # Execute
+        handler = zRaceSubmitHandler(race_id, submission=submission, include_points=True)
+        
+        # Verify
+        assert len(handler.fields) == 3  # finish_time, comment, points
+        assert handler.fields[2].custom_id == "points"
+        assert handler.fields[2].label == "Points"
+        assert handler.fields[2].default_value == 100
+        assert handler.fields[2].required is False
+
+    @patch('ui.menus.get_race')
+    def test_zRaceSubmitHandler_constructor_no_points_when_not_completed(self, mock_get_race):
+        """Test zRaceSubmitHandler constructor doesn't include points when race not completed."""
+        # Setup
+        race_id = 999
+        race = create_mock_race(race_id=race_id, description="Active Race")
+        race.category_id.points_type = PointsType.MarioKart
+        race.state = RaceState.Active  # Not completed
+        mock_get_race.return_value = race
+        
+        # Execute
+        handler = zRaceSubmitHandler(race_id, include_points=True)
+        
+        # Verify
+        assert len(handler.fields) == 2  # Only finish_time and comment, no points
+        assert all(field.custom_id != "points" for field in handler.fields)
+
+    @patch('ui.menus.get_race')
+    def test_zRaceSubmitHandler_constructor_no_points_when_no_scoring(self, mock_get_race):
+        """Test zRaceSubmitHandler constructor doesn't include points when category has no scoring."""
+        # Setup
+        race_id = 888
+        race = create_mock_race(race_id=race_id, description="No Scoring Race")
+        race.category_id.points_type = PointsType.NoScoring
+        race.state = RaceState.Completed
+        mock_get_race.return_value = race
+        
+        # Execute
+        handler = zRaceSubmitHandler(race_id, include_points=True)
+        
+        # Verify
+        assert len(handler.fields) == 2  # Only finish_time and comment, no points
+        assert all(field.custom_id != "points" for field in handler.fields)
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.zMultiPageModalSender')
+    @patch('ui.menus.get_race')
+    async def test_send_submit_modal(self, mock_get_race, mock_modal_sender_class):
+        """Test send_submit_modal method."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id)
+        mock_get_race.return_value = race
+        
+        mock_modal_sender = Mock()
+        mock_modal_sender_class.return_value = mock_modal_sender
+        mock_modal_sender.send_modal = AsyncMock()
+        
+        handler = zRaceSubmitHandler(race_id)
+        mock_interaction = Mock()
+        
+        # Execute
+        await handler.send_submit_modal(mock_interaction)
+        
+        # Verify
+        mock_modal_sender_class.assert_called_once()
+        mock_modal_sender.send_modal.assert_called_once_with(
+            mock_interaction,
+            handler.fields,
+            handler.on_submit,
+            "Race Submission"
+        )
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.send_message')
+    @patch('ui.menus.do_post_submit_actions')
+    @patch('ui.menus.game_time_is_valid')
+    @patch('ui.menus.zBot_now')
+    @patch('ui.menus.AsyncRaceSubmission')
+    @patch('ui.menus.get_race')
+    async def test_on_submit_new_submission(self, mock_get_race, mock_async_race_submission, mock_zbot_now, mock_game_time_valid, mock_do_post_submit_actions, mock_send_message):
+        """Test on_submit method for new submission."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id, is_team_race=False)
+        mock_get_race.return_value = race
+        
+        mock_submission = Mock()
+        mock_async_race_submission.return_value = mock_submission
+        mock_zbot_now.return_value = "2024-01-15 10:30:00"
+        mock_game_time_valid.return_value = True
+        mock_send_message.return_value = AsyncMock()
+        
+        handler = zRaceSubmitHandler(race_id)
+        mock_interaction = Mock()
+        mock_interaction.user.id = 111
+        
+        submitted_values = ["1:23:45", "Great run!"]
+        
+        # Execute
+        await handler.on_submit(mock_interaction, submitted_values)
+        
+        # Verify
+        mock_async_race_submission.assert_called_once()
+        assert mock_submission.race_id == race_id
+        assert mock_submission.user_id == 111
+        assert mock_submission.submit_datetime == "2024-01-15 10:30:00"
+        assert mock_submission.finish_time == "1:23:45"
+        assert mock_submission.comment == "Great run!"
+        assert mock_submission.save.call_count == 2  # Called twice in the method
+        mock_do_post_submit_actions.assert_called_once_with(mock_interaction, race, 111)
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.send_message')
+    @patch('ui.menus.do_post_submit_actions')
+    @patch('ui.menus.game_time_is_valid')
+    @patch('ui.menus.get_race')
+    async def test_on_submit_invalid_finish_time(self, mock_get_race, mock_game_time_valid, mock_do_post_submit_actions, mock_send_message):
+        """Test on_submit method with invalid finish time."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id)
+        mock_get_race.return_value = race
+        mock_game_time_valid.return_value = False
+        
+        handler = zRaceSubmitHandler(race_id)
+        mock_interaction = Mock()
+        mock_interaction.user.id = 111
+        
+        submitted_values = ["invalid_time", "Great run!"]
+        
+        # Execute
+        await handler.on_submit(mock_interaction, submitted_values)
+        
+        # Verify
+        mock_do_post_submit_actions.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.send_message')
+    @patch('ui.menus.do_post_submit_actions')
+    @patch('ui.menus.game_time_is_valid')
+    @patch('ui.menus.get_race')
+    async def test_on_submit_with_points(self, mock_get_race, mock_game_time_valid, mock_do_post_submit_actions, mock_send_message):
+        """Test on_submit method with points field."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id, is_team_race=False)
+        race.category_id.points_type = PointsType.MarioKart
+        race.state = RaceState.Completed
+        mock_get_race.return_value = race
+        mock_game_time_valid.return_value = True
+        
+        handler = zRaceSubmitHandler(race_id, include_points=True)
+        handler.fields.append(zField(custom_id="points", label="Points", default_value=None, required=False))
+        
+        mock_interaction = Mock()
+        mock_interaction.user.id = 111
+        
+        submitted_values = ["1:23:45", "Great run!", "100"]
+        
+        # Execute
+        await handler.on_submit(mock_interaction, submitted_values)
+        
+        # Verify
+        assert handler.submission.points == 100
+        mock_do_post_submit_actions.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.send_message')
+    @patch('ui.menus.do_post_submit_actions')
+    @patch('ui.menus.game_time_is_valid')
+    @patch('ui.menus.get_race')
+    async def test_on_submit_invalid_points(self, mock_get_race, mock_game_time_valid, mock_do_post_submit_actions, mock_send_message):
+        """Test on_submit method with invalid points."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id)
+        mock_get_race.return_value = race
+        mock_game_time_valid.return_value = True
+        
+        handler = zRaceSubmitHandler(race_id, include_points=True)
+        handler.fields.append(zField(custom_id="points", label="Points", default_value=None, required=False))
+        
+        mock_interaction = Mock()
+        mock_interaction.user.id = 111
+        
+        submitted_values = ["1:23:45", "Great run!", "invalid_points"]
+        
+        # Execute
+        await handler.on_submit(mock_interaction, submitted_values)
+        
+        # Verify
+        mock_do_post_submit_actions.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.send_message')
+    @patch('ui.menus.do_post_submit_actions')
+    @patch('ui.menus.game_time_is_valid')
+    @patch('ui.menus.get_race')
+    async def test_on_submit_team_race(self, mock_get_race, mock_game_time_valid, mock_do_post_submit_actions, mock_send_message):
+        """Test on_submit method for team race."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id, is_team_race=True)
+        mock_get_race.return_value = race
+        mock_game_time_valid.return_value = True
+        
+        handler = zRaceSubmitHandler(race_id)
+        mock_interaction = Mock()
+        mock_interaction.user.id = 111
+        
+        # Mock teammate selection
+        mock_teammate = Mock()
+        mock_teammate.id = 222
+        
+        with patch('ui.menus.prompt_for_user', return_value=mock_teammate), \
+             patch('ui.menus.get_race_submission', return_value=None):
+            
+            submitted_values = ["1:23:45", "Great run!"]
+            
+            # Execute
+            await handler.on_submit(mock_interaction, submitted_values)
+            
+            # Verify
+            assert handler.submission.teammate_id == 222
+            mock_do_post_submit_actions.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.get_extra_info_type')
+    @patch('ui.menus.get_extra_info')
+    @patch('ui.menus.send_message')
+    async def test_save_extra_info_string_type(self, mock_send_message, mock_get_extra_info, mock_get_extra_info_type):
+        """Test save_extra_info method with string type."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id)
+        handler = zRaceSubmitHandler(race_id)
+        
+        # Set up a mock submission
+        mock_submission = Mock()
+        mock_submission.id = 1
+        handler.submission = mock_submission
+        
+        field = zField(custom_id="1", label="Test Field", default_value=None, required=True)
+        value = "test string"
+        
+        mock_info_type = Mock()
+        mock_info_type.var_type = VarType.Str
+        mock_get_extra_info_type.return_value = mock_info_type
+        
+        mock_info = Mock()
+        mock_get_extra_info.return_value = mock_info
+        
+        # Execute
+        result = await handler.save_extra_info(Mock(), field, value)
+        
+        # Verify
+        assert result is True
+        assert mock_info.data == "test string"
+        mock_info.save.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.get_extra_info_type')
+    @patch('ui.menus.get_extra_info')
+    @patch('ui.menus.send_message')
+    async def test_save_extra_info_int_type_valid(self, mock_send_message, mock_get_extra_info, mock_get_extra_info_type):
+        """Test save_extra_info method with valid integer type."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id)
+        handler = zRaceSubmitHandler(race_id)
+        
+        # Set up a mock submission
+        mock_submission = Mock()
+        mock_submission.id = 1
+        handler.submission = mock_submission
+        
+        field = zField(custom_id="1", label="Test Field", default_value=None, required=True)
+        value = "123"
+        
+        mock_info_type = Mock()
+        mock_info_type.var_type = VarType.Int
+        mock_get_extra_info_type.return_value = mock_info_type
+        
+        mock_info = Mock()
+        mock_get_extra_info.return_value = mock_info
+        
+        # Execute
+        result = await handler.save_extra_info(Mock(), field, value)
+        
+        # Verify
+        assert result is True
+        assert mock_info.data == 123
+        mock_info.save.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.get_extra_info_type')
+    @patch('ui.menus.get_extra_info')
+    @patch('ui.menus.send_message')
+    async def test_save_extra_info_int_type_invalid(self, mock_send_message, mock_get_extra_info, mock_get_extra_info_type):
+        """Test save_extra_info method with invalid integer type."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id)
+        handler = zRaceSubmitHandler(race_id)
+        
+        # Set up a mock submission
+        mock_submission = Mock()
+        mock_submission.id = 1
+        handler.submission = mock_submission
+        
+        field = zField(custom_id="1", label="Test Field", default_value=None, required=True)
+        value = "invalid_int"
+        
+        mock_info_type = Mock()
+        mock_info_type.var_type = VarType.Int
+        mock_info_type.name = "Test Field"
+        mock_get_extra_info_type.return_value = mock_info_type
+        
+        mock_info = Mock()
+        mock_get_extra_info.return_value = mock_info
+        
+        mock_interaction = Mock()
+        
+        # Execute
+        result = await handler.save_extra_info(mock_interaction, field, value)
+        
+        # Verify
+        assert result is False
+        mock_info.save.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.get_extra_info_type')
+    @patch('ui.menus.get_extra_info')
+    @patch('ui.menus.send_message')
+    async def test_save_extra_info_float_type_valid(self, mock_send_message, mock_get_extra_info, mock_get_extra_info_type):
+        """Test save_extra_info method with valid float type."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id)
+        handler = zRaceSubmitHandler(race_id)
+        
+        # Set up a mock submission
+        mock_submission = Mock()
+        mock_submission.id = 1
+        handler.submission = mock_submission
+        
+        field = zField(custom_id="1", label="Test Field", default_value=None, required=True)
+        value = "123.45"
+        
+        mock_info_type = Mock()
+        mock_info_type.var_type = VarType.Float
+        mock_get_extra_info_type.return_value = mock_info_type
+        
+        mock_info = Mock()
+        mock_get_extra_info.return_value = mock_info
+        
+        # Execute
+        result = await handler.save_extra_info(Mock(), field, value)
+        
+        # Verify
+        assert result is True
+        assert mock_info.data == 123.45
+        mock_info.save.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.get_extra_info_type')
+    @patch('ui.menus.get_extra_info')
+    @patch('ui.menus.send_message')
+    async def test_save_extra_info_game_time_type_valid(self, mock_send_message, mock_get_extra_info, mock_get_extra_info_type):
+        """Test save_extra_info method with valid game time type."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id)
+        handler = zRaceSubmitHandler(race_id)
+        
+        # Set up a mock submission
+        mock_submission = Mock()
+        mock_submission.id = 1
+        handler.submission = mock_submission
+        
+        field = zField(custom_id="1", label="Test Field", default_value=None, required=True)
+        value = "1:23:45"
+        
+        mock_info_type = Mock()
+        mock_info_type.var_type = VarType.GameTime
+        mock_info_type.name = "Test Field"
+        mock_get_extra_info_type.return_value = mock_info_type
+        
+        mock_info = Mock()
+        mock_get_extra_info.return_value = mock_info
+        
+        with patch('ui.menus.game_time_is_valid', return_value=True):
+            # Execute
+            result = await handler.save_extra_info(Mock(), field, value)
+            
+            # Verify
+            assert result is True
+            assert mock_info.data == "1:23:45"
+            mock_info.save.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.get_extra_info_type')
+    @patch('ui.menus.get_extra_info')
+    @patch('ui.menus.send_message')
+    async def test_save_extra_info_game_time_type_invalid(self, mock_send_message, mock_get_extra_info, mock_get_extra_info_type):
+        """Test save_extra_info method with invalid game time type."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id)
+        handler = zRaceSubmitHandler(race_id)
+        
+        # Set up a mock submission
+        mock_submission = Mock()
+        mock_submission.id = 1
+        handler.submission = mock_submission
+        
+        field = zField(custom_id="1", label="Test Field", default_value=None, required=True)
+        value = "invalid_time"
+        
+        mock_info_type = Mock()
+        mock_info_type.var_type = VarType.GameTime
+        mock_info_type.name = "Test Field"
+        mock_get_extra_info_type.return_value = mock_info_type
+        
+        mock_info = Mock()
+        mock_get_extra_info.return_value = mock_info
+        
+        mock_interaction = Mock()
+        
+        with patch('ui.menus.game_time_is_valid', return_value=False):
+            # Execute
+            result = await handler.save_extra_info(mock_interaction, field, value)
+            
+            # Verify
+            assert result is False
+            mock_info.save.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('ui.menus.get_extra_info_type')
+    @patch('ui.menus.get_extra_info')
+    @patch('ui.menus.send_message')
+    async def test_save_extra_info_empty_value(self, mock_send_message, mock_get_extra_info, mock_get_extra_info_type):
+        """Test save_extra_info method with empty value."""
+        # Setup
+        race_id = 123
+        race = create_mock_race(race_id=race_id)
+        handler = zRaceSubmitHandler(race_id)
+        
+        field = zField(custom_id="1", label="Test Field", default_value=None, required=False)
+        value = ""
+        
+        # Execute
+        result = await handler.save_extra_info(Mock(), field, value)
+        
+        # Verify
+        assert result is True
+        # No save call expected for empty values

@@ -293,27 +293,34 @@ Complex functions with multiple dependencies, state management, and Discord UI i
 
 ### Modal & Form Handlers (HIGH PRIORITY)
 
-- [ ] `zRaceSubmitHandler` class - `ui/menus.py:595`
-  - Test modal field generation (finish_time, comment, points)
-  - Test extra info field inclusion
-  - Test edit vs create scenarios
-  - *Requires: Modal mock framework[8]*
+- [x] `zRaceSubmitHandler` class - `ui/menus.py:595` ✅ **COMPLETED**
+  - ✅ Test modal field generation (finish_time, comment, points)
+  - ✅ Test extra info field inclusion
+  - ✅ Test edit vs create scenarios
+  - **Tests written:** 18 comprehensive tests covering constructor, modal handling, submission processing, and validation
+  - **Key features tested:** Field generation, points inclusion logic, submission creation/editing, team race handling, extra info validation
+  - **Technical details:** Uses `AsyncMock` for async methods, tests all data type validations, covers error handling scenarios
 
-- [ ] `zRaceSubmitHandler.on_submit()` - `ui/menus.py:654`
-  - Test new submission creation
-  - Test submission editing
-  - Test validation error handling
-  - Test team race teammate selection
-  - Test post-submit action trigger
-  - *Requires: Multi-step interaction mocking[5]*
+- [x] `zRaceSubmitHandler.on_submit()` - `ui/menus.py:654` ✅ **COMPLETED**
+  - ✅ Test new submission creation
+  - ✅ Test submission editing
+  - ✅ Test validation error handling
+  - ✅ Test team race teammate selection
+  - ✅ Test post-submit action trigger
+  - **Tests written:** 6 tests covering submission flow, validation, and team race logic
+  - **Key features tested:** Database submission creation, input validation, team race teammate selection, post-submit actions
+  - **Technical details:** Mocks database operations, Discord interactions, and async validation functions
 
-- [ ] `zRaceSubmitHandler.save_extra_info()` - `ui/menus.py:709`
-  - Test string type validation
-  - Test int type validation and error
-  - Test float type validation
-  - Test GameTime validation
-  - Test DateTime validation
-  - Test optional field handling (empty values)
+- [x] `zRaceSubmitHandler.save_extra_info()` - `ui/menus.py:709` ✅ **COMPLETED**
+  - ✅ Test string type validation
+  - ✅ Test int type validation and error
+  - ✅ Test float type validation
+  - ✅ Test GameTime validation
+  - ✅ Test DateTime validation
+  - ✅ Test optional field handling (empty values)
+  - **Tests written:** 6 tests covering all data type validations and error handling
+  - **Key features tested:** Type conversion, validation error messages, empty value handling
+  - **Technical details:** Tests all VarType enum values, validates error message generation
 
 ### Complex UI Views & Interactions (MEDIUM PRIORITY)
 
@@ -540,15 +547,15 @@ pytest -v test/
   - ✅ get_race_leaderboard_table (8 tests, leaderboard table generation with extra info)
   - ✅ get_sorted_team_submissions (6 tests, team matching and validation logic)
   - ✅ export_race (7 tests, CSV generation and file I/O)
-- **Phase 3**: ☐ 0/21 tests implemented
-- **Total**: ✅ 18/54 tests implemented (33%) - 2 items skipped from total
-- **Total Tests Written**: 240 tests passing ✅ 🎯
+- **Phase 3**: ✅ 3/21 tests implemented (14%)
+- **Total**: ✅ 21/54 tests implemented (39%) - 2 items skipped from total
+- **Total Tests Written**: 258 tests passing ✅ 🎯
 - **Bugs Found**: 4 bugs caught and fixed by tests! 🎯
 - **Test Infrastructure Created**:
   - Discord mock factory (`test/test_utils/discord_mocks.py`)
   - Database fixtures (`test/test_utils/db_fixtures.py` + PointsType)
-  - Unit tests: Formatters (89), Permissions (39), Race Logic (79)
+  - Unit tests: Formatters (89), Permissions (39), Race Logic (97)
   - Integration tests: Race State Flows (22) NEW!
 
-**Last Updated**: Message & Embed Building functions completed - Discord embed creation, URL validation, and leaderboard formatting! (240 total tests)
+**Last Updated**: zRaceSubmitHandler class completed - comprehensive modal handling, submission processing, and validation testing! (258 total tests)
 
