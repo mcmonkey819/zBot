@@ -800,7 +800,7 @@ class zRaceAddEditModal(zModal):
                 row=2,
                 default_value=race.description if race is not None else None),
             self.hash_id: nextcord.ui.TextInput(
-                label="Hash",
+                label="Hash / Flags",
                 required=False,
                 custom_id=self.hash_id,
                 row=3,

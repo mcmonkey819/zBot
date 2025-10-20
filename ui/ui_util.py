@@ -310,7 +310,7 @@ def get_race_info_message(race):
 
     seed_embed.add_field(name="Seed", value=race.seed, inline=False)
     if race.hash is not None and race.hash != "":
-        seed_embed.add_field(name="Hash", value=race.hash, inline=False)
+        seed_embed.add_field(name="Hash / Flags", value=race.hash, inline=False)
     
     return seed_embed
 
