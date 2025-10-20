@@ -11,7 +11,7 @@ from datetime import datetime
 # Mock nextcord.ext.menus before importing ui.menus to avoid import errors
 sys.modules['nextcord.ext.menus'] = MagicMock()
 
-from ui.ui_util import forfeit_race, get_submission_details_dict, save_message
+from ui.ui_util import forfeit_race, get_submission_details_dict, save_message, get_race_leaderboard_table, get_sorted_team_submissions, export_race
 from ui.menus import do_post_submit_actions
 from test.test_utils.db_fixtures import (
     create_mock_race, 
@@ -22,6 +22,7 @@ from test.test_utils.db_fixtures import (
     ForfeitFinishTime,
     RaceMessageType
 )
+from db.db_util import RaceState, PointsType, VarType
 
 
 @pytest.mark.unit
@@ -1145,3 +1146,1013 @@ class TestDoPostSubmitActions:
         mock_get_user.assert_not_called()
         mock_interaction.guild.get_role.assert_not_called()
         mock_update_leaderboard.assert_not_called()
+
+
+@pytest.mark.unit
+class TestGetRaceLeaderboardTable:
+    """Tests for get_race_leaderboard_table() function in ui/ui_util.py"""
+
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    def test_get_race_leaderboard_table_basic_submissions(self, mock_get_user_name, mock_get_sorted_submissions, 
+                                                         mock_get_extra_info_type, mock_get_extra_info):
+        """Test basic leaderboard table generation with submissions."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.client = Mock()
+        
+        # Create mock submissions
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", comment="Great run!"
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=race_id, user_id=222, finish_time="1:45:12", comment="Could be better"
+        )
+        submission3 = create_mock_submission(
+            submission_id=3, race_id=race_id, user_id=333, finish_time="2:01:33", comment="First attempt"
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1, submission2, submission3]
+        mock_get_user_name.side_effect = lambda user_id, user: f"User{user_id}"
+        
+        # Mock extra info assignments (none for this test)
+        with patch('ui.ui_util.AsyncRaceExtraInfoAssignment') as mock_assignment_class:
+            mock_assignment_class.select.return_value.where.return_value = []
+            
+            # Execute
+            result = get_race_leaderboard_table(mock_interaction, race_id)
+            
+            # Verify
+            assert "1st" in result
+            assert "2nd" in result  
+            assert "3rd" in result
+            assert "User111" in result
+            assert "User222" in result
+            assert "User333" in result
+            assert "1:23:45" in result
+            assert "1:45:12" in result
+            assert "2:01:33" in result
+            assert "Great run!" in result
+            assert "Could be better" in result
+            assert "First attempt" in result
+            assert "Name" in result
+            assert "Finish Time" in result
+            assert "Comment" in result
+            
+            mock_get_sorted_submissions.assert_called_once_with(race_id)
+            assert mock_get_user_name.call_count == 3
+
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    def test_get_race_leaderboard_table_with_extra_info(self, mock_get_user_name, mock_get_sorted_submissions,
+                                                       mock_get_extra_info_type, mock_get_extra_info):
+        """Test leaderboard table with extra info assignments."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.client = Mock()
+        
+        # Create mock submissions
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", comment="Great run!"
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=race_id, user_id=222, finish_time="1:45:12", comment="Could be better"
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1, submission2]
+        mock_get_user_name.side_effect = lambda user_id, user: f"User{user_id}"
+        
+        # Create mock extra info assignments
+        mock_assignment1 = Mock()
+        mock_assignment1.info_type_id = 1
+        mock_assignment2 = Mock()
+        mock_assignment2.info_type_id = 2
+        
+        # Create mock extra info types
+        mock_extra_info_type1 = create_mock_extra_info_type(info_type_id=1, name="Collection Rate")
+        mock_extra_info_type2 = create_mock_extra_info_type(info_type_id=2, name="VoD Link")
+        
+        # Create mock extra info data
+        mock_extra_info1 = create_mock_extra_info(submission_id=1, info_type_id=1, data="95.5%")
+        mock_extra_info2 = create_mock_extra_info(submission_id=2, info_type_id=1, data="87.2%")
+        mock_extra_info3 = create_mock_extra_info(submission_id=1, info_type_id=2, data="https://youtube.com/watch?v=abc123")
+        
+        mock_get_extra_info_type.side_effect = lambda info_type_id: mock_extra_info_type1 if info_type_id == 1 else mock_extra_info_type2
+        mock_get_extra_info.side_effect = lambda submission_id, info_type_id: {
+            (1, 1): mock_extra_info1,
+            (2, 1): mock_extra_info2,
+            (1, 2): mock_extra_info3,
+            (2, 2): None  # No VoD link for submission 2
+        }.get((submission_id, info_type_id))
+        
+        # Mock extra info assignments
+        with patch('ui.ui_util.AsyncRaceExtraInfoAssignment') as mock_assignment_class:
+            mock_assignment_class.select.return_value.where.return_value = [mock_assignment1, mock_assignment2]
+            
+            # Execute
+            result = get_race_leaderboard_table(mock_interaction, race_id)
+            
+            # Verify
+            assert "Collection Rate" in result
+            assert "VoD Link" in result
+            assert "95.5%" in result
+            assert "87.2%" in result
+            assert "https://youtube.com/watch?v=abc123" in result
+            assert "Name" in result
+            assert "Finish Time" in result
+            assert "Comment" in result
+            
+            # Verify extra info lookups
+            assert mock_get_extra_info_type.call_count == 2
+            assert mock_get_extra_info.call_count == 4  # 2 submissions × 2 extra info types
+
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    def test_get_race_leaderboard_table_no_submissions(self, mock_get_user_name, mock_get_sorted_submissions,
+                                                      mock_get_extra_info_type, mock_get_extra_info):
+        """Test leaderboard table with no submissions."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.client = Mock()
+        
+        mock_get_sorted_submissions.return_value = None
+        
+        # Mock extra info assignments (none for this test)
+        with patch('ui.ui_util.AsyncRaceExtraInfoAssignment') as mock_assignment_class:
+            mock_assignment_class.select.return_value.where.return_value = []
+            
+            # Execute
+            result = get_race_leaderboard_table(mock_interaction, race_id)
+            
+            # Verify
+            assert "Name" in result
+            assert "Finish Time" in result
+            assert "Comment" in result
+            # Should not contain any user data
+            assert "User" not in result
+            assert "1st" not in result
+            assert "2nd" not in result
+            
+            mock_get_sorted_submissions.assert_called_once_with(race_id)
+            mock_get_user_name.assert_not_called()
+
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    def test_get_race_leaderboard_table_empty_submissions_list(self, mock_get_user_name, mock_get_sorted_submissions,
+                                                              mock_get_extra_info_type, mock_get_extra_info):
+        """Test leaderboard table with empty submissions list."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.client = Mock()
+        
+        mock_get_sorted_submissions.return_value = []
+        
+        # Mock extra info assignments (none for this test)
+        with patch('ui.ui_util.AsyncRaceExtraInfoAssignment') as mock_assignment_class:
+            mock_assignment_class.select.return_value.where.return_value = []
+            
+            # Execute
+            result = get_race_leaderboard_table(mock_interaction, race_id)
+            
+            # Verify
+            assert "Name" in result
+            assert "Finish Time" in result
+            assert "Comment" in result
+            # Should not contain any user data
+            assert "User" not in result
+            assert "1st" not in result
+            assert "2nd" not in result
+            
+            mock_get_sorted_submissions.assert_called_once_with(race_id)
+            mock_get_user_name.assert_not_called()
+
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    def test_get_race_leaderboard_table_missing_extra_info_type(self, mock_get_user_name, mock_get_sorted_submissions,
+                                                               mock_get_extra_info_type, mock_get_extra_info):
+        """Test leaderboard table when extra info type is not found."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.client = Mock()
+        
+        # Create mock submissions
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", comment="Great run!"
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1]
+        mock_get_user_name.return_value = "User111"
+        
+        # Create mock extra info assignments with missing type
+        mock_assignment1 = Mock()
+        mock_assignment1.info_type_id = 999  # Non-existent type
+        
+        mock_get_extra_info_type.return_value = None  # Type not found
+        mock_get_extra_info.return_value = None
+        
+        # Mock extra info assignments
+        with patch('ui.ui_util.AsyncRaceExtraInfoAssignment') as mock_assignment_class:
+            mock_assignment_class.select.return_value.where.return_value = [mock_assignment1]
+            
+            # Execute
+            result = get_race_leaderboard_table(mock_interaction, race_id)
+            
+            # Verify
+            assert "User111" in result
+            assert "1:23:45" in result
+            assert "Great run!" in result
+            # Should not include the missing extra info type
+            assert "Name" in result
+            assert "Finish Time" in result
+            assert "Comment" in result
+            
+            mock_get_extra_info_type.assert_called_once_with(999)
+
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    def test_get_race_leaderboard_table_user_not_found(self, mock_get_user_name, mock_get_sorted_submissions,
+                                                      mock_get_extra_info_type, mock_get_extra_info):
+        """Test leaderboard table when user is not found by client."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.client = Mock()
+        mock_interaction.client.get_user.return_value = None  # User not found
+        
+        # Create mock submissions
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", comment="Great run!"
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1]
+        mock_get_user_name.return_value = "111"  # Fallback to user_id
+        
+        # Mock extra info assignments (none for this test)
+        with patch('ui.ui_util.AsyncRaceExtraInfoAssignment') as mock_assignment_class:
+            mock_assignment_class.select.return_value.where.return_value = []
+            
+            # Execute
+            result = get_race_leaderboard_table(mock_interaction, race_id)
+            
+            # Verify
+            assert "111" in result  # Should show user_id as fallback
+            assert "1:23:45" in result
+            assert "Great run!" in result
+            assert "1st" in result
+            
+            mock_interaction.client.get_user.assert_called_once_with(111)
+            mock_get_user_name.assert_called_once_with(111, None)
+
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    def test_get_race_leaderboard_table_sorting_verification(self, mock_get_user_name, mock_get_sorted_submissions,
+                                                            mock_get_extra_info_type, mock_get_extra_info):
+        """Test that leaderboard respects the sorting from get_sorted_race_submissions."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.client = Mock()
+        
+        # Create mock submissions in reverse order (slowest first)
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="2:01:33", comment="Slowest"
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=race_id, user_id=222, finish_time="1:45:12", comment="Middle"
+        )
+        submission3 = create_mock_submission(
+            submission_id=3, race_id=race_id, user_id=333, finish_time="1:23:45", comment="Fastest"
+        )
+        
+        # Return submissions in reverse order (slowest first)
+        mock_get_sorted_submissions.return_value = [submission1, submission2, submission3]
+        mock_get_user_name.side_effect = lambda user_id, user: f"User{user_id}"
+        
+        # Mock extra info assignments (none for this test)
+        with patch('ui.ui_util.AsyncRaceExtraInfoAssignment') as mock_assignment_class:
+            mock_assignment_class.select.return_value.where.return_value = []
+            
+            # Execute
+            result = get_race_leaderboard_table(mock_interaction, race_id)
+            
+            # Verify the order in the table matches the submission order
+            # Find the positions of each user in the result
+            lines = result.split('\n')
+            user111_line = next((line for line in lines if "User111" in line), None)
+            user222_line = next((line for line in lines if "User222" in line), None)
+            user333_line = next((line for line in lines if "User333" in line), None)
+            
+            assert user111_line is not None
+            assert user222_line is not None
+            assert user333_line is not None
+            
+            # Find line numbers
+            user111_idx = lines.index(user111_line)
+            user222_idx = lines.index(user222_line)
+            user333_idx = lines.index(user333_line)
+            
+            # User111 should come first (slowest), then User222, then User333 (fastest)
+            assert user111_idx < user222_idx < user333_idx
+            
+            mock_get_sorted_submissions.assert_called_once_with(race_id)
+
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    def test_get_race_leaderboard_table_comment_handling(self, mock_get_user_name, mock_get_sorted_submissions,
+                                                        mock_get_extra_info_type, mock_get_extra_info):
+        """Test leaderboard table with various comment scenarios."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.client = Mock()
+        
+        # Create mock submissions with different comment scenarios
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", comment="Great run!"
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=race_id, user_id=222, finish_time="1:45:12", comment=""  # Empty comment
+        )
+        submission3 = create_mock_submission(
+            submission_id=3, race_id=race_id, user_id=333, finish_time="2:01:33", comment=None  # None comment
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1, submission2, submission3]
+        mock_get_user_name.side_effect = lambda user_id, user: f"User{user_id}"
+        
+        # Mock extra info assignments (none for this test)
+        with patch('ui.ui_util.AsyncRaceExtraInfoAssignment') as mock_assignment_class:
+            mock_assignment_class.select.return_value.where.return_value = []
+            
+            # Execute
+            result = get_race_leaderboard_table(mock_interaction, race_id)
+            
+            # Verify
+            assert "Great run!" in result
+            assert "User111" in result
+            assert "User222" in result
+            assert "User333" in result
+            # Empty and None comments should be handled gracefully
+            assert "Comment" in result  # Column header should be present
+            
+            mock_get_sorted_submissions.assert_called_once_with(race_id)
+            assert mock_get_user_name.call_count == 3
+
+
+@pytest.mark.unit
+class TestGetSortedTeamSubmissions:
+    """Tests for get_sorted_team_submissions() function in ui/ui_util.py"""
+
+    @patch('ui.ui_util.finish_time_seconds_to_str')
+    @patch('ui.ui_util.finish_time_to_seconds')
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_get_sorted_team_submissions_not_team_race(self, mock_get_race, mock_get_sorted_submissions, 
+                                                      mock_get_user_name, mock_get_extra_info, 
+                                                      mock_finish_time_to_seconds, mock_finish_time_seconds_to_str):
+        """Test that function returns None for non-team races."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.guild = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=False)
+        mock_get_race.return_value = race
+        
+        # Execute
+        result = get_sorted_team_submissions(mock_interaction, race_id)
+        
+        # Verify
+        assert result is None
+        mock_get_race.assert_called_once_with(race_id)
+        mock_get_sorted_submissions.assert_not_called()
+
+    @patch('ui.ui_util.finish_time_seconds_to_str')
+    @patch('ui.ui_util.finish_time_to_seconds')
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_get_sorted_team_submissions_single_submission(self, mock_get_race, mock_get_sorted_submissions, 
+                                                          mock_get_user_name, mock_get_extra_info, 
+                                                          mock_finish_time_to_seconds, mock_finish_time_seconds_to_str):
+        """Test team submissions with single submission (no teammate)."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.guild = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=True, team_name_info_id=1)
+        mock_get_race.return_value = race
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", 
+            comment="Solo run", teammate_id=None
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1]
+        mock_get_user_name.return_value = "Player1"
+        mock_get_extra_info.return_value = None  # No team name
+        mock_finish_time_to_seconds.return_value = 5025  # 1:23:45 in seconds
+        mock_finish_time_seconds_to_str.return_value = "1:23:45"
+        
+        # Execute
+        result = get_sorted_team_submissions(mock_interaction, race_id)
+        
+        # Verify
+        assert result is not None
+        assert len(result) == 1
+        
+        team_sub = result[0]
+        assert team_sub.team_name == "Team Player1"
+        assert team_sub.user_ids == [111]
+        assert team_sub.user_names == ["Player1"]
+        assert team_sub.team_finish_time == "1:23:45"
+        assert team_sub.finish_times == ["1:23:45", None]
+        
+        mock_get_race.assert_called_once_with(race_id)
+        mock_get_sorted_submissions.assert_called_once_with(race_id)
+        mock_get_user_name.assert_called_once_with(111, mock_interaction.guild.get_member(111))
+
+    @patch('ui.ui_util.finish_time_seconds_to_str')
+    @patch('ui.ui_util.finish_time_to_seconds')
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_get_sorted_team_submissions_matched_teammates(self, mock_get_race, mock_get_sorted_submissions, 
+                                                         mock_get_user_name, mock_get_extra_info, 
+                                                         mock_finish_time_to_seconds, mock_finish_time_seconds_to_str):
+        """Test team submissions with matched teammates."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.guild = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=True, team_name_info_id=1)
+        mock_get_race.return_value = race
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", 
+            comment="Team run", teammate_id=222
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=race_id, user_id=222, finish_time="1:25:30", 
+            comment="Team run", teammate_id=111
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1, submission2]
+        mock_get_user_name.side_effect = lambda user_id, user: f"Player{user_id}"
+        mock_get_extra_info.return_value = None  # No team name
+        mock_finish_time_to_seconds.side_effect = lambda time: 5025 if time == "1:23:45" else 5130  # 1:25:30
+        mock_finish_time_seconds_to_str.return_value = "1:24:37"  # Average time
+        
+        # Execute
+        result = get_sorted_team_submissions(mock_interaction, race_id)
+        
+        # Verify
+        assert result is not None
+        assert len(result) == 1
+        
+        team_sub = result[0]
+        assert team_sub.team_name == "Team Player111 & Player222"
+        assert team_sub.user_ids == [111, 222]
+        assert team_sub.user_names == ["Player111", "Player222"]
+        assert team_sub.team_finish_time == "1:24:37"
+        assert team_sub.finish_times == ["1:23:45", "1:25:30"]
+        
+        # Verify finish_time_to_seconds was called for both times plus sorting
+        assert mock_finish_time_to_seconds.call_count == 3  # 2 for calculation + 1 for sorting
+        mock_finish_time_to_seconds.assert_any_call("1:23:45")
+        mock_finish_time_to_seconds.assert_any_call("1:25:30")
+        mock_finish_time_to_seconds.assert_any_call("1:24:37")  # For sorting
+
+    @patch('ui.ui_util.finish_time_seconds_to_str')
+    @patch('ui.ui_util.finish_time_to_seconds')
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_get_sorted_team_submissions_with_team_name(self, mock_get_race, mock_get_sorted_submissions, 
+                                                      mock_get_user_name, mock_get_extra_info, 
+                                                      mock_finish_time_to_seconds, mock_finish_time_seconds_to_str):
+        """Test team submissions with custom team name."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.guild = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=True, team_name_info_id=1)
+        mock_get_race.return_value = race
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", 
+            comment="Team run", teammate_id=222
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=race_id, user_id=222, finish_time="1:25:30", 
+            comment="Team run", teammate_id=111
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1, submission2]
+        mock_get_user_name.side_effect = lambda user_id, user: f"Player{user_id}"
+        
+        # Mock team name extra info
+        team_name_info = create_mock_extra_info(submission_id=1, info_type_id=1, data="Awesome Team")
+        mock_get_extra_info.return_value = team_name_info
+        
+        mock_finish_time_to_seconds.side_effect = lambda time: 5025 if time == "1:23:45" else 5130
+        mock_finish_time_seconds_to_str.return_value = "1:24:37"
+        
+        # Execute
+        result = get_sorted_team_submissions(mock_interaction, race_id)
+        
+        # Verify
+        assert result is not None
+        assert len(result) == 1
+        
+        team_sub = result[0]
+        assert team_sub.team_name == "Awesome Team"
+        assert team_sub.user_ids == [111, 222]
+        assert team_sub.user_names == ["Player111", "Player222"]
+        assert team_sub.team_finish_time == "1:24:37"
+        assert team_sub.finish_times == ["1:23:45", "1:25:30"]
+
+    @patch('ui.ui_util.finish_time_seconds_to_str')
+    @patch('ui.ui_util.finish_time_to_seconds')
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_get_sorted_team_submissions_teammate_id_mismatch(self, mock_get_race, mock_get_sorted_submissions, 
+                                                            mock_get_user_name, mock_get_extra_info, 
+                                                            mock_finish_time_to_seconds, mock_finish_time_seconds_to_str):
+        """Test team submissions with teammate ID mismatch."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.guild = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=True, team_name_info_id=1)
+        mock_get_race.return_value = race
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", 
+            comment="Team run", teammate_id=222
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=race_id, user_id=222, finish_time="1:25:30", 
+            comment="Team run", teammate_id=333  # Mismatch - should be 111
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1, submission2]
+        mock_get_user_name.return_value = "Player111"
+        mock_get_extra_info.return_value = None
+        mock_finish_time_to_seconds.return_value = 5025
+        mock_finish_time_seconds_to_str.return_value = "1:23:45"
+        
+        # Execute
+        result = get_sorted_team_submissions(mock_interaction, race_id)
+        
+        # Verify - should treat as solo submission due to mismatch
+        assert result is not None
+        assert len(result) == 2  # Both submissions treated as solo
+        
+        # First submission (solo due to mismatch)
+        team_sub1 = result[0]
+        assert team_sub1.team_name == "Team Player111"
+        assert team_sub1.user_ids == [111]
+        assert team_sub1.user_names == ["Player111"]
+        assert team_sub1.team_finish_time == "1:23:45"
+        assert team_sub1.finish_times == ["1:23:45", None]
+
+    @patch('ui.ui_util.finish_time_seconds_to_str')
+    @patch('ui.ui_util.finish_time_to_seconds')
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_get_sorted_team_submissions_multiple_teams(self, mock_get_race, mock_get_sorted_submissions, 
+                                                       mock_get_user_name, mock_get_extra_info, 
+                                                       mock_finish_time_to_seconds, mock_finish_time_seconds_to_str):
+        """Test team submissions with multiple teams."""
+        # Setup
+        race_id = 123
+        mock_interaction = Mock()
+        mock_interaction.guild = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=True, team_name_info_id=1)
+        mock_get_race.return_value = race
+        
+        # Team 1: Users 111 & 222
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", 
+            comment="Team 1", teammate_id=222
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=race_id, user_id=222, finish_time="1:25:30", 
+            comment="Team 1", teammate_id=111
+        )
+        
+        # Team 2: Users 333 & 444
+        submission3 = create_mock_submission(
+            submission_id=3, race_id=race_id, user_id=333, finish_time="1:30:00", 
+            comment="Team 2", teammate_id=444
+        )
+        submission4 = create_mock_submission(
+            submission_id=4, race_id=race_id, user_id=444, finish_time="1:32:15", 
+            comment="Team 2", teammate_id=333
+        )
+        
+        # Solo submission: User 555
+        submission5 = create_mock_submission(
+            submission_id=5, race_id=race_id, user_id=555, finish_time="1:35:00", 
+            comment="Solo", teammate_id=None
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1, submission2, submission3, submission4, submission5]
+        mock_get_user_name.side_effect = lambda user_id, user: f"Player{user_id}"
+        mock_get_extra_info.return_value = None
+        mock_finish_time_to_seconds.side_effect = lambda time: {
+            "1:23:45": 5025, "1:25:30": 5130, "1:30:00": 5400, "1:32:15": 5535, "1:35:00": 5700,
+            "1:24:37": 5077, "1:31:07": 5467  # Average times for sorting
+        }[time]
+        mock_finish_time_seconds_to_str.side_effect = lambda sec: {
+            5077: "1:24:37", 5467: "1:31:07", 5700: "1:35:00"
+        }[sec]
+        
+        # Execute
+        result = get_sorted_team_submissions(mock_interaction, race_id)
+        
+        # Verify
+        assert result is not None
+        assert len(result) == 3  # 2 teams + 1 solo
+        
+        # Results should be sorted by team finish time
+        team1 = result[0]  # Fastest team
+        team2 = result[1]  # Second team
+        solo = result[2]   # Solo submission
+        
+        assert team1.team_name == "Team Player111 & Player222"
+        assert team1.user_ids == [111, 222]
+        assert team1.team_finish_time == "1:24:37"
+        
+        assert team2.team_name == "Team Player333 & Player444"
+        assert team2.user_ids == [333, 444]
+        assert team2.team_finish_time == "1:31:07"
+        
+        assert solo.team_name == "Team Player555"
+        assert solo.user_ids == [555]
+        assert solo.team_finish_time == "1:35:00"
+
+
+@pytest.mark.unit
+class TestExportRace:
+    """Tests for export_race() function in ui/ui_util.py"""
+
+    @patch('ui.ui_util.csv.writer')
+    @patch('builtins.open', new_callable=MagicMock)
+    @patch('ui.ui_util.get_sorted_team_submissions')
+    @patch('ui.ui_util.get_race_extra_info_assignments')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_export_race_basic_individual_race(self, mock_get_race, mock_get_sorted_submissions, 
+                                             mock_get_user_name, mock_get_extra_info, 
+                                             mock_get_extra_info_type, mock_get_race_extra_info_assignments,
+                                             mock_get_sorted_team_submissions, mock_open, mock_csv_writer):
+        """Test basic individual race export."""
+        # Setup
+        race_id = 123
+        filepath = "test_export.csv"
+        mock_interaction = Mock()
+        mock_interaction.guild = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=False, state=RaceState.Completed)
+        race.category_id.points_type = PointsType.NoScoring
+        mock_get_race.return_value = race
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", 
+            comment="Great run!", points=None
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=race_id, user_id=222, finish_time="1:25:30", 
+            comment="Good run", points=None
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1, submission2]
+        mock_get_user_name.side_effect = lambda user_id, user: f"Player{user_id}"
+        mock_get_race_extra_info_assignments.return_value = []
+        mock_get_sorted_team_submissions.return_value = None
+        
+        # Mock file writing
+        mock_file = MagicMock()
+        mock_open.return_value.__enter__.return_value = mock_file
+        mock_csv_writer.return_value = mock_file
+        
+        # Execute
+        result = export_race(mock_interaction, race_id, filepath)
+        
+        # Verify
+        assert result is True
+        mock_open.assert_called_once_with(filepath, 'w', newline='')
+        
+        # Verify CSV writer calls
+        assert mock_file.writerow.call_count == 3  # Header + 2 data rows
+        
+        # Check header row
+        header_call = mock_file.writerow.call_args_list[0][0][0]
+        assert "User ID" in header_call
+        assert "Username" in header_call
+        assert "Finish Time" in header_call
+        assert "Comment" in header_call
+        assert "Points" not in header_call  # No scoring race
+
+    @patch('ui.ui_util.csv.writer')
+    @patch('builtins.open', new_callable=MagicMock)
+    @patch('ui.ui_util.get_sorted_team_submissions')
+    @patch('ui.ui_util.get_race_extra_info_assignments')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_export_race_with_points(self, mock_get_race, mock_get_sorted_submissions, 
+                                   mock_get_user_name, mock_get_extra_info, 
+                                   mock_get_extra_info_type, mock_get_race_extra_info_assignments,
+                                   mock_get_sorted_team_submissions, mock_open, mock_csv_writer):
+        """Test race export with points scoring."""
+        # Setup
+        race_id = 123
+        filepath = "test_export.csv"
+        mock_interaction = Mock()
+        mock_interaction.guild = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=False, state=RaceState.Completed)
+        race.category_id.points_type = PointsType.MarioKart
+        mock_get_race.return_value = race
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", 
+            comment="Great run!", points=100.0
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1]
+        mock_get_user_name.return_value = "Player111"
+        mock_get_race_extra_info_assignments.return_value = []
+        mock_get_sorted_team_submissions.return_value = None
+        
+        # Mock file writing
+        mock_file = MagicMock()
+        mock_open.return_value.__enter__.return_value = mock_file
+        mock_csv_writer.return_value = mock_file
+        
+        # Execute
+        result = export_race(mock_interaction, race_id, filepath)
+        
+        # Verify
+        assert result is True
+        
+        # Check header includes Points
+        header_call = mock_file.writerow.call_args_list[0][0][0]
+        assert "Points" in header_call
+        
+        # Check data row includes points
+        data_call = mock_file.writerow.call_args_list[1][0][0]
+        assert 100.0 in data_call
+
+    @patch('ui.ui_util.get_race')
+    def test_export_race_race_not_found(self, mock_get_race):
+        """Test export when race is not found."""
+        # Setup
+        race_id = 123
+        filepath = "test_export.csv"
+        mock_interaction = Mock()
+        
+        mock_get_race.return_value = None
+        
+        # Execute
+        result = export_race(mock_interaction, race_id, filepath)
+        
+        # Verify
+        assert result is False
+        mock_get_race.assert_called_once_with(race_id)
+
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_export_race_no_submissions(self, mock_get_race, mock_get_sorted_submissions):
+        """Test export when race has no submissions."""
+        # Setup
+        race_id = 123
+        filepath = "test_export.csv"
+        mock_interaction = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=False)
+        mock_get_race.return_value = race
+        mock_get_sorted_submissions.return_value = None
+        
+        # Execute
+        result = export_race(mock_interaction, race_id, filepath)
+        
+        # Verify
+        assert result is False
+        mock_get_race.assert_called_once_with(race_id)
+        mock_get_sorted_submissions.assert_called_once_with(race_id)
+
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_export_race_empty_submissions(self, mock_get_race, mock_get_sorted_submissions):
+        """Test export when race has empty submissions list."""
+        # Setup
+        race_id = 123
+        filepath = "test_export.csv"
+        mock_interaction = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=False)
+        mock_get_race.return_value = race
+        mock_get_sorted_submissions.return_value = []
+        
+        # Execute
+        result = export_race(mock_interaction, race_id, filepath)
+        
+        # Verify
+        assert result is False
+        mock_get_race.assert_called_once_with(race_id)
+        mock_get_sorted_submissions.assert_called_once_with(race_id)
+
+    @patch('ui.ui_util.csv.writer')
+    @patch('builtins.open', new_callable=MagicMock)
+    @patch('ui.ui_util.get_sorted_team_submissions')
+    @patch('ui.ui_util.get_race_extra_info_assignments')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_export_race_with_extra_info(self, mock_get_race, mock_get_sorted_submissions, 
+                                       mock_get_user_name, mock_get_extra_info, 
+                                       mock_get_extra_info_type, mock_get_race_extra_info_assignments,
+                                       mock_get_sorted_team_submissions, mock_open, mock_csv_writer):
+        """Test race export with extra info columns."""
+        # Setup
+        race_id = 123
+        filepath = "test_export.csv"
+        mock_interaction = Mock()
+        mock_interaction.guild = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=False, state=RaceState.Completed)
+        race.category_id.points_type = PointsType.NoScoring
+        mock_get_race.return_value = race
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", 
+            comment="Great run!"
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1]
+        mock_get_user_name.return_value = "Player111"
+        
+        # Mock extra info assignments
+        mock_assignment1 = Mock()
+        mock_assignment1.info_type_id = 1
+        mock_assignment2 = Mock()
+        mock_assignment2.info_type_id = 2
+        
+        mock_extra_info_type1 = create_mock_extra_info_type(info_type_id=1, name="Collection Rate", var_type=0)  # String
+        mock_extra_info_type2 = create_mock_extra_info_type(info_type_id=2, name="Score", var_type=1)  # Int
+        
+        mock_get_race_extra_info_assignments.return_value = [mock_assignment1, mock_assignment2]
+        mock_get_extra_info_type.side_effect = lambda info_type_id: mock_extra_info_type1 if info_type_id == 1 else mock_extra_info_type2
+        
+        # Mock extra info data
+        mock_extra_info1 = create_mock_extra_info(submission_id=1, info_type_id=1, data="95.5%")
+        mock_extra_info2 = create_mock_extra_info(submission_id=1, info_type_id=2, data="1500")
+        
+        mock_get_extra_info.side_effect = lambda submission_id, info_type_id: {
+            (1, 1): mock_extra_info1,
+            (1, 2): mock_extra_info2
+        }.get((submission_id, info_type_id))
+        
+        mock_get_sorted_team_submissions.return_value = None
+        
+        # Mock file writing
+        mock_file = MagicMock()
+        mock_open.return_value.__enter__.return_value = mock_file
+        mock_csv_writer.return_value = mock_file
+        
+        # Execute
+        result = export_race(mock_interaction, race_id, filepath)
+        
+        # Verify
+        assert result is True
+        
+        # Check header includes extra info columns
+        header_call = mock_file.writerow.call_args_list[0][0][0]
+        assert "Collection Rate" in header_call
+        assert "Score" in header_call
+        
+        # Check data row includes extra info data
+        data_call = mock_file.writerow.call_args_list[1][0][0]
+        assert "95.5%" in data_call
+        assert 1500 in data_call  # Int type should be converted
+
+    @patch('ui.ui_util.csv.writer')
+    @patch('builtins.open', new_callable=MagicMock)
+    @patch('ui.ui_util.get_sorted_team_submissions')
+    @patch('ui.ui_util.get_race_extra_info_assignments')
+    @patch('ui.ui_util.get_extra_info_type')
+    @patch('ui.ui_util.get_extra_info')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_sorted_race_submissions')
+    @patch('ui.ui_util.get_race')
+    def test_export_race_team_race(self, mock_get_race, mock_get_sorted_submissions, 
+                                  mock_get_user_name, mock_get_extra_info, 
+                                  mock_get_extra_info_type, mock_get_race_extra_info_assignments,
+                                  mock_get_sorted_team_submissions, mock_open, mock_csv_writer):
+        """Test team race export with team data."""
+        # Setup
+        race_id = 123
+        filepath = "test_export.csv"
+        mock_interaction = Mock()
+        mock_interaction.guild = Mock()
+        
+        race = create_mock_race(race_id=race_id, is_team_race=True, state=RaceState.Completed)
+        race.category_id.points_type = PointsType.NoScoring
+        mock_get_race.return_value = race
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=race_id, user_id=111, finish_time="1:23:45", 
+            comment="Team run", teammate_id=222
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=race_id, user_id=222, finish_time="1:25:30", 
+            comment="Team run", teammate_id=111
+        )
+        
+        mock_get_sorted_submissions.return_value = [submission1, submission2]
+        mock_get_user_name.side_effect = lambda user_id, user: f"Player{user_id}"
+        mock_get_race_extra_info_assignments.return_value = []
+        
+        # Mock team submissions
+        from ui.ui_util import TeamSubmissionData
+        team_sub = TeamSubmissionData(
+            team_name="Test Team",
+            user_ids=[111, 222],
+            user_names=["Player111", "Player222"],
+            team_finish_time="1:24:37",
+            finish_times=["1:23:45", "1:25:30"]
+        )
+        mock_get_sorted_team_submissions.return_value = [team_sub]
+        
+        # Mock file writing
+        mock_file = MagicMock()
+        mock_open.return_value.__enter__.return_value = mock_file
+        mock_csv_writer.return_value = mock_file
+        
+        # Execute
+        result = export_race(mock_interaction, race_id, filepath)
+        
+        # Verify
+        assert result is True
+        
+        # Check header includes team columns
+        header_call = mock_file.writerow.call_args_list[0][0][0]
+        assert "Teammate ID" in header_call
+        assert "Teammate Username" in header_call
+        assert "Team Finish Time (Avg)" in header_call
+        
+        # Check data rows include team data
+        data_calls = [call[0][0] for call in mock_file.writerow.call_args_list[1:]]
+        assert len(data_calls) == 2  # Two data rows
+        
+        # Verify team data is included in both rows
+        for data_call in data_calls:
+            assert 222 in data_call or 111 in data_call  # Teammate ID
+            assert "Player222" in data_call or "Player111" in data_call  # Teammate username
+            assert "1:24:37" in data_call  # Team finish time

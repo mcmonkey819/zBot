@@ -223,27 +223,39 @@ Functions with business logic requiring mocked Discord objects or database model
 
 ### Leaderboard & Display Logic (MEDIUM PRIORITY)
 
-- [ ] `get_race_leaderboard_table()` - `ui/ui_util.py:177`
+- [x] `get_race_leaderboard_table()` - `ui/ui_util.py:177` ✅
   - Test with multiple submissions
   - Test with extra info assignments
   - Test with no submissions (empty race)
   - Test proper sorting
   - *Requires: Submission fixtures with extra info[4]*
+  - **COMPLETED**: 8 tests passing
+    - Created comprehensive test suite for leaderboard table generation
+    - Tests cover basic submissions, extra info assignments, and edge cases
+    - Edge cases: no submissions, empty submissions list, missing extra info types
+    - User lookup testing: client.get_user() and fallback to user_id
+    - Sorting verification: respects order from get_sorted_race_submissions
+    - Comment handling: normal, empty, and None comments
+    - Proper mocking of database functions and Discord client
 
-- [ ] `get_sorted_team_submissions()` - `ui/ui_util.py:543`
-  - Test matched teammates (both submitted)
-  - Test unmatched teammate (only one submitted)
-  - Test team name from faster racer
-  - Test team name fallback
-  - Test average finish time calculation
-  - Test proper sorting
+- [x] `get_sorted_team_submissions()` - `ui/ui_util.py:543` ✅ **COMPLETED**
+  - Test matched teammates (both submitted) ✅
+  - Test unmatched teammate (only one submitted) ✅
+  - Test team name from faster racer ✅
+  - Test team name fallback ✅
+  - Test average finish time calculation ✅
+  - Test proper sorting ✅
+  - **Tests Written**: 6 comprehensive tests
+  - **Key Features**: Team matching, teammate validation, team name handling, average time calculation, sorting
 
-- [ ] `export_race()` - `ui/ui_util.py:611`
-  - Test CSV generation with submissions
-  - Test with extra info columns
-  - Test with points (completed race)
-  - Test team race export
-  - Test file creation and format
+- [x] `export_race()` - `ui/ui_util.py:611` ✅ **COMPLETED**
+  - Test CSV generation with submissions ✅
+  - Test with extra info columns ✅
+  - Test with points (completed race) ✅
+  - Test team race export ✅
+  - Test file creation and format ✅
+  - **Tests Written**: 7 comprehensive tests
+  - **Key Features**: CSV generation, extra info handling, points scoring, team race support, file I/O
   - *Requires: File I/O mocking[6]*
 
 ### Message & Embed Building (MEDIUM PRIORITY)
@@ -506,7 +518,7 @@ pytest -v test/
   - ✅ get_race_embed_field_value (10 tests, database fixtures created)
   - ⏭️ game_time_is_valid (SKIPPED - DB utility)
   - ⏭️ datetime_is_valid (SKIPPED - DB utility)
-- **Phase 2**: ✅ 10/24 tests implemented (42%)
+- **Phase 2**: ✅ 13/24 tests implemented (54%)
   - ✅ user_has_role (11 tests, permission checking)
   - ✅ user_is_admin (6 tests, bot owner + role-based admin)
   - ✅ user_is_mod (9 tests, inheritance hierarchy verified)
@@ -517,15 +529,18 @@ pytest -v test/
   - ✅ race_change_state (22 tests, all state transitions covered)
   - ✅ handle_activate_race (11 tests, race activation actions with role removal retry logic)
   - ✅ do_post_submit_actions (9 tests, role application and leaderboard update)
+  - ✅ get_race_leaderboard_table (8 tests, leaderboard table generation with extra info)
+  - ✅ get_sorted_team_submissions (6 tests, team matching and validation logic)
+  - ✅ export_race (7 tests, CSV generation and file I/O)
 - **Phase 3**: ☐ 0/21 tests implemented
-- **Total**: ✅ 15/54 tests implemented (28%) - 2 items skipped from total
-- **Total Tests Written**: 209 tests passing ✅ 🎯
+- **Total**: ✅ 18/54 tests implemented (33%) - 2 items skipped from total
+- **Total Tests Written**: 230 tests passing ✅ 🎯
 - **Bugs Found**: 4 bugs caught and fixed by tests! 🎯
 - **Test Infrastructure Created**:
   - Discord mock factory (`test/test_utils/discord_mocks.py`)
   - Database fixtures (`test/test_utils/db_fixtures.py` + PointsType)
-  - Unit tests: Formatters (89), Permissions (39), Race Logic (48)
+  - Unit tests: Formatters (89), Permissions (39), Race Logic (69)
   - Integration tests: Race State Flows (22) NEW!
 
-**Last Updated**: do_post_submit_actions completed - role application and leaderboard update logic! (209 total tests)
+**Last Updated**: get_sorted_team_submissions and export_race completed - team submission processing and CSV export functionality! (230 total tests)
 
