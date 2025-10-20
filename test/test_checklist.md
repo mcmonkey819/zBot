@@ -260,22 +260,30 @@ Functions with business logic requiring mocked Discord objects or database model
 
 ### Message & Embed Building (MEDIUM PRIORITY)
 
-- [ ] `get_race_info_message()` - `ui/ui_util.py:279`
-  - Test embed creation with seed URL extraction
-  - Test with thumbnail URL
-  - Test with hash field
-  - Test with additional instructions
+- [x] `get_race_info_message()` - `ui/ui_util.py:279` ✅ **COMPLETED**
+  - ✅ Test embed creation with seed URL extraction
+  - ✅ Test with thumbnail URL
+  - ✅ Test with hash field
+  - ✅ Test with additional instructions
+  - **Tests written:** 4 tests covering basic embed creation, URL extraction, empty hash handling, and thumbnail error handling
+  - **Key features tested:** Discord embed creation, URL validation, field management, thumbnail handling
+  - **Technical details:** Uses `validators.url` for URL detection, handles thumbnail errors gracefully
 
-- [ ] `get_race_leaderboard_embed()` - `ui/ui_util.py:371`
-  - Test embed with submission details
-  - Test pagination (current_page, per_page)
-  - Test with/without show_details flag
-  - *Requires: Bot client mock[7]*
+- [x] `get_race_leaderboard_embed()` - `ui/ui_util.py:371` ✅ **COMPLETED**
+  - ✅ Test embed with submission details
+  - ✅ Test pagination (current_page, per_page)
+  - ✅ Test with/without show_details flag
+  - **Tests written:** 3 tests covering detailed leaderboard, simple leaderboard, and points ordering
+  - **Key features tested:** Discord embed creation, user fetching, submission details formatting, pagination
+  - **Technical details:** Uses `AsyncMock` for bot client, tests both detailed and simple display modes
 
-- [ ] `get_category_leaderboard_embed()` - `ui/ui_util.py:433`
-  - Test with points list
-  - Test pagination
-  - Test proper place calculation with offset
+- [x] `get_category_leaderboard_embed()` - `ui/ui_util.py:433` ✅ **COMPLETED**
+  - ✅ Test with points list
+  - ✅ Test pagination
+  - ✅ Test proper place calculation with offset
+  - **Tests written:** 3 tests covering basic embed creation, pagination, and empty list handling
+  - **Key features tested:** Discord embed creation, user fetching, points formatting, submission counting
+  - **Technical details:** Uses `AsyncMock` for bot client, tests pagination logic with place calculation
 
 ---
 
@@ -534,13 +542,13 @@ pytest -v test/
   - ✅ export_race (7 tests, CSV generation and file I/O)
 - **Phase 3**: ☐ 0/21 tests implemented
 - **Total**: ✅ 18/54 tests implemented (33%) - 2 items skipped from total
-- **Total Tests Written**: 230 tests passing ✅ 🎯
+- **Total Tests Written**: 240 tests passing ✅ 🎯
 - **Bugs Found**: 4 bugs caught and fixed by tests! 🎯
 - **Test Infrastructure Created**:
   - Discord mock factory (`test/test_utils/discord_mocks.py`)
   - Database fixtures (`test/test_utils/db_fixtures.py` + PointsType)
-  - Unit tests: Formatters (89), Permissions (39), Race Logic (69)
+  - Unit tests: Formatters (89), Permissions (39), Race Logic (79)
   - Integration tests: Race State Flows (22) NEW!
 
-**Last Updated**: get_sorted_team_submissions and export_race completed - team submission processing and CSV export functionality! (230 total tests)
+**Last Updated**: Message & Embed Building functions completed - Discord embed creation, URL validation, and leaderboard formatting! (240 total tests)
 

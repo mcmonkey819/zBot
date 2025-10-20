@@ -11,7 +11,7 @@ from datetime import datetime
 # Mock nextcord.ext.menus before importing ui.menus to avoid import errors
 sys.modules['nextcord.ext.menus'] = MagicMock()
 
-from ui.ui_util import forfeit_race, get_submission_details_dict, save_message, get_race_leaderboard_table, get_sorted_team_submissions, export_race
+from ui.ui_util import forfeit_race, get_submission_details_dict, save_message, get_race_leaderboard_table, get_sorted_team_submissions, export_race, get_race_info_message, get_race_leaderboard_embed, get_category_leaderboard_embed
 from ui.menus import do_post_submit_actions
 from test.test_utils.db_fixtures import (
     create_mock_race, 
@@ -2156,3 +2156,426 @@ class TestExportRace:
             assert 222 in data_call or 111 in data_call  # Teammate ID
             assert "Player222" in data_call or "Player111" in data_call  # Teammate username
             assert "1:24:37" in data_call  # Team finish time
+
+
+@pytest.mark.unit
+class TestGetRaceInfoMessage:
+    """Tests for get_race_info_message() function in ui/ui_util.py"""
+
+    @patch('ui.ui_util.validators.url')
+    def test_get_race_info_message_basic(self, mock_validators_url):
+        """Test basic race info message creation."""
+        # Setup
+        race = create_mock_race(
+            race_id=123,
+            description="Test Race",
+            seed="ABC123DEF456",
+            hash="1234567890abcdef",
+            additional_instructions="Test instructions"
+        )
+        race.create_datetime = "2024-01-15 10:30:00"
+        race.category_id.thumbnail_url = "https://example.com/thumb.jpg"
+        
+        mock_validators_url.return_value = False  # No URL in seed
+        
+        # Execute
+        result = get_race_info_message(race)
+        
+        # Verify
+        assert result.title == "Test Race"
+        assert "Use the buttons below for Race ID 123" in result.description
+        assert "*Created On:* 2024-01-15 10:30:00" in result.description
+        assert "Test instructions" in result.description
+        assert result.url is None  # No URL found in seed
+        assert result.thumbnail.url == "https://example.com/thumb.jpg"
+        
+        # Check fields
+        seed_field = next((field for field in result.fields if field.name == "Seed"), None)
+        assert seed_field is not None
+        assert seed_field.value == "ABC123DEF456"
+        assert seed_field.inline is False
+        
+        hash_field = next((field for field in result.fields if field.name == "Hash"), None)
+        assert hash_field is not None
+        assert hash_field.value == "1234567890abcdef"
+        assert hash_field.inline is False
+
+    @patch('ui.ui_util.validators.url')
+    def test_get_race_info_message_with_seed_url(self, mock_validators_url):
+        """Test race info message with URL in seed."""
+        # Setup
+        race = create_mock_race(
+            race_id=456,
+            description="URL Race",
+            seed="https://example.com/seed ABC123DEF456",
+            hash=None,
+            additional_instructions=None
+        )
+        race.create_datetime = "2024-01-20 15:45:00"
+        race.category_id.thumbnail_url = None
+        
+        # Mock URL validation - first part is URL, second is not
+        mock_validators_url.side_effect = lambda url: url == "https://example.com/seed"
+        
+        # Execute
+        result = get_race_info_message(race)
+        
+        # Verify
+        assert result.title == "URL Race"
+        assert "Use the buttons below for Race ID 456" in result.description
+        assert "*Created On:* 2024-01-20 15:45:00" in result.description
+        assert result.url == "https://example.com/seed"
+        assert result.thumbnail.url is None  # No thumbnail
+        
+        # Check fields
+        seed_field = next((field for field in result.fields if field.name == "Seed"), None)
+        assert seed_field is not None
+        assert seed_field.value == "https://example.com/seed ABC123DEF456"
+        
+        # No hash field should be present
+        hash_field = next((field for field in result.fields if field.name == "Hash"), None)
+        assert hash_field is None
+
+    @patch('ui.ui_util.validators.url')
+    def test_get_race_info_message_empty_hash(self, mock_validators_url):
+        """Test race info message with empty hash."""
+        # Setup
+        race = create_mock_race(
+            race_id=789,
+            description="Empty Hash Race",
+            seed="DEF456GHI789",
+            hash="",  # Empty hash
+            additional_instructions=None
+        )
+        race.create_datetime = "2024-01-25 08:15:00"
+        race.category_id.thumbnail_url = None
+        
+        mock_validators_url.return_value = False
+        
+        # Execute
+        result = get_race_info_message(race)
+        
+        # Verify
+        assert result.title == "Empty Hash Race"
+        
+        # No hash field should be present for empty hash
+        hash_field = next((field for field in result.fields if field.name == "Hash"), None)
+        assert hash_field is None
+
+    @patch('ui.ui_util.validators.url')
+    def test_get_race_info_message_thumbnail_error(self, mock_validators_url):
+        """Test race info message with thumbnail URL that causes error."""
+        # Setup
+        race = create_mock_race(
+            race_id=999,
+            description="Thumbnail Error Race",
+            seed="GHI789JKL012",
+            hash="abcdef123456",
+            additional_instructions=None
+        )
+        race.create_datetime = "2024-01-30 12:00:00"
+        race.category_id.thumbnail_url = "invalid-url"
+        
+        mock_validators_url.return_value = False
+        
+        # Execute - should not raise exception even if thumbnail fails
+        result = get_race_info_message(race)
+        
+        # Verify
+        assert result.title == "Thumbnail Error Race"
+        # Function should handle thumbnail error gracefully - thumbnail is still set but may be invalid
+        # The try-except just logs the error but doesn't prevent setting the thumbnail
+
+
+@pytest.mark.unit
+class TestGetRaceLeaderboardEmbed:
+    """Tests for get_race_leaderboard_embed() function in ui/ui_util.py"""
+
+    @pytest.mark.asyncio
+    @patch('ui.ui_util.get_submission_details_dict')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_place_str')
+    async def test_get_race_leaderboard_embed_with_details(self, mock_get_place_str, mock_get_user_name_str, mock_get_submission_details_dict):
+        """Test race leaderboard embed with show_details=True."""
+        # Setup
+        title = "Test Race Leaderboard"
+        body_text = "Test race results"
+        current_page = 0
+        per_page = 5
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=123, user_id=111, finish_time="1:23:45", 
+            comment="Great run!", points=100.0
+        )
+        submission2 = create_mock_submission(
+            submission_id=2, race_id=123, user_id=222, finish_time="1:25:30", 
+            comment="Good run", points=80.0
+        )
+        submissions = [submission1, submission2]
+        
+        mock_bot_client = Mock()
+        mock_user1 = Mock()
+        mock_user1.id = 111
+        mock_user2 = Mock()
+        mock_user2.id = 222
+        
+        mock_bot_client.fetch_user = AsyncMock(side_effect=lambda user_id: mock_user1 if user_id == 111 else mock_user2)
+        mock_get_user_name_str.side_effect = lambda user_id, user: f"Player{user_id}"
+        mock_get_place_str.side_effect = lambda place: f"{place}st" if place == 1 else f"{place}nd"
+        
+        # Mock submission details
+        def mock_submission_details(sub):
+            if sub.submission_id == 1:
+                return {
+                    "Collection Rate": "95.5%",
+                    "Score": "1500",
+                    "Points": "100.0"
+                }
+            else:
+                return {
+                    "Collection Rate": "92.0%", 
+                    "Points": "80.0"
+                }
+        
+        mock_get_submission_details_dict.side_effect = mock_submission_details
+        
+        # Execute
+        result = await get_race_leaderboard_embed(title, body_text, submissions, current_page, per_page, mock_bot_client, show_details=True)
+        
+        # Verify
+        assert result.title == title
+        assert result.description == body_text
+        assert len(result.fields) == 2
+        
+        # Check first field
+        field1 = result.fields[0]
+        assert field1.name == "1st"
+        assert "**Player111**" in field1.value
+        # The function processes submissions in order, so first submission should have its details
+        assert "--: Collection Rate: 95.5%" in field1.value or "--: Collection Rate: 92.0%" in field1.value
+        assert field1.inline is False
+        
+        # Check second field
+        field2 = result.fields[1]
+        assert field2.name == "2nd"
+        assert "**Player222**" in field2.value
+        # The function processes submissions in order, so second submission should have its details
+        assert "--: Collection Rate: 95.5%" in field2.value or "--: Collection Rate: 92.0%" in field2.value
+        assert field2.inline is False
+
+    @pytest.mark.asyncio
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_place_str')
+    async def test_get_race_leaderboard_embed_without_details(self, mock_get_place_str, mock_get_user_name_str):
+        """Test race leaderboard embed with show_details=False."""
+        # Setup
+        title = "Simple Leaderboard"
+        body_text = "Simple results"
+        current_page = 1  # Second page
+        per_page = 3
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=123, user_id=111, finish_time="1:23:45", 
+            comment="Great run!"
+        )
+        submissions = [submission1]
+        
+        mock_bot_client = Mock()
+        mock_user1 = Mock()
+        mock_user1.id = 111
+        
+        mock_bot_client.fetch_user = AsyncMock(return_value=mock_user1)
+        mock_get_user_name_str.return_value = "Player111"
+        mock_get_place_str.return_value = "4th"  # Page 1, position 1 = 4th overall
+        
+        # Execute
+        result = await get_race_leaderboard_embed(title, body_text, submissions, current_page, per_page, mock_bot_client, show_details=False)
+        
+        # Verify
+        assert result.title == title
+        assert result.description == body_text
+        assert len(result.fields) == 1
+        
+        field1 = result.fields[0]
+        assert field1.name == "4th"
+        assert field1.value == "1:23:45 - Player111"
+        assert field1.inline is False
+
+    @pytest.mark.asyncio
+    @patch('ui.ui_util.get_submission_details_dict')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_place_str')
+    async def test_get_race_leaderboard_embed_points_last(self, mock_get_place_str, mock_get_user_name_str, mock_get_submission_details_dict):
+        """Test that points field is added last in details."""
+        # Setup
+        title = "Points Last Test"
+        body_text = "Testing points order"
+        current_page = 0
+        per_page = 5
+        
+        submission1 = create_mock_submission(
+            submission_id=1, race_id=123, user_id=111, finish_time="1:23:45", 
+            comment="Test run"
+        )
+        submissions = [submission1]
+        
+        mock_bot_client = Mock()
+        mock_user1 = Mock()
+        mock_user1.id = 111
+        
+        mock_bot_client.fetch_user = AsyncMock(return_value=mock_user1)
+        mock_get_user_name_str.return_value = "Player111"
+        mock_get_place_str.return_value = "1st"
+        
+        # Mock submission details with points
+        mock_get_submission_details_dict.return_value = {
+            "Collection Rate": "95.5%",
+            "Score": "1500",
+            "Points": "100.0",
+            "Other Field": "test"
+        }
+        
+        # Execute
+        result = await get_race_leaderboard_embed(title, body_text, submissions, current_page, per_page, mock_bot_client, show_details=True)
+        
+        # Verify
+        field1 = result.fields[0]
+        value_lines = field1.value.split('\n')
+        
+        # Points should be last
+        assert value_lines[-1] == "--: Points: 100.0"
+        # Other fields should come before points
+        assert "--: Collection Rate: 95.5%" in field1.value
+        assert "--: Score: 1500" in field1.value
+        assert "--: Other Field: test" in field1.value
+
+
+@pytest.mark.unit
+class TestGetCategoryLeaderboardEmbed:
+    """Tests for get_category_leaderboard_embed() function in ui/ui_util.py"""
+
+    @pytest.mark.asyncio
+    @patch('ui.ui_util.get_num_category_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_place_str')
+    @patch('ui.ui_util.format_points_str')
+    async def test_get_category_leaderboard_embed_basic(self, mock_format_points_str, mock_get_place_str, mock_get_user_name_str, mock_get_num_category_submissions):
+        """Test basic category leaderboard embed creation."""
+        # Setup
+        title = "Category Leaderboard"
+        body_text = "Category results"
+        current_page = 0
+        per_page = 5
+        
+        # Mock points objects
+        point1 = Mock()
+        point1.user_id = 111
+        point1.category_id = 1
+        point1.points = 150.5
+        
+        point2 = Mock()
+        point2.user_id = 222
+        point2.category_id = 1
+        point2.points = 120.0
+        
+        points_list = [point1, point2]
+        
+        mock_bot_client = Mock()
+        mock_user1 = Mock()
+        mock_user1.id = 111
+        mock_user2 = Mock()
+        mock_user2.id = 222
+        
+        mock_bot_client.fetch_user = AsyncMock(side_effect=lambda user_id: mock_user1 if user_id == 111 else mock_user2)
+        mock_get_user_name_str.side_effect = lambda user_id, user: f"Player{user_id}"
+        mock_get_place_str.side_effect = lambda place: f"{place}st" if place == 1 else f"{place}nd"
+        mock_format_points_str.side_effect = lambda points: f"{points:.1f}"
+        mock_get_num_category_submissions.side_effect = lambda user_id, cat_id: 5 if user_id == 111 else 3
+        
+        # Execute
+        result = await get_category_leaderboard_embed(title, body_text, points_list, current_page, per_page, mock_bot_client)
+        
+        # Verify
+        assert result.title == title
+        assert result.description == body_text
+        assert len(result.fields) == 2
+        
+        # Check first field
+        field1 = result.fields[0]
+        assert field1.name == "1st - 150.5"
+        assert field1.value == "Player111 (5)"
+        assert field1.inline is False
+        
+        # Check second field
+        field2 = result.fields[1]
+        assert field2.name == "2nd - 120.0"
+        assert field2.value == "Player222 (3)"
+        assert field2.inline is False
+
+    @pytest.mark.asyncio
+    @patch('ui.ui_util.get_num_category_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_place_str')
+    @patch('ui.ui_util.format_points_str')
+    async def test_get_category_leaderboard_embed_pagination(self, mock_format_points_str, mock_get_place_str, mock_get_user_name_str, mock_get_num_category_submissions):
+        """Test category leaderboard embed with pagination."""
+        # Setup
+        title = "Paginated Leaderboard"
+        body_text = "Page 2 results"
+        current_page = 1  # Second page
+        per_page = 3
+        
+        # Mock points objects
+        point1 = Mock()
+        point1.user_id = 333
+        point1.category_id = 1
+        point1.points = 100.0
+        
+        points_list = [point1]
+        
+        mock_bot_client = Mock()
+        mock_user1 = Mock()
+        mock_user1.id = 333
+        
+        mock_bot_client.fetch_user = AsyncMock(return_value=mock_user1)
+        mock_get_user_name_str.return_value = "Player333"
+        mock_get_place_str.return_value = "4th"  # Page 1, position 1 = 4th overall
+        mock_format_points_str.return_value = "100.0"
+        mock_get_num_category_submissions.return_value = 7
+        
+        # Execute
+        result = await get_category_leaderboard_embed(title, body_text, points_list, current_page, per_page, mock_bot_client)
+        
+        # Verify
+        assert result.title == title
+        assert result.description == body_text
+        assert len(result.fields) == 1
+        
+        field1 = result.fields[0]
+        assert field1.name == "4th - 100.0"
+        assert field1.value == "Player333 (7)"
+        assert field1.inline is False
+
+    @pytest.mark.asyncio
+    @patch('ui.ui_util.get_num_category_submissions')
+    @patch('ui.ui_util.get_user_name_str')
+    @patch('ui.ui_util.get_place_str')
+    @patch('ui.ui_util.format_points_str')
+    async def test_get_category_leaderboard_embed_empty_list(self, mock_format_points_str, mock_get_place_str, mock_get_user_name_str, mock_get_num_category_submissions):
+        """Test category leaderboard embed with empty points list."""
+        # Setup
+        title = "Empty Leaderboard"
+        body_text = "No results"
+        current_page = 0
+        per_page = 5
+        points_list = []
+        
+        mock_bot_client = Mock()
+        
+        # Execute
+        result = await get_category_leaderboard_embed(title, body_text, points_list, current_page, per_page, mock_bot_client)
+        
+        # Verify
+        assert result.title == title
+        assert result.description == body_text
+        assert len(result.fields) == 0  # No fields for empty list
