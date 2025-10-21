@@ -258,7 +258,7 @@ Functions with business logic requiring mocked Discord objects or database model
   - **Key Features**: CSV generation, extra info handling, points scoring, team race support, file I/O
   - *Requires: File I/O mocking[6]*
 
-### Message & Embed Building (MEDIUM PRIORITY)
+### git ad (MEDIUM PRIORITY)
 
 - [x] `get_race_info_message()` - `ui/ui_util.py:279` ✅ **COMPLETED**
   - ✅ Test embed creation with seed URL extraction
@@ -324,19 +324,29 @@ Complex functions with multiple dependencies, state management, and Discord UI i
 
 ### Complex UI Views & Interactions (MEDIUM PRIORITY)
 
-- [ ] `zRaceInfoButtonView` - `ui/menus.py:467`
-  - Test submit_time_button logic
-  - Test forfeit_button logic
-  - Test leaderboard_button with permissions
-  - Test team_leaderboard_button (team races only)
-  - *Requires: Button callback testing framework[9]*
+- [x] `zRaceInfoButtonView` - `ui/menus.py:467` ✅ **COMPLETED**
+  - ✅ Test submit_time_button logic
+  - ✅ Test forfeit_button logic
+  - ✅ Test leaderboard_button with permissions
+  - ✅ Test team_leaderboard_button (team races only)
+  - ✅ Test initialization with regular vs team races
+  - ✅ Test initialization when race not found
+  - ✅ Test add_static_embed_fields static method
+  - ✅ Test Discord API error handling in all button callbacks
+  - **Tests Written**: 20 comprehensive tests covering all functionality
+  - **Key Features**: Race state validation, submission permissions, button interactions, error handling
+  - **Technical Details**: Uses `AsyncMock` for async methods, tests all race states and user conditions
+  - **Error Handling**: Tests `HTTPException`, `ConnectionClosed`, and other Discord API errors
 
-- [ ] `zRaceInfoButtonView.check_can_submit()` - `ui/menus.py:481`
-  - Test inactive race rejection
-  - Test completed race with allow_completed_submit
-  - Test edit time window (4 hours)
-  - Test assigned race validation
-  - Test seed access time limit enforcement
+- [x] `zRaceInfoButtonView.check_can_submit()` - `ui/menus.py:481` ✅ **COMPLETED**
+  - ✅ Test inactive race rejection
+  - ✅ Test completed race with allow_completed_submit
+  - ✅ Test edit time window (4 hours)
+  - ✅ Test assigned race validation
+  - ✅ Test seed access time limit enforcement
+  - **Tests Written**: 8 comprehensive tests covering all permission scenarios
+  - **Key Features**: Race state validation, submission permissions, edit windows, assigned race logic
+  - **Technical Details**: Tests all race states, user conditions, and time-based restrictions
 
 - [ ] `zSingleSelectView` - `ui/ui_util.py:739`
   - Test single selection handling
@@ -547,15 +557,62 @@ pytest -v test/
   - ✅ get_race_leaderboard_table (8 tests, leaderboard table generation with extra info)
   - ✅ get_sorted_team_submissions (6 tests, team matching and validation logic)
   - ✅ export_race (7 tests, CSV generation and file I/O)
-- **Phase 3**: ✅ 3/21 tests implemented (14%)
-- **Total**: ✅ 21/54 tests implemented (39%) - 2 items skipped from total
-- **Total Tests Written**: 258 tests passing ✅ 🎯
+- **Phase 3**: ✅ 5/21 tests implemented (24%)
+- **Phase 4**: ⏳ 0/1 tests implemented (0%) - Discord API error testing
+- **Phase 5**: ✅ 1/1 tests implemented (100%) - UI View Components ✨ **PHASE COMPLETE!**
+- **Total**: ✅ 24/56 tests implemented (43%) - 2 items skipped from total
+- **Total Tests Written**: 278 tests passing ✅ 🎯
 - **Bugs Found**: 4 bugs caught and fixed by tests! 🎯
 - **Test Infrastructure Created**:
   - Discord mock factory (`test/test_utils/discord_mocks.py`)
   - Database fixtures (`test/test_utils/db_fixtures.py` + PointsType)
-  - Unit tests: Formatters (89), Permissions (39), Race Logic (97)
+  - Unit tests: Formatters (89), Permissions (39), Race Logic (97), UI Menus (20) NEW!
   - Integration tests: Race State Flows (22) NEW!
 
-**Last Updated**: zRaceSubmitHandler class completed - comprehensive modal handling, submission processing, and validation testing! (258 total tests)
+**Last Updated**: zRaceInfoButtonView class completed - comprehensive UI view testing with Discord API error handling! (278 total tests)
+
+---
+
+## Phase 4: Discord Interface Error Handling (NEW - HIGH PRIORITY)
+
+Testing resilience against Discord API failures, timeouts, and network issues.
+
+### Discord API Error Scenarios
+
+- [ ] **Discord API Timeout/Network Error Testing** - `ui/ui_util.py` & `ui/menus.py`
+  - [ ] Test `interaction.send()` timeout handling
+  - [ ] Test `interaction.response.send_modal()` network failure
+  - [ ] Test `message.edit()` HTTP exception handling
+  - [ ] Test `channel.send()` connection errors
+  - [ ] Test webhook token expiration (401 Unauthorized)
+  - [ ] Test rate limiting (429 Too Many Requests)
+  - [ ] Test connection closed errors (WebSocket issues)
+  - [ ] Test graceful degradation when Discord is unavailable
+  - **Priority**: HIGH - Production logs show frequent Discord API errors
+  - **Key Functions**: `send_message()`, `get_race_info_message()`, menu callbacks
+  - **Error Types**: `nextcord.errors.HTTPException`, `nextcord.errors.ConnectionClosed`, `asyncio.TimeoutError`
+  - **Mock Strategy**: Use `side_effect` to simulate specific Discord API exceptions
+  - **Expected Behavior**: Functions should log errors gracefully and not crash the bot
+
+---
+
+## Phase 5: UI View Components (NEW - HIGH PRIORITY)
+
+Testing Discord UI view components and their interactions.
+
+### Race Info Button View
+
+- [x] `zRaceInfoButtonView` class - `ui/menus.py:467` ✅ **COMPLETED**
+  - ✅ Test initialization with regular vs team races
+  - ✅ Test initialization when race not found
+  - ✅ Test `check_can_submit()` with various race states and user conditions
+  - ✅ Test `submit_time_button()` callback functionality
+  - ✅ Test `forfeit_button()` callback functionality  
+  - ✅ Test `leaderboard_button()` callback functionality
+  - ✅ Test `add_static_embed_fields()` static method
+  - ✅ Test Discord API error handling in all button callbacks
+  - **Tests Written**: 20 comprehensive tests covering all functionality
+  - **Key Features**: Race state validation, submission permissions, button interactions, error handling
+  - **Technical Details**: Uses `AsyncMock` for async methods, tests all race states and user conditions
+  - **Error Handling**: Tests `HTTPException`, `ConnectionClosed`, and other Discord API errors
 
