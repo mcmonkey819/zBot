@@ -322,7 +322,7 @@ Complex functions with multiple dependencies, state management, and Discord UI i
   - **Key features tested:** Type conversion, validation error messages, empty value handling
   - **Technical details:** Tests all VarType enum values, validates error message generation
 
-### Complex UI Views & Interactions (MEDIUM PRIORITY)
+### git 
 
 - [x] `zRaceInfoButtonView` - `ui/menus.py:467` ✅ **COMPLETED**
   - ✅ Test submit_time_button logic
@@ -348,13 +348,13 @@ Complex functions with multiple dependencies, state management, and Discord UI i
   - **Key Features**: Race state validation, submission permissions, edit windows, assigned race logic
   - **Technical Details**: Tests all race states, user conditions, and time-based restrictions
 
-- [ ] `zSingleSelectView` - `ui/ui_util.py:739`
+- [x] `zSingleSelectView` - `ui/ui_util.py:739`
   - Test single selection handling
   - Test "Show More" pagination (>25 items)
   - Test callback with payload
   - Test prompt() method flow
 
-- [ ] `zMultiPageModalSender` - `ui/ui_util.py:860`
+- [x] `zMultiPageModalSender` - `ui/ui_util.py:860`
   - Test single page modal
   - Test multi-page modal (>4 fields)
   - Test field indexing across pages

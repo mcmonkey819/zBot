@@ -1002,8 +1002,14 @@ async def create_edit_category_command(interaction, payload):
     select_list.insert(0, nextcord.SelectOption(label="Create New...", value=0, description="Create a new category."))
     
     # Prompt the user to select an option
-    view = zSingleSelectView(select_list, create_edit_category, "Choose Category..")
-    await send_message(interaction, view=view)
+    view = await safe_zSingleSelectView(
+        interaction, 
+        select_list, 
+        create_edit_category, 
+        "Choose Category..", 
+        empty_message="No categories available. Create a new category first.")
+    if view is not None:
+        await send_message(interaction, view=view)
 
 async def create_edit_category(category_id, interaction):
     if category_id == 0:
@@ -1142,8 +1148,14 @@ async def category_edit_points(interaction, category):
         member_name = get_user_name_str(p.user_id, member)
         select_list.append(nextcord.SelectOption(label=f"{member_name} - {p.points}", value=p.id, description=f"{member_name} Current Points: {p.points}"))
 
-    view = zSingleSelectView(select_list, category_edit_db_points, "Choose Racer To Modify...")
-    await send_message(interaction, view=view)
+    view = await safe_zSingleSelectView(
+        interaction, 
+        select_list, 
+        category_edit_db_points, 
+        "Choose Racer To Modify...", 
+        empty_message="No racers with points found for this category.")
+    if view is not None:
+        await send_message(interaction, view=view)
 
 async def category_edit_db_points(points_id, interaction):
     db_points = get_category_points_by_id(points_id)
@@ -1225,7 +1237,16 @@ async def category_assign_extra_info(interaction, category):
             s.label = f"✅ {s.label}"
 
     # Prompt the user to select an option
-    extra_info_id = await zSingleSelectView(select_list, None, "Choose Extra Info Type..").prompt(interaction)
+    view = await safe_zSingleSelectView(
+        interaction, 
+        select_list, 
+        None, 
+        "Choose Extra Info Type..", 
+        empty_message="No extra info types available. Create an extra info type first.")
+    if view is None:
+        return  # User was shown empty message, operation cancelled
+    
+    extra_info_id = await view.prompt(interaction)
 
     extra_info_type = get_extra_info_type(extra_info_id)
     extra_info_name = "" if extra_info_type is None else extra_info_type.name
@@ -1542,8 +1563,9 @@ async def create_edit_race_command(interaction, payload):
     select_list.insert(0, nextcord.SelectOption(label="Create New...", value=0, description="Create a new race."))
     
     # Prompt the user to select an option
-    view = zSingleSelectView(select_list, create_edit_race, "Choose Race..")
-    await send_message(interaction, view=view)
+    view = await safe_zSingleSelectView(interaction, select_list, create_edit_race, "Choose Race..", empty_message="No races available. Create a new race first.")
+    if view is not None:
+        await send_message(interaction, view=view)
 
 async def create_edit_race(race_id, interaction):
     if race_id == 0 or race_id is None:
@@ -1553,9 +1575,14 @@ async def create_edit_race(race_id, interaction):
             await add_race(select_list[0].value, interaction)
         else:
             # Prompt the user to select a category for the race, then send the add race modal
-            await send_message(interaction, view=zSingleSelectView(get_category_select_list(interaction.guild_id),
-                                                                add_race,
-                                                                "Select Race Category"))
+            category_view = await safe_zSingleSelectView(
+                interaction, 
+                get_category_select_list(interaction.guild_id), 
+                add_race, 
+                "Select Race Category", 
+                empty_message="No categories available. Create a category first.")
+            if category_view is not None:
+                await send_message(interaction, view=category_view)
     else:
         await send_race_menu(interaction, race_id)
 
@@ -2040,7 +2067,11 @@ async def race_assign_extra_info(interaction, race):
             s.label = f"✅ {s.label}"
 
     # Prompt the user to select an option
-    extra_info_id = await zSingleSelectView(select_list, None, "Choose Extra Info Type..").prompt(interaction)
+    view = await safe_zSingleSelectView(interaction, select_list, None, "Choose Extra Info Type..", empty_message="No extra info types available. Create an extra info type first.")
+    if view is None:
+        return  # User was shown empty message, operation cancelled
+    
+    extra_info_id = await view.prompt(interaction)
 
     extra_info_type = get_extra_info_type(extra_info_id)
     extra_info_name = "" if extra_info_type is None else extra_info_type.name
@@ -2224,7 +2255,11 @@ async def prompt_for_role(interaction, placeholder="Choose Role..."):
     server = get_server_from_interaction(interaction)
     role_list = get_role_select_list(server)
     
-    selected_role = await zSingleSelectView(role_list, None, placeholder).prompt(interaction)
+    view = await safe_zSingleSelectView(interaction, role_list, None, placeholder, empty_message="No roles available.")
+    if view is None:
+        return None  # User was shown empty message, operation cancelled
+    
+    selected_role = await view.prompt(interaction)
     
     return None if selected_role == 0 else selected_role
 
@@ -2233,7 +2268,16 @@ async def prompt_for_channel(interaction, placeholder="Choose Channel..."):
     server = get_server_from_interaction(interaction)
     channel_list = await get_permitted_channel_select_list(interaction.client.user.id, server)
     
-    selected_channel_id = await zSingleSelectView(channel_list, None, placeholder).prompt(interaction)
+    view = await safe_zSingleSelectView(
+        interaction, 
+        channel_list, 
+        None, 
+        placeholder, 
+        empty_message="No channels available. The bot may not have permission to access any text channels.")
+    if view is None:
+        return None  # User was shown empty message, operation cancelled
+    
+    selected_channel_id = await view.prompt(interaction)
     if selected_channel_id == 0:
         await send_message(interaction, "**ERROR** Could not fetch selected channel. Please contact a bot admin.")
         return None
@@ -2659,11 +2703,18 @@ async def race_toggle_is_team_race(interaction, payload):
 
     # If we've just set this as a team race, prompt for the extra info type to use for team names
     if race.is_team_race:
-        team_name_info_id = await zSingleSelectView(select_list, None, "Select Team Name Field").prompt(interaction)
-        if team_name_info_id is not None:
-            race.team_name_info_id = team_name_info_id
-            race.save()
-            await send_message(interaction, f"Team Name Field {get_extra_info_type(team_name_info_id).name} saved")
+        view = await safe_zSingleSelectView(
+            interaction, 
+            select_list, 
+            None, 
+            "Select Team Name Field", 
+            empty_message="No extra info types available for team names.")
+        if view is not None:
+            team_name_info_id = await view.prompt(interaction)
+            if team_name_info_id is not None:
+                race.team_name_info_id = team_name_info_id
+                race.save()
+                await send_message(interaction, f"Team Name Field {get_extra_info_type(team_name_info_id).name} saved")
                                                  
 ########################################################################################################################
 async def toggle_required_extra_info(interaction, payload):

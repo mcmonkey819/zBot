@@ -746,10 +746,37 @@ class zSingleSelect(nextcord.ui.Select):
                 await self.submit_handler(int(interaction.data['values'][0]), interaction)
 
 #####################################################################################################################
+# Helper function to safely create a zSingleSelectView with empty list handling
+async def safe_zSingleSelectView(interaction, select_list: SelectList, submit_handler, placeholder = None, payload=None, empty_message="No options available"):
+    """
+    Safely create a zSingleSelectView, handling empty lists gracefully.
+    
+    Args:
+        interaction: The Discord interaction object
+        select_list: List of SelectOption objects
+        submit_handler: Function to call when selection is made
+        placeholder: Placeholder text for the select
+        payload: Optional payload data
+        empty_message: Message to show if list is empty
+        
+    Returns:
+        zSingleSelectView if list is not empty, None if empty (and shows message)
+    """
+    if len(select_list) == 0:
+        await send_message(interaction, empty_message)
+        return None
+    return zSingleSelectView(select_list, submit_handler, placeholder, payload)
+
+#####################################################################################################################
 # View which contains a zSingleSelect
 class zSingleSelectView(nextcord.ui.View):
     def __init__(self, select_list: SelectList, submit_handler, placeholder = None, payload=None):
         super().__init__(timeout=None)
+        
+        # Validate that the select list is not empty
+        if len(select_list) == 0:
+            raise ValueError("zSingleSelectView requires at least one option. Empty select lists are not supported by Discord.")
+        
         self.selected_value = None
         self.submit_handler = submit_handler
         self.select = zSingleSelect(select_list, self.save_selected_value, placeholder, payload)
