@@ -364,30 +364,45 @@ Complex functions with multiple dependencies, state management, and Discord UI i
 
 ### Command Workflows (MEDIUM PRIORITY)
 
-- [ ] `show_race_details()` - `ui/menus.py:2249`
-  - Test assigned race seed confirmation
-  - Test seed_time recording on first view
-  - Test cancellation handling
-  - Test embed and view sending
-  - *Requires: Full interaction flow mocking[5]*
+- [x] `show_race_details()` - `ui/menus.py:2249` ✅ **COMPLETED**
+  - [x] Test assigned race seed confirmation
+  - [x] Test seed_time recording on first view
+  - [x] Test cancellation handling
+  - [x] Test embed and view sending
+  - [x] Test error handling for missing race data
+  - [x] Test non-assigned race direct display
+  - [x] Test team race vs individual race handling
+  - [x] Test full interaction flow with all mocks
+  - *File: `test/unit/test_show_race_details.py` (11 test cases)*
 
-- [ ] `show_race_leaderboard()` - `ui/menus.py:2390`
-  - Test paginated menu creation
-  - Test with various submission counts
-  - Test title and description generation
+- [x] `show_race_leaderboard()` - `ui/menus.py:2390` ✅ **COMPLETED**
+  - [x] Test paginated menu creation
+  - [x] Test with various submission counts
+  - [x] Test title and description generation
+  - [x] Test menu start parameters
+  - [x] Test different race states
+  - [x] Test guild_id and client passing
+  - *File: `test/unit/test_show_race_leaderboard.py` (6 test cases)*
 
-- [ ] `show_category_leaderboard()` - `ui/menus.py:2523`
-  - Test RecentRace leaderboard type
-  - Test Points leaderboard type
-  - Test no points scenario
+- [x] `show_category_leaderboard()` - `ui/menus.py:2523` ✅ **COMPLETED**
+  - [x] Test RecentRace leaderboard type
+  - [x] Test Points leaderboard type
+  - [x] Test no points scenario
+  - [x] Test category not found error
+  - [x] Test different leaderboard types
+  - [x] Test menu creation parameters
+  - [x] Test recent race multiple races
+  - *File: `test/unit/test_show_category_leaderboard.py` (8 test cases)*
 
-- [ ] `race_edit_submission()` - `ui/menus.py:1764`
-  - Test inactive race rejection
-  - Test submission list generation
-  - Test create new submission flow
-  - Test edit existing submission flow
-  - Test user selection for new submission
-  - *Requires: Select menu interaction mocking[9]*
+- [x] `race_edit_submission()` - `ui/menus.py:1764` ✅ **COMPLETED**
+  - [x] Test inactive race rejection
+  - [x] Test submission list generation
+  - [x] Test create new submission flow
+  - [x] Test edit existing submission flow
+  - [x] Test user selection for new submission
+  - [x] Test user fetch error handling
+  - [x] Test view creation parameters
+  - *File: `test/unit/test_race_edit_submission.py` (13 test cases)*
 
 ### Leaderboard Updates & Channel Operations (MEDIUM PRIORITY)
 
