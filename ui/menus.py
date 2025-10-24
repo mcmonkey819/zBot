@@ -2871,10 +2871,13 @@ async def update_menu_embed_field(menu, toggle_field: ToggleField):
 async def update_category_leaderboard(interaction, race):
     # Check if there are any category leaderboard messages
     msgs = get_messages_by_category_id(race.category_id.id)
-    msgs = list(filter(lambda x: x.message_type is RaceMessageType.Leaderboard, msgs))
+    if msgs is not None:
+        msgs = list(filter(lambda x: x.message_type is RaceMessageType.Leaderboard, msgs))
+    else:
+        msgs = []
 
     # We can only update the leaderboard if there is a message stored in the DB indicating the saved channel
-    if msgs is not None and len(msgs) > 0:
+    if len(msgs) > 0:
         # Extract the channel_id from the message and fetch the channel
         channel = interaction.guild.get_channel(msgs[0].channel_id)
 

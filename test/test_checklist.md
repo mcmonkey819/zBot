@@ -406,27 +406,45 @@ Complex functions with multiple dependencies, state management, and Discord UI i
 
 ### Leaderboard Updates & Channel Operations (MEDIUM PRIORITY)
 
-- [ ] `update_race_leaderboard()` - `ui/menus.py:2838`
-  - Test with no submissions (early return)
-  - Test message deletion and recreation
-  - Test category leaderboard cascade update
+- [x] `update_race_leaderboard()` - `ui/menus.py:2889` ✅ **COMPLETED**
+  - [x] Test with no submissions (early return)
+  - [x] Test message deletion and recreation
+  - [x] Test category leaderboard cascade update
+  - [x] Test RecentRace vs Points leaderboard type handling
+  - [x] Test channel not found handling
+  - [x] Test no existing messages logging
+  - *File: `test/unit/test_update_race_leaderboard.py` (7 test cases)*
 
-- [ ] `update_category_leaderboard()` - `ui/menus.py:2820`
-  - Test message lookup by category
-  - Test message deletion
-  - Test new leaderboard posting
+- [x] `update_category_leaderboard()` - `ui/menus.py:2871` ✅ **COMPLETED**
+  - [x] Test message lookup by category
+  - [x] Test message deletion
+  - [x] Test new leaderboard posting
+  - [x] Test mixed message types filtering
+  - [x] Test channel not found handling
+  - [x] Test None messages handling
+  - [x] Test empty leaderboard messages after filtering
+  - *File: `test/unit/test_update_category_leaderboard.py` (8 test cases)*
 
-- [ ] `post_channel_race_leaderboard()` - `ui/menus.py:2401`
-  - Test multi-page leaderboard posting
-  - Test message saving to DB
-  - Test empty submissions case
-  - Test save_as_category_message flag
-  - *Requires: Channel mock with send()[7]*
+- [x] `post_channel_race_leaderboard()` - `ui/menus.py:2445` ✅ **COMPLETED**
+  - [x] Test multi-page leaderboard posting
+  - [x] Test message saving to DB
+  - [x] Test empty submissions case
+  - [x] Test save_as_category_message flag
+  - [x] Test single page leaderboard posting
+  - [x] Test per_page calculation
+  - [x] Test race_id from submissions
+  - *File: `test/unit/test_post_channel_race_leaderboard.py` (8 test cases)*
 
-- [ ] `post_channel_category_leaderboard()` - `ui/menus.py:2485`
-  - Test RecentRace type posting
-  - Test Points type posting
-  - Test no races scenario
+- [x] `post_channel_category_leaderboard()` - `ui/menus.py:2529` ✅ **COMPLETED**
+  - [x] Test RecentRace type posting
+  - [x] Test Points type posting
+  - [x] Test no races scenario
+  - [x] Test category not found error
+  - [x] Test per_page setting
+  - [x] Test different leaderboard types
+  - [x] Test message saving parameters
+  - [x] Test RecentRace save_as_category_message flag
+  - *File: `test/unit/test_post_channel_category_leaderboard.py` (9 test cases)*
 
 ### Toggle & Configuration Functions (LOWER PRIORITY)
 
