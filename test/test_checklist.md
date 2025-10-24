@@ -448,15 +448,25 @@ Complex functions with multiple dependencies, state management, and Discord UI i
 
 ### Toggle & Configuration Functions (LOWER PRIORITY)
 
-- [ ] `toggle_category_leaderboard_type()` - `ui/menus.py:2543`
-  - Test RecentRace ↔ Points toggle
-  - Test menu embed update
-  - Test database persistence
+- [x] `toggle_category_leaderboard_type()` - `ui/menus.py:2587` ✅ **COMPLETED**
+  - [x] Test RecentRace ↔ Points toggle
+  - [x] Test menu embed update
+  - [x] Test database persistence
+  - [x] Test button style update
+  - [x] Test embed field value update
+  - [x] Test logging output
+  - [x] Test payload structure
+  - *File: `test/unit/test_toggle_category_leaderboard_type.py` (8 test cases)*
 
-- [ ] `toggle_required_extra_info()` - `ui/menus.py:2669`
-  - Test required ↔ optional toggle
-  - Test button style update
-  - Test menu embed update
+- [x] `toggle_required_extra_info()` - `ui/menus.py:2720` ✅ **COMPLETED**
+  - [x] Test required ↔ optional toggle
+  - [x] Test button style update
+  - [x] Test menu embed update
+  - [x] Test database persistence
+  - [x] Test embed field value update
+  - [x] Test payload structure
+  - [x] Test multiple toggles consistency
+  - *File: `test/unit/test_toggle_required_extra_info.py` (8 test cases)*
 
 ---
 
