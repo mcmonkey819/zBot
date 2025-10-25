@@ -103,13 +103,51 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         await interaction.response.defer(ephemeral=True)
 
+        # Validate channel access permissions
+        try:
+            # Check if bot has permission to send messages in both channels
+            if not mod_channel.permissions_for(interaction.guild.me).send_messages:
+                await send_message(interaction, "**ERROR** Bot does not have permission to send messages in the moderator channel. Please check channel permissions.")
+                return
+                
+            if not racer_channel.permissions_for(interaction.guild.me).send_messages:
+                await send_message(interaction, "**ERROR** Bot does not have permission to send messages in the racer channel. Please check channel permissions.")
+                return
+                
+            # Check if bot has permission to embed links (needed for rich embeds)
+            if not mod_channel.permissions_for(interaction.guild.me).embed_links:
+                await send_message(interaction, "**ERROR** Bot does not have permission to embed links in the moderator channel. Please check channel permissions.")
+                return
+                
+            if not racer_channel.permissions_for(interaction.guild.me).embed_links:
+                await send_message(interaction, "**ERROR** Bot does not have permission to embed links in the racer channel. Please check channel permissions.")
+                return
+                
+            logging.info(f"Channel permission validation passed for server {interaction.guild_id}")
+            
+        except Exception as e:
+            logging.error(f"Error validating channel permissions for server {interaction.guild_id}: {e}")
+            await send_message(interaction, "**ERROR** Failed to validate channel permissions. Please try again.")
+            return
+
         # Check if this server is in the DB and that the user is an admin
         db_server = self.get_server(interaction)
         if db_server is None:
             if interaction.user.id == bot_config.CoolestGuy:
+                logging.info(f"Setting up new server {interaction.guild_id} ({interaction.guild.name})")
                 # Query for the moderator and admin roles and then create a DB entry for this server
                 admin_role = await prompt_for_role(interaction, placeholder="Select Race Admin Role...")
+                if admin_role is None:
+                    logging.warning(f"Admin role selection cancelled for server {interaction.guild_id}")
+                    await send_message(interaction, "**ERROR** Admin role selection failed. Server setup cancelled.")
+                    return
+                    
                 mod_role = await prompt_for_role(interaction, placeholder="Select Race Moderator Role...")
+                if mod_role is None:
+                    logging.warning(f"Moderator role selection cancelled for server {interaction.guild_id}")
+                    await send_message(interaction, "**ERROR** Moderator role selection failed. Server setup cancelled.")
+                    return
+                    
                 db_server = AsyncRaceServer()
                 
                 db_server.id = interaction.guild.id
@@ -121,27 +159,60 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                     logging.info(f"Saving server [{db_server.id}] {db_server.name} to DB")
                     # Need to do a force insert since the primary key is the server ID which is not an auto-incrementing ID
                     db_server.save(force_insert=True)
-                except:
-                    await send_message(interaction, "**ERROR** Could not save server information")
+                    logging.info(f"Successfully saved server {db_server.id} to database")
+                except Exception as e:
+                    logging.error(f"Failed to save server {interaction.guild_id} to database: {e}")
+                    await send_message(interaction, "**ERROR** Could not save server information to database. Please try again.")
                     return
             else:
+                logging.warning(f"Unauthorized startup attempt by user {interaction.user.id} on server {interaction.guild_id}")
                 await send_message(interaction, "**ERROR** This server is not setup for use with this bot, please contact the bot owner")
                 return
 
         if not user_is_admin(interaction.guild, interaction.user):
+            logging.warning(f"Non-admin user {interaction.user.id} attempted startup on server {interaction.guild_id}")
             await send_message(interaction, "Only Race Admins can use this command", ephemeral=True)
             return
 
+        # Create moderator menu
+        logging.info(f"Creating moderator menu for server {interaction.guild_id} in channel {mod_channel.id}")
         mod_message = await send_moderator_menu(interaction, mod_channel)
-        save_message(interaction.guild_id, mod_channel.id, mod_message.id, message_type=RaceMessageType.Menu)
+        if mod_message is None:
+            logging.error(f"Failed to create moderator menu for server {interaction.guild_id}")
+            await send_message(interaction, "**ERROR** Failed to create moderator menu. Server setup incomplete.")
+            return
+            
+        if not save_message(interaction.guild_id, mod_channel.id, mod_message.id, message_type=RaceMessageType.Menu):
+            logging.error(f"Failed to save moderator menu to database for server {interaction.guild_id}")
+            await send_message(interaction, "**ERROR** Failed to save moderator menu to database. Server setup incomplete.")
+            return
+        logging.info(f"Successfully created and saved moderator menu for server {interaction.guild_id}")
         
+        # Create racer menu
+        logging.info(f"Creating racer menu for server {interaction.guild_id} in channel {racer_channel.id}")
         racer_message = await send_racer_menu(interaction, racer_channel)
-        save_message(interaction.guild_id, racer_channel.id, racer_message.id, message_type=RaceMessageType.Menu)
+        if racer_message is None:
+            logging.error(f"Failed to create racer menu for server {interaction.guild_id}")
+            await send_message(interaction, "**ERROR** Failed to create racer menu. Server setup incomplete.")
+            return
+            
+        if not save_message(interaction.guild_id, racer_channel.id, racer_message.id, message_type=RaceMessageType.Menu):
+            logging.error(f"Failed to save racer menu to database for server {interaction.guild_id}")
+            await send_message(interaction, "**ERROR** Failed to save racer menu to database. Server setup incomplete.")
+            return
+        logging.info(f"Successfully created and saved racer menu for server {interaction.guild_id}")
         
         # Restore pinned race states after creating admin menus
-        await self.restore_pinned_race_states(interaction)
+        logging.info(f"Restoring pinned race states for server {interaction.guild_id}")
+        if not await self.restore_pinned_race_states(interaction):
+            logging.warning(f"Some pinned race states could not be restored for server {interaction.guild_id}")
+            await send_message(interaction, "**WARNING** Some pinned race states could not be restored. Check the restoration summary for details.")
+        else:
+            logging.info(f"Successfully restored pinned race states for server {interaction.guild_id}")
         
-        await send_message(interaction, "Done!", ephemeral=True)
+        # Final success message
+        logging.info(f"Startup completed successfully for server {interaction.guild_id}")
+        await send_message(interaction, "✅ **Server setup completed successfully!**\n\nModerator and racer menus have been created and pinned race states have been restored.")
         
 
 

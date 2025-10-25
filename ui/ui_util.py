@@ -69,16 +69,19 @@ async def check_user_is_admin(interaction):
 
 ########################################################################################################################
 def save_message(server_id, channel_id, message_id, *, message_type=RaceMessageType.Leaderboard, category_id=None, race_id=None):
-    msg = AsyncRaceMessage(server_id=server_id,
-                           channel_id=channel_id,
-                           message_id=message_id,
-                           message_type=message_type,
-                           category_id=category_id,
-                           race_id=race_id)
     try:
+        msg = AsyncRaceMessage(server_id=server_id,
+                               channel_id=channel_id,
+                               message_id=message_id,
+                               message_type=message_type,
+                               category_id=category_id,
+                               race_id=race_id)
         msg.save()
-    except:
-        logging.info(f"**ERROR** Failed to save cleanup message for server {server_id}, channel {channel_id}, message {message_id}")
+        logging.info(f"Successfully saved message for server {server_id}, channel {channel_id}, message {message_id}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to save message for server {server_id}, channel {channel_id}, message {message_id}: {e}")
+        return False
 
 ########################################################################################################################
 # Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes message and optionally deletes or
@@ -1008,7 +1011,7 @@ async def handle_missing_channel_restoration(interaction, race_id, category_id, 
         return None
 
 ########################################################################################################################
-async def send_startup_restoration_summary(interaction, restored_count, skipped_races, skipped_categories):
+async def send_startup_restoration_summary(interaction, restored_count, skipped_races, skipped_categories, errors=None):
     """Send summary of pinned race restoration results"""
     summary_parts = []
     
@@ -1023,6 +1026,12 @@ async def send_startup_restoration_summary(interaction, restored_count, skipped_
         category_list = ", ".join(map(str, skipped_categories))
         summary_parts.append(f"⚠️ Skipped {len(skipped_categories)} category/category pin(s) (no longer exist): {category_list}")
     
+    if errors:
+        error_list = ", ".join(errors[:5])  # Limit to first 5 errors to avoid message length issues
+        if len(errors) > 5:
+            error_list += f" (and {len(errors) - 5} more)"
+        summary_parts.append(f"❌ Errors occurred: {error_list}")
+    
     if summary_parts:
         summary_text = "**Pinned Race Restoration Summary:**\n" + "\n".join(summary_parts)
         await send_message(interaction, summary_text, ephemeral=True)
@@ -1030,60 +1039,98 @@ async def send_startup_restoration_summary(interaction, restored_count, skipped_
 ########################################################################################################################
 async def restore_pinned_race_states(server_id, interaction):
     """Restore pinned race states from database with enhanced error handling"""
-    from ui.menus import pin_race_info, pin_race_for_category
-    
-    restored_count = 0
-    skipped_races = []
-    skipped_categories = []
-    
-    pinned_states = get_pinned_race_states(server_id)
-    
-    for state in pinned_states:
+    try:
+        from ui.menus import pin_race_info, pin_race_for_category
+        
+        restored_count = 0
+        skipped_races = []
+        skipped_categories = []
+        errors = []
+        
+        # Get pinned states with error handling
         try:
-            # Check if race/category still exists
-            if state.race_id and get_race(state.race_id) is None:
-                skipped_races.append(state.race_id)
-                continue
-                
-            if state.category_id and get_category(state.category_id) is None:
-                skipped_categories.append(state.category_id)
-                continue
-            
-            # Check if channel still exists
-            channel = interaction.guild.get_channel(state.channel_id)
-            if channel is None:
-                # Channel missing, prompt for new one
-                channel = await handle_missing_channel_restoration(
-                    interaction, state.race_id, state.category_id, state.pin_type
-                )
-                if channel is None:
-                    # User dismissed, add to skipped list
-                    if state.pin_type == PinType.Individual:
-                        skipped_races.append(state.race_id)
-                    else:
-                        skipped_categories.append(state.category_id)
-                    continue
-            
-            # Restore the pinned message
-            if state.pin_type == PinType.Individual:
-                race = get_race(state.race_id)
-                if race:
-                    await pin_race_info(channel.id, race, interaction)
-            else:
-                category = get_category(state.category_id)
-                if category:
-                    # Find most recent race in category
-                    recent_race = get_most_recent_race(category.id)
-                    if recent_race:
-                        await pin_race_for_category(interaction, recent_race)
-            
-            restored_count += 1
-            
+            pinned_states = get_pinned_race_states(server_id)
         except Exception as e:
-            logging.error(f"Failed to restore pinned state {state.id}: {e}")
-            continue
-    
-    # Send summary message
-    await send_startup_restoration_summary(
-        interaction, restored_count, skipped_races, skipped_categories
-    )
+            logging.error(f"Failed to retrieve pinned race states for server {server_id}: {e}")
+            await send_message(interaction, "**ERROR** Failed to retrieve pinned race states from database.")
+            return False
+        
+        if not pinned_states:
+            logging.info(f"No pinned race states found for server {server_id}")
+            return True
+        
+        for state in pinned_states:
+            try:
+                # Check if race/category still exists
+                if state.race_id and get_race(state.race_id) is None:
+                    skipped_races.append(state.race_id)
+                    continue
+                    
+                if state.category_id and get_category(state.category_id) is None:
+                    skipped_categories.append(state.category_id)
+                    continue
+                
+                # Check if channel still exists
+                channel = interaction.guild.get_channel(state.channel_id)
+                if channel is None:
+                    # Channel missing, prompt for new one
+                    try:
+                        channel = await handle_missing_channel_restoration(
+                            interaction, state.race_id, state.category_id, state.pin_type
+                        )
+                        if channel is None:
+                            # User dismissed, add to skipped list
+                            if state.pin_type == PinType.Individual:
+                                skipped_races.append(state.race_id)
+                            else:
+                                skipped_categories.append(state.category_id)
+                            continue
+                    except Exception as e:
+                        logging.error(f"Failed to handle missing channel for state {state.id}: {e}")
+                        errors.append(f"Channel restoration failed for state {state.id}")
+                        continue
+                
+                # Restore the pinned message
+                if state.pin_type == PinType.Individual:
+                    race = get_race(state.race_id)
+                    if race:
+                        try:
+                            await pin_race_info(channel.id, race, interaction)
+                        except Exception as e:
+                            logging.error(f"Failed to pin race info for race {state.race_id}: {e}")
+                            errors.append(f"Failed to pin race {state.race_id}")
+                            continue
+                else:
+                    category = get_category(state.category_id)
+                    if category:
+                        try:
+                            # Find most recent race in category
+                            recent_race = get_most_recent_race(category.id)
+                            if recent_race:
+                                await pin_race_for_category(interaction, recent_race)
+                        except Exception as e:
+                            logging.error(f"Failed to pin category for category {state.category_id}: {e}")
+                            errors.append(f"Failed to pin category {state.category_id}")
+                            continue
+                
+                restored_count += 1
+                
+            except Exception as e:
+                logging.error(f"Failed to restore pinned state {state.id}: {e}")
+                errors.append(f"Failed to restore state {state.id}")
+                continue
+        
+        # Send summary message
+        try:
+            await send_startup_restoration_summary(
+                interaction, restored_count, skipped_races, skipped_categories, errors
+            )
+        except Exception as e:
+            logging.error(f"Failed to send restoration summary: {e}")
+        
+        return len(errors) == 0
+        
+    except Exception as e:
+        logging.error(f"Critical error in restore_pinned_race_states: {e}")
+        await send_message(interaction, "**ERROR** Critical failure during pinned race state restoration.")
+        return False

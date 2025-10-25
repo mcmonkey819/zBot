@@ -2198,23 +2198,37 @@ async def show_racer_info_help(interaction, payload):
 # Other Menu Functions
 ########################################################################################################################
 async def send_moderator_menu(interaction, channel, footer=None):
-    title = f"Async Race Moderation"
-    description = f"Use the buttons below to manage aync races and categories. Descriptions of the functions are below."
-    if footer is None:
-        footer = "For questions or issues that are not covered by the help topics, please contact a bot admin."
-    menu = zButtonMenu(None, ModeratorMenuItems, use_channel=True, title=title, description=description, footer=footer)
-    await menu.start(interaction=interaction, channel=channel, ephemeral=False)
-    return menu.message
+    try:
+        title = f"Async Race Moderation"
+        description = f"Use the buttons below to manage aync races and categories. Descriptions of the functions are below."
+        if footer is None:
+            footer = "For questions or issues that are not covered by the help topics, please contact a bot admin."
+        
+        menu = zButtonMenu(None, ModeratorMenuItems, use_channel=True, title=title, description=description, footer=footer)
+        await menu.start(interaction=interaction, channel=channel, ephemeral=False)
+        return menu.message
+        
+    except Exception as e:
+        logging.error(f"Error in send_moderator_menu: {e}")
+        await send_message(interaction, "**ERROR** Failed to create moderator menu. Please check channel permissions.")
+        return None
 
 ########################################################################################################################
 async def send_racer_menu(interaction, channel, footer=None):
-    title = f"Async Race Dashboard"
-    description = f"Use the buttons below to discover races, view your stats and more."
-    if footer is None:
-        footer = "For questions or issues please contact a race moderator or bot admin."
-    menu = zButtonMenu(None, RacerInfoButtonMenuItems, use_channel=True, title=title, description=description, footer=footer)
-    await menu.start(interaction=interaction, channel=channel, ephemeral=False)
-    return menu.message
+    try:
+        title = f"Async Race Dashboard"
+        description = f"Use the buttons below to discover races, view your stats and more."
+        if footer is None:
+            footer = "For questions or issues please contact a race moderator or bot admin."
+        
+        menu = zButtonMenu(None, RacerInfoButtonMenuItems, use_channel=True, title=title, description=description, footer=footer)
+        await menu.start(interaction=interaction, channel=channel, ephemeral=False)
+        return menu.message
+        
+    except Exception as e:
+        logging.error(f"Error in send_racer_menu: {e}")
+        await send_message(interaction, "**ERROR** Failed to create racer menu. Please check channel permissions.")
+        return None
 
 ########################################################################################################################
 async def send_category_menu(interaction, category_id):
@@ -2253,16 +2267,27 @@ async def prompt_for_value(interaction, title, label, default_value):
 
 ########################################################################################################################
 async def prompt_for_role(interaction, placeholder="Choose Role..."):
-    server = get_server_from_interaction(interaction)
-    role_list = get_role_select_list(server)
-    
-    view = await safe_zSingleSelectView(interaction, role_list, None, placeholder, empty_message="No roles available.")
-    if view is None:
-        return None  # User was shown empty message, operation cancelled
-    
-    selected_role = await view.prompt(interaction)
-    
-    return None if selected_role == 0 else selected_role
+    try:
+        server = get_server_from_interaction(interaction)
+        if server is None:
+            logging.error(f"Failed to get server from interaction for role selection")
+            await send_message(interaction, "**ERROR** Could not access server information")
+            return None
+            
+        role_list = get_role_select_list(server)
+        
+        view = await safe_zSingleSelectView(interaction, role_list, None, placeholder, empty_message="No roles available.")
+        if view is None:
+            return None  # User was shown empty message, operation cancelled
+        
+        selected_role = await view.prompt(interaction)
+        
+        return None if selected_role == 0 else selected_role
+        
+    except Exception as e:
+        logging.error(f"Error in prompt_for_role: {e}")
+        await send_message(interaction, "**ERROR** Failed to select role. Please try again.")
+        return None
 
 ########################################################################################################################
 async def prompt_for_channel(interaction, placeholder="Choose Channel..."):

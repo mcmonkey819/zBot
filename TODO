@@ -1,7 +1,285 @@
+Exception Handling Cleanup
+-------------------------------------------------------
+This section focuses on adding comprehensive exception handling to network-facing interfaces (Discord API calls) and database operations throughout the async_races cog and supporting code. The goal is to ensure graceful error handling, maintain data integrity, and provide meaningful error messages to users while preventing the bot from crashing due to unhandled exceptions. Each workflow should be audited for potential failure points and have appropriate try/except blocks with proper error logging and user feedback.
+
+**Key Areas of Focus:**
+- Discord API calls (message sending, role management, channel operations)
+- Database operations (queries, inserts, updates, deletes)
+- File operations (CSV exports, report generation)
+- Network timeouts and connection issues
+- Data validation and parsing errors
+- User permission and authorization failures
+
+**Exception Handling Pattern:**
+Follow the pattern established in `update_pinned_state_channel` with try/except blocks around database operations, proper error logging, and graceful degradation where possible.
+
+Error handling should be logically wrapped around the functions/interfaces that can generate exceptions and handled in-place to avoid carrying complex error state up through the call stack. The scope should be determined by what makes the logic simpler and easier to read - wrapping additional lines is acceptable if it improves clarity, but avoid wrapping large blocks that would complicate error recovery and state tracking. This approach also prevents unnecessary nested exception handling blocks.
+
+Error handling strategy should be evaluated case-by-case: some errors should be logged and return failure indicators to cancel operations, while others can be handled gracefully with defaults or continued execution. Refactor existing functions as necessary to meet these goals, which will improve overall robustness and simplify testing.
+
+**Testing Strategy:**
+Each workflow should have integration tests that simulate various failure scenarios including network failures, database errors, permission issues, and invalid data inputs.
+
+**Main Workflow Checklist:**
+
+[ ] **Server Setup & Administration Workflows**
+    [ ] - Fix `/async_admin startup` command exception handling issues
+        [X] - Refactor `prompt_for_role()` to handle role selection failures internally and return success/failure indicator
+        [X] - Refactor `send_moderator_menu()` and `send_racer_menu()` to handle menu creation failures internally
+        [X] - Refactor `save_message()` to handle database save failures internally (fix existing bug in error logging)
+        [X] - Refactor `restore_pinned_race_states()` to handle restoration failures internally
+        [X] - Add validation for channel access permissions before using channels
+        [X] - Add proper error logging and user feedback for all failure scenarios
+        [X] - Evaluate if startup should fail fast on first error or continue with partial setup
+    [ ] - Fix `/async_admin shutdown` command exception handling issues
+        [ ] - Refactor `save_pinned_race_states()` to handle state saving failures internally
+        [ ] - Refactor `get_server_messages()` to handle database query failures internally
+        [ ] - Refactor `delete_message()` to handle individual message deletion failures internally
+        [ ] - Add validation that server exists before attempting operations
+        [ ] - Add proper error logging and user feedback for all failure scenarios
+        [ ] - Evaluate if shutdown should continue with partial cleanup or fail fast
+    [ ] - Fix `/async_admin custom_report` command exception handling issues
+        [ ] - Add try/except around file operations with proper cleanup (close file handle) in all code paths
+        [ ] - Add try/except around `interaction.guild.get_role()` call with validation for role existence
+        [ ] - Add try/except around database queries with graceful handling of missing data
+        [ ] - Add try/except around `interaction.guild.get_member()` calls with fallback for missing members
+        [ ] - Add proper error logging and user feedback for all failure scenarios
+        [ ] - Add timeout handling for large report generation
+        [ ] - Consider refactoring into smaller functions for better error handling granularity
+    [ ] - Fix utility function exception handling issues
+        [ ] - Fix `save_message()` function (ui/ui_util.py:71-82) - incorrect error logging (logs error on success)
+        [ ] - Refactor `delete_message()` function to handle channel access failures internally
+        [ ] - Refactor `get_server_messages()` function to handle database query failures internally
+        [ ] - Refactor `prompt_for_role()` function to handle role selection failures internally
+        [ ] - Refactor `send_moderator_menu()` and `send_racer_menu()` functions to handle menu creation failures internally
+    [ ] - Write integration tests for admin workflows
+        [ ] - Test server setup with invalid channels/roles
+        [ ] - Test shutdown with missing messages
+        [ ] - Test report generation with database errors
+        [ ] - Test role selection cancellation scenarios
+        [ ] - Test menu creation with insufficient permissions
+        [ ] - Test file I/O failures during report generation
+
+[ ] **Race Management Workflows**
+    [ ] - Audit race creation workflow for exception handling
+        [ ] - Database operations (race creation, validation)
+        [ ] - Category assignment and validation
+        [ ] - Extra info field assignment
+        [ ] - Role and channel validation
+    [ ] - Audit race editing workflow for exception handling
+        [ ] - Core race info updates
+        [ ] - Submit role assignment
+        [ ] - Leaderboard channel assignment
+        [ ] - Extra info field management
+    [ ] - Audit race deletion workflow for exception handling
+        [ ] - Database cleanup operations
+        [ ] - Message cleanup (pinned races, leaderboards)
+        [ ] - Role cleanup operations
+    [ ] - Audit race state changes (activate/complete) for exception handling
+        [ ] - Race activation process
+        [ ] - Role management during state changes
+        [ ] - Race scoring calculations (MarioKart, Trueskill, ParTime, Fixed)
+        [ ] - Category points calculation and updates
+        [ ] - Leaderboard updates
+        [ ] - Pinned race management
+    [ ] - Write integration tests for race management workflows
+        [ ] - Test race creation with invalid data
+        [ ] - Test race editing with permission issues
+        [ ] - Test race deletion with missing references
+        [ ] - Test state changes with network failures
+        [ ] - Test race completion with scoring calculation errors
+        [ ] - Test scoring with invalid submission data
+        [ ] - Test scoring with database errors during calculation
+
+[ ] **Category Management Workflows**
+    [ ] - Audit category creation workflow for exception handling
+        [ ] - Database operations (category creation, validation)
+        [ ] - Scoring type validation and setup
+        [ ] - Role and channel assignment
+        [ ] - Extra info field assignment
+    [ ] - Audit category editing workflow for exception handling
+        [ ] - Description updates
+        [ ] - Scoring type changes
+        [ ] - Submit role management
+        [ ] - Leaderboard channel management
+        [ ] - Points configuration
+    [ ] - Audit category deletion workflow for exception handling
+        [ ] - Database cleanup operations
+        [ ] - Race cleanup and reassignment
+        [ ] - Message cleanup operations
+    [ ] - Write integration tests for category management workflows
+        [ ] - Test category creation with invalid scoring types
+        [ ] - Test category editing with database errors
+        [ ] - Test category deletion with active races
+
+[ ] **Race Submission Workflows**
+    [ ] - Audit time submission workflow for exception handling
+        [ ] - Database operations (submission creation/updates)
+        [ ] - Time validation and parsing
+        [ ] - Extra info field validation
+        [ ] - Role assignment operations
+        [ ] - Leaderboard updates
+    [ ] - Audit submission editing workflow for exception handling
+        [ ] - Database operations (submission updates)
+        [ ] - Permission validation
+        [ ] - Data validation and parsing
+        [ ] - Leaderboard updates
+    [ ] - Audit submission validation workflow for exception handling
+        [ ] - Database operations (validation status updates)
+        [ ] - Notification operations
+        [ ] - Leaderboard updates
+    [ ] - Write integration tests for submission workflows
+        [ ] - Test submission with invalid time formats
+        [ ] - Test submission editing with permission issues
+        [ ] - Test validation with database errors
+        [ ] - Test submission impact on race scoring calculations
+        [ ] - Test submission editing impact on recalculated scores
+
+[ ] **Leaderboard Management Workflows**
+    [ ] - Audit race leaderboard updates for exception handling
+        [ ] - Database queries for submission data
+        [ ] - Discord API calls (message updates)
+        [ ] - Data formatting and validation
+        [ ] - Channel access validation
+    [ ] - Audit category leaderboard updates for exception handling
+        [ ] - Database queries for category data
+        [ ] - Discord API calls (message updates)
+        [ ] - Points calculation and validation
+        [ ] - Channel access validation
+    [ ] - Audit leaderboard channel management for exception handling
+        [ ] - Channel creation and validation
+        [ ] - Message pinning operations
+        [ ] - Permission validation
+    [ ] - Write integration tests for leaderboard workflows
+        [ ] - Test leaderboard updates with missing channels
+        [ ] - Test leaderboard updates with permission issues
+        [ ] - Test leaderboard updates with database errors
+
+[ ] **Racer Assignment Workflows**
+    [ ] - Audit racer assignment workflow for exception handling
+        [ ] - Database operations (roster management)
+        [ ] - User validation and lookup
+        [ ] - Permission validation
+        [ ] - Role assignment operations
+    [ ] - Audit racer removal workflow for exception handling
+        [ ] - Database cleanup operations
+        [ ] - Role removal operations
+        [ ] - Submission cleanup
+    [ ] - Write integration tests for racer assignment workflows
+        [ ] - Test assignment with invalid users
+        [ ] - Test assignment with permission issues
+        [ ] - Test removal with database errors
+
+[ ] **Race Scoring Workflows**
+    [ ] - Audit race completion scoring for exception handling
+        [ ] - Database operations (scoring calculations)
+        [ ] - Points calculation algorithms (MarioKart, Trueskill, ParTime, Fixed)
+        [ ] - Category points aggregation and updates
+        [ ] - Data validation during scoring
+        [ ] - Error handling for edge cases (no submissions, invalid times)
+    [ ] - Audit manual race rescoring for exception handling
+        [ ] - Database operations (score recalculation)
+        [ ] - Category points recalculation
+        [ ] - Leaderboard updates after rescoring
+        [ ] - Validation of scoring parameters
+    [ ] - Audit scoring type changes for exception handling
+        [ ] - Database operations (scoring type updates)
+        [ ] - Recalculation of existing race scores
+        [ ] - Category points recalculation
+        [ ] - Data migration and validation
+    [ ] - Write integration tests for scoring workflows
+        [ ] - Test scoring with various submission counts (0, 1, 2, 3+)
+        [ ] - Test scoring with invalid time formats
+        [ ] - Test scoring with database errors during calculation
+        [ ] - Test scoring type changes with existing data
+        [ ] - Test manual rescoring with permission issues
+        [ ] - Test scoring edge cases (ties, DNFs, forfeits)
+
+[ ] **Extra Info Management Workflows**
+    [ ] - Audit extra info field creation for exception handling
+        [ ] - Database operations (field creation, validation)
+        [ ] - Data type validation
+        [ ] - Assignment operations
+    [ ] - Audit extra info field assignment for exception handling
+        [ ] - Database operations (assignment management)
+        [ ] - Validation operations
+        [ ] - Cleanup operations
+    [ ] - Write integration tests for extra info workflows
+        [ ] - Test field creation with invalid data types
+        [ ] - Test assignment with database errors
+        [ ] - Test cleanup with missing references
+
+[ ] **Export and Reporting Workflows**
+    [ ] - Audit race export workflow for exception handling
+        [ ] - Database queries for race data
+        [ ] - File I/O operations (CSV generation)
+        [ ] - Data formatting and validation
+        [ ] - Permission validation
+    [ ] - Audit leaderboard export workflow for exception handling
+        [ ] - Database queries for leaderboard data
+        [ ] - File I/O operations (CSV generation)
+        [ ] - Data formatting and validation
+    [ ] - Write integration tests for export workflows
+        [ ] - Test export with missing race data
+        [ ] - Test export with file system errors
+        [ ] - Test export with permission issues
+
+[ ] **Pinned Race State Management Workflows**
+    [ ] - Audit pinned race state saving for exception handling
+        [ ] - Database operations (state persistence)
+        [ ] - Message validation and cleanup
+        [ ] - Channel access validation
+    [ ] - Audit pinned race state restoration for exception handling
+        [ ] - Database queries for saved states
+        [ ] - Discord API calls (message recreation)
+        [ ] - Channel access validation
+        [ ] - Menu recreation
+    [ ] - Write integration tests for pinned state workflows
+        [ ] - Test state saving with database errors
+        [ ] - Test state restoration with missing channels
+        [ ] - Test state restoration with permission issues
+
+[ ] **Utility and Helper Functions**
+    [ ] - Audit database utility functions for exception handling
+        [ ] - All database query operations
+        [ ] - All database insert/update/delete operations
+        [ ] - Data validation and parsing
+        [ ] - Transaction management
+    [ ] - Audit UI utility functions for exception handling
+        [ ] - Discord API calls (message sending, editing)
+        [ ] - User and role validation
+        [ ] - Channel access validation
+        [ ] - Permission checking
+    [ ] - Write integration tests for utility functions
+        [ ] - Test database utilities with connection errors
+        [ ] - Test UI utilities with API failures
+        [ ] - Test validation functions with invalid data
+
+[ ] **Cross-Cutting Concerns**
+    [ ] - Implement centralized error logging and reporting
+        [ ] - Standardize error message formats
+        [ ] - Add error tracking and metrics
+        [ ] - Implement error recovery strategies
+    [ ] - Add comprehensive input validation
+        [ ] - Time format validation
+        [ ] - User input sanitization
+        [ ] - Permission validation
+        [ ] - Data type validation
+    [ ] - Implement graceful degradation strategies
+        [ ] - Fallback mechanisms for critical operations
+        [ ] - User-friendly error messages
+        [ ] - Partial operation completion handling
+    [ ] - Write comprehensive integration test suite
+        [ ] - Test all workflows with various failure scenarios
+        [ ] - Test error recovery and cleanup
+        [ ] - Test user experience during failures
+        [ ] - Test data integrity during failures
+
+
 General Stuff
 -------------------------------------------------------
 [X] - Change "Hash" label to "Hash / Flagstring"
-[ ] - Save pin channel ID for category, auto-pin races on startup and on toggling category pin option on/off (or add manual pin option to category)
+[X] - Save pin channel ID for category, auto-pin races on startup and on toggling category pin option on/off (or add manual pin option to category)
 [ ] - Debug - Announcement message failing
 [ ] - Allow validate for non-assigned races
     [ ] - Have to move validate field to submission table
