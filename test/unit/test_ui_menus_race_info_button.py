@@ -12,7 +12,7 @@ from nextcord.partial_emoji import PartialEmoji
 
 # Import the class under test
 from ui.menus import zRaceInfoButtonView
-from db.zBot_db_orm import RaceState
+from db.db_util import RaceState
 from test.test_utils.discord_mocks import create_mock_interaction, create_mock_user, create_mock_guild
 from test.test_utils.db_fixtures import create_mock_race, create_mock_category, create_mock_submission
 

@@ -138,6 +138,9 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         racer_message = await send_racer_menu(interaction, racer_channel)
         save_message(interaction.guild_id, racer_channel.id, racer_message.id, message_type=RaceMessageType.Menu)
         
+        # Restore pinned race states after creating admin menus
+        await self.restore_pinned_race_states(interaction)
+        
         await send_message(interaction, "Done!", ephemeral=True)
         
 
@@ -158,6 +161,10 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 await send_message(interaction, "Only Race Admins can use this command", ephemeral=True)
                 return
 
+        # First, save pinned race states before deleting messages
+        await self.save_pinned_race_states(interaction)
+        
+        # Then proceed with normal message cleanup
         message_list = get_server_messages(interaction.guild_id)
         for m in message_list:
             await delete_message(get_server_from_interaction(interaction), m.id)
@@ -313,6 +320,52 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                     f.write(f"{race_id}, , {username}, {s.finish_time}, {par_time_str}, {points}, {cr}, {vod}, {s.comment}\n")
         f.close()
         await send_message(interaction, "Done!")
+
+    ####################################################################################################################
+    async def save_pinned_race_states(self, interaction):
+        """Save pinned race states before shutdown"""
+        from db.db_util import save_pinned_race_state, clear_pinned_race_states, PinType
+        
+        # Clear any existing pinned states for this server
+        clear_pinned_race_states(interaction.guild_id)
+        
+        # Get all messages for this server
+        message_list = get_server_messages(interaction.guild_id)
+        
+        saved_count = 0
+        for message in message_list:
+            # Only process RaceInfo messages (pinned race info)
+            if message.message_type == RaceMessageType.RaceInfo:
+                if message.race_id is not None:
+                    # Individual race pin
+                    save_pinned_race_state(
+                        server_id=interaction.guild_id,
+                        race_id=message.race_id,
+                        category_id=None,
+                        channel_id=message.channel_id,
+                        pin_type=PinType.Individual
+                    )
+                    saved_count += 1
+                elif message.category_id is not None:
+                    # Category pin
+                    save_pinned_race_state(
+                        server_id=interaction.guild_id,
+                        race_id=None,
+                        category_id=message.category_id,
+                        channel_id=message.channel_id,
+                        pin_type=PinType.Category
+                    )
+                    saved_count += 1
+        
+        logging.info(f"Saved {saved_count} pinned race states for server {interaction.guild_id}")
+
+    ####################################################################################################################
+    async def restore_pinned_race_states(self, interaction):
+        """Restore pinned race states after startup"""
+        from ui.ui_util import restore_pinned_race_states
+        
+        # Call the restoration function from ui_util
+        await restore_pinned_race_states(interaction.guild_id, interaction)
 
 
 def setup(bot):

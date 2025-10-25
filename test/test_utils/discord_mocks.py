@@ -2,7 +2,7 @@
 """
 Mock factories for Discord objects used in testing.
 """
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock, MagicMock, AsyncMock
 import nextcord
 
 
@@ -176,6 +176,7 @@ def create_mock_interaction(user=None, guild=None, channel=None, guild_id=None, 
     
     # Add mock response object
     interaction.response = MagicMock()
+    interaction.response.defer = AsyncMock()
     interaction.send = MagicMock()
     interaction.original_message = MagicMock()
     

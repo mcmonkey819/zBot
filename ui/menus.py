@@ -11,7 +11,8 @@ import time
 import threading
 from nextcord.emoji import Emoji
 from nextcord.enums import ButtonStyle
-from nextcord.ext import commands, menus
+from nextcord.ext import commands
+from nextcord.ext import menus
 from nextcord.interactions import Interaction
 from nextcord.partial_emoji import PartialEmoji
 import re

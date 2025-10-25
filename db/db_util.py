@@ -81,6 +81,10 @@ class RaceMessageType:
     Menu         = 2
     Announcement = 3
 
+class PinType:
+    Individual = 0
+    Category = 1
+
 class VcChannelType:
     Ignore        = 0  # Ignore this channel for dynamic VC creation
     Permanent     = 1  # Permanent VC that should not be deleted
@@ -996,3 +1000,62 @@ def get_messages_by_race_id(race_id, message_type=RaceMessageType.Leaderboard):
 ########################################################################################################################
 def get_messages_by_category_id(category_id):
     return AsyncRaceMessage.select().where(AsyncRaceMessage.category_id == category_id)
+
+########################################################################################################################
+# PINNED RACE STATE HELPER FUNCTIONS
+########################################################################################################################
+
+def save_pinned_race_state(server_id, race_id, category_id, channel_id, pin_type):
+    """Save a pinned race state to the database"""
+    try:
+        pinned_state = AsyncRacePinnedState(
+            server_id=server_id,
+            race_id=race_id,
+            category_id=category_id,
+            channel_id=channel_id,
+            pin_type=pin_type
+        )
+        pinned_state.save()
+        logging.info(f"Saved pinned race state: server={server_id}, race={race_id}, category={category_id}, channel={channel_id}, type={pin_type}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to save pinned race state: {e}")
+        return False
+
+########################################################################################################################
+def get_pinned_race_states(server_id):
+    """Get all pinned race states for a server"""
+    try:
+        return AsyncRacePinnedState.select().where(AsyncRacePinnedState.server_id == server_id)
+    except Exception as e:
+        logging.error(f"Failed to get pinned race states for server {server_id}: {e}")
+        return []
+
+########################################################################################################################
+def clear_pinned_race_states(server_id):
+    """Clear all pinned race states for a server"""
+    try:
+        query = AsyncRacePinnedState.delete().where(AsyncRacePinnedState.server_id == server_id)
+        deleted_count = query.execute()
+        logging.info(f"Cleared {deleted_count} pinned race states for server {server_id}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to clear pinned race states for server {server_id}: {e}")
+        return False
+
+########################################################################################################################
+def update_pinned_state_channel(server_id, race_id, category_id, new_channel_id):
+    """Update the channel for a pinned state"""
+    try:
+        query = AsyncRacePinnedState.update(channel_id=new_channel_id).where(
+            (AsyncRacePinnedState.server_id == server_id) &
+            (AsyncRacePinnedState.race_id == race_id) &
+            (AsyncRacePinnedState.category_id == category_id)
+        )
+        updated_count = query.execute()
+        logging.info(f"Updated channel for pinned state: server={server_id}, race={race_id}, category={category_id}, new_channel={new_channel_id}")
+        return updated_count > 0
+    except Exception as e:
+        logging.error(f"Failed to update pinned state channel: {e}")
+        return False
+

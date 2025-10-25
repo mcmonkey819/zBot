@@ -2,6 +2,7 @@
 from peewee import *
 import config.bot_config as bot_config
 import logging
+from datetime import datetime
 
 db_path = bot_config.PRODUCTION_DB
 if bot_config.TEST_MODE:
@@ -183,6 +184,19 @@ class ServerUtilsVcList(Model):
         table_name = 'server_utils_vc_list'
         database = db
 
+class AsyncRacePinnedState(Model):
+    id                      = IntegerField(primary_key=True)
+    server_id               = IntegerField()
+    race_id                 = ForeignKeyField(AsyncRace, backref='pinned_states', null=True)
+    category_id             = ForeignKeyField(AsyncRaceCategory, backref='pinned_states', null=True)
+    channel_id              = IntegerField()
+    pin_type                = IntegerField()  # 0 = individual, 1 = category
+    created_datetime        = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'async_race_pinned_states'
+        database = db
+
 ####################################################################################################################
 # Deletes all existing tables, then recreates them.
 def drop_add_db_tables():
@@ -200,7 +214,8 @@ def drop_add_db_tables():
         AsyncRaceTrueSkillParams,
         AsyncRaceTrueSkillRacerParams,
         AsyncRaceCategoryDrawThreshold,
-        ServerUtilsVcList])
+        ServerUtilsVcList,
+        AsyncRacePinnedState])
     add_db_tables()
 
 ####################################################################################################################
@@ -220,7 +235,8 @@ def add_db_tables():
         AsyncRaceTrueSkillParams,
         AsyncRaceTrueSkillRacerParams,
         AsyncRaceCategoryDrawThreshold,
-        ServerUtilsVcList])
+        ServerUtilsVcList,
+        AsyncRacePinnedState])
 
 ####################################################################################################################
 # Recreates the indicated table
@@ -270,6 +286,9 @@ def recreate_table(table_name):
         case "ServerUtilsVcList":
             db.drop_tables([ServerUtilsVcList])
             db.create_tables([ServerUtilsVcList])
+        case "AsyncRacePinnedState":
+            db.drop_tables([AsyncRacePinnedState])
+            db.create_tables([AsyncRacePinnedState])
         case _:
             logging.info(f"Unrecognized table name {table_name}")
             result = False

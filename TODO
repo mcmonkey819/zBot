@@ -1,6 +1,6 @@
 General Stuff
 -------------------------------------------------------
-[ ] - Change "Hash" label to "Hash / Flagstring"
+[X] - Change "Hash" label to "Hash / Flagstring"
 [ ] - Save pin channel ID for category, auto-pin races on startup and on toggling category pin option on/off (or add manual pin option to category)
 [ ] - Debug - Announcement message failing
 [ ] - Allow validate for non-assigned races
