@@ -227,20 +227,53 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         # Check if this server is in the DB and that the user is an admin
         server = self.get_server(interaction)
-        if server is not None:
-            if not user_is_admin(interaction.guild, interaction.user):
-                await send_message(interaction, "Only Race Admins can use this command", ephemeral=True)
-                return
+        if server is None:
+            logging.error(f"Shutdown attempted on non-configured server {interaction.guild_id}")
+            await send_message(interaction, "**ERROR** This server is not configured for use with this bot.", ephemeral=True)
+            return
+            
+        if not user_is_admin(interaction.guild, interaction.user):
+            logging.warning(f"Non-admin user {interaction.user.id} attempted shutdown on server {interaction.guild_id}")
+            await send_message(interaction, "Only Race Admins can use this command", ephemeral=True)
+            return
 
         # First, save pinned race states before deleting messages
-        await self.save_pinned_race_states(interaction)
+        saved_count, failed_count = await self.save_pinned_race_states(interaction)
+        if failed_count > 0:
+            logging.warning(
+                f"Shutdown: Saved {saved_count} pinned race states with "
+                f"{failed_count} failures for server {interaction.guild_id}")
         
         # Then proceed with normal message cleanup
         message_list = get_server_messages(interaction.guild_id)
-        for m in message_list:
-            await delete_message(get_server_from_interaction(interaction), m.id)
+        deleted_count = 0
+        failed_deletes = 0
         
-        await send_message(interaction, "Done!", ephemeral=True)
+        for m in message_list:
+            result = await delete_message(get_server_from_interaction(interaction), m.id)
+            if result:
+                deleted_count += 1
+            else:
+                failed_deletes += 1
+        
+        if failed_deletes > 0:
+            logging.warning(
+                f"Shutdown: Deleted {deleted_count} messages with "
+                f"{failed_deletes} failures for server {interaction.guild_id}")
+            await send_message(
+                interaction,
+                f"**Partial cleanup completed.**\n"
+                f"Saved: {saved_count} pinned states\n"
+                f"Deleted: {deleted_count} messages\n"
+                f"Failures: {failed_deletes}",
+                ephemeral=True)
+        else:
+            await send_message(
+                interaction,
+                f"✅ **Done!**\n"
+                f"Saved: {saved_count} pinned states\n"
+                f"Deleted: {deleted_count} messages",
+                ephemeral=True)
     
     ####################################################################################################################
     @async_admin.subcommand(description="For development purposes only, creates/recreates the specified database table")
@@ -291,144 +324,232 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         self,
         interaction,
         type: int):
+        
+        self.log_command(interaction.user, "CUSTOM_REPORT")
+        await interaction.response.defer(ephemeral=True)
 
         server = get_server_from_interaction(interaction)
         report_name = "custom_report.csv"
-        f = open(report_name, "w", encoding="utf-8")
 
-        if type == 1:
-            #role_id = await prompt_for_role(interaction)
-            role_id = 1230196277279719445
-            role = interaction.guild.get_role(role_id)
+        try:
+            with open(report_name, "w", encoding="utf-8") as f:
+                if type == 1:
+                    role_id = 1230196277279719445
+                    
+                    # Add exception handling for get_role call with validation
+                    try:
+                        role = interaction.guild.get_role(role_id)
+                        if role is None:
+                            logging.error(f"Role {role_id} not found in guild {interaction.guild_id}")
+                            await send_message(
+                                interaction, 
+                                f"**ERROR:** Role not found. Please verify the role ID and try again.",
+                                ephemeral=True)
+                            return
+                    except Exception as e:
+                        logging.error(f"Failed to get role {role_id} from guild {interaction.guild_id}: {e}")
+                        await send_message(
+                            interaction, 
+                            f"**ERROR:** Failed to retrieve role. Please verify the role exists and try again.",
+                            ephemeral=True)
+                        return
 
-            column_headings = '"username", "user_id", "Race ID", "Finish Time", "Comment", "CR", "VoD"\n'
-            f.write(column_headings)
-            no_race_doods = ""
-            
-            by_race_id = False
-            if by_race_id:
-                racers = []
-                for race_id in [367, 368, 369, 370, 371]:
-                    submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id)
-                    for s in submissions:
-                        logging.info(f"Handling Submission ID {s.id}")
-                        user = interaction.guild.get_member(s.user_id)
-                        username = get_user_name_str(user.id, user) if user is not None else "Unknown"
-                        user_data_str = f"{username}, {s.user_id},"
-                        line_str = user_data_str + f'{s.race_id}, {s.finish_time}, "{s.comment}",'
+                    column_headings = '"username", "user_id", "Race ID", "Finish Time", "Comment", "CR", "VoD"\n'
+                    f.write(column_headings)
+                    no_race_doods = ""
+                    
+                    by_race_id = False
+                    if by_race_id:
+                        racers = []
+                        for race_id in [367, 368, 369, 370, 371]:
+                            try:
+                                submissions = AsyncRaceSubmission.select().where(AsyncRaceSubmission.race_id == race_id)
+                            except Exception as e:
+                                logging.error(f"Database query failed for race_id {race_id}: {e}")
+                                continue
+                            
+                            for s in submissions:
+                                logging.info(f"Handling Submission ID {s.id}")
+                                # Add exception handling for get_member calls
+                                user = None
+                                try:
+                                    user = interaction.guild.get_member(s.user_id)
+                                except Exception as e:
+                                    logging.warning(f"Failed to get member {s.user_id}: {e}")
+                                username = get_user_name_str(s.user_id, user) if user is not None else "Unknown"
+                                user_data_str = f"{username}, {s.user_id},"
+                                line_str = user_data_str + f'{s.race_id}, {s.finish_time}, "{s.comment}",'
+                                try:
+                                    db_cr = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 10)).get()
+                                    cr = int(db_cr.data)
+                                except Exception as e:
+                                    logging.warning(f"Could not retrieve CR for submission {s.id}: {e}")
+                                    cr = 0
+                                try:
+                                    db_vod = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 11)).get()
+                                    vod =  db_vod.data
+                                except Exception as e:
+                                    logging.warning(f"Could not retrieve VoD for submission {s.id}: {e}")
+                                    vod = "Forfeit"
+                                line_str += f"{cr}, {vod},"
+                                line_str += "\n"
+                                f.write(line_str)
+                                if s.id not in racers:
+                                    racers.append(s.user_id)
+                        
+                        for m in role.members:
+                            if m.id not in racers:
+                                # Add exception handling for get_member calls
+                                user = None
+                                try:
+                                    user = interaction.guild.get_member(m.id)
+                                except Exception as e:
+                                    logging.warning(f"Failed to get member {m.id}: {e}")
+                                username = get_user_name_str(m.id, user) if user is not None else "Unknown"
+                                f.write(f"{username}, {m.id},\n")
+                    else:
+                        for m in role.members:
+                            username = get_user_name_str(m.id, m)
+                            user_data_str = f"{username}, {m.id},"
+                            try:
+                                submissions = AsyncRaceSubmission.select().where((AsyncRaceSubmission.race_id == 367) | (AsyncRaceSubmission.race_id == 368) | (AsyncRaceSubmission.race_id == 369) | (AsyncRaceSubmission.race_id == 370) | (AsyncRaceSubmission.race_id == 371))
+                                submissions = list(filter(lambda s: s.user_id == m.id, submissions))
+                                logging.info(f"Processing {len(submissions)} total submissions")
+                            except Exception as e:
+                                logging.error(f"Database query failed when processing member {m.id}: {e}")
+                                continue
+                            
+                            if submissions is not None and len(submissions) > 0:
+                                for s in submissions:
+                                    logging.info(f"Handling Submission ID {s.id}")
+                                    line_str = user_data_str + f'{s.race_id}, {s.finish_time}, "{s.comment}",'
+                                    try:
+                                        db_cr = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 10)).get()
+                                        cr = int(db_cr.data)
+                                    except Exception as e:
+                                        logging.warning(f"Could not retrieve CR for submission {s.id}: {e}")
+                                        cr = 0
+                                    try:
+                                        db_vod = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 11)).get()
+                                        vod =  db_vod.data
+                                    except Exception as e:
+                                        logging.warning(f"Could not retrieve VoD for submission {s.id}: {e}")
+                                        vod = "Forfeit"
+                                    line_str += f"{cr}, {vod},"
+                                    line_str += "\n"
+                                    f.write(line_str)
+                            else:
+                                no_race_doods += user_data_str + "\n"
+                        f.write(no_race_doods)
+                
+                elif type == 2:
+                    f.write("Race ID, Place, Racer Name, Finish Time, Par Time, Points, CR, VoD, Comment  \n")
+                    for race_id in [367, 368, 369, 370, 371]:
+                        f.write(",,,,,,\n")
                         try:
-                            db_cr = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 10)).get()
-                            cr = int(db_cr.data)
-                        except:
-                            cr = 0
-                        try:
-                            db_vod = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 11)).get()
-                            vod =  db_vod.data
-                        except:
-                            vod = "Forfeit"
-                        line_str += f"{cr}, {vod},"
-                        line_str += "\n"
-                        f.write(line_str)
-                        if s.id not in racers:
-                            racers.append(s.user_id)
-                for m in role.members:
-                    if m.id not in racers:
-                        user = interaction.guild.get_member(m.id)
-                        username = get_user_name_str(m.id, user) if user is not None else "Unknown"
-                        f.write(f"{username}, {m.id},\n")
-            else:
-                for m in role.members:
-                    username = get_user_name_str(m.id, m)
-                    user_data_str = f"{username}, {m.id},"
-                    submissions = AsyncRaceSubmission.select().where((AsyncRaceSubmission.race_id == 367) | (AsyncRaceSubmission.race_id == 368) | (AsyncRaceSubmission.race_id == 369) | (AsyncRaceSubmission.race_id == 370) | (AsyncRaceSubmission.race_id == 371))
-                    submissions = list(filter(lambda s: s.user_id == m.id, submissions))
-                    logging.info(f"Processing {len(submissions)} total submissions")
-                    if submissions is not None and len(submissions) > 0:
+                            submissions = get_sorted_race_submissions(race_id)
+                            par_time_seconds = calculate_par_time(submissions)
+                            par_time_str = finish_time_seconds_to_str(int(par_time_seconds))
+                        except Exception as e:
+                            logging.error(f"Failed to get sorted submissions or calculate par time for race_id {race_id}: {e}")
+                            continue
+                        
                         for s in submissions:
-                            logging.info(f"Handling Submission ID {s.id}")
-                            line_str = user_data_str + f'{s.race_id}, {s.finish_time}, "{s.comment}",'
+                            # Add exception handling for get_member calls
+                            user = None
+                            try:
+                                user = interaction.guild.get_member(s.user_id)
+                            except Exception as e:
+                                logging.warning(f"Failed to get member {s.user_id}: {e}")
+                            username = get_user_name_str(s.user_id, user) if user is not None else "Unknown"
+                            try:
+                                points = (2.0 - (float(finish_time_to_seconds(s.finish_time) / par_time_seconds))) * 100.0
+                                if points > 105.0:
+                                    points = 105.0
+                                logging.info(f"Submission ID: {s.id} - {points}")
+                            except Exception as e:
+                                logging.warning(f"Failed to calculate points for submission {s.id}: {e}")
+                                points = 0
+                            
                             try:
                                 db_cr = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 10)).get()
                                 cr = int(db_cr.data)
-                            except:
+                            except Exception as e:
+                                logging.warning(f"Could not retrieve CR for submission {s.id}: {e}")
                                 cr = 0
                             try:
                                 db_vod = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 11)).get()
                                 vod =  db_vod.data
-                            except:
+                            except Exception as e:
+                                logging.warning(f"Could not retrieve VoD for submission {s.id}: {e}")
                                 vod = "Forfeit"
-                            line_str += f"{cr}, {vod},"
-                            line_str += "\n"
-                            f.write(line_str)
-                    else:
-                        no_race_doods += user_data_str + "\n"
-                f.write(no_race_doods)
+                            f.write(f"{race_id}, , {username}, {s.finish_time}, {par_time_str}, {points}, {cr}, {vod}, {s.comment}\n")
             
-        elif type == 2:
-            f.write("Race ID, Place, Racer Name, Finish Time, Par Time, Points, CR, VoD, Comment  \n")
-            for race_id in [367, 368, 369, 370, 371]:
-                f.write(",,,,,,\n")
-                submissions = get_sorted_race_submissions(race_id)
-                par_time_seconds = calculate_par_time(submissions)
-                par_time_str = finish_time_seconds_to_str(int(par_time_seconds))
-                for s in submissions:
-                    user = interaction.guild.get_member(s.user_id)
-                    username = get_user_name_str(s.user_id, user) if user is not None else "Unknown"
-                    points = (2.0 - (float(finish_time_to_seconds(s.finish_time) / par_time_seconds))) * 100.0
-                    if points > 105.0:
-                        points = 105.0
-                    logging.info(f"Submission ID: {s.id} - {points}")
-                    try:
-                        db_cr = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 10)).get()
-                        cr = int(db_cr.data)
-                    except:
-                        cr = 0
-                    try:
-                        db_vod = AsyncRaceExtraInfo.select().where((AsyncRaceExtraInfo.submission_id == s.id) & (AsyncRaceExtraInfo.info_type_id == 11)).get()
-                        vod =  db_vod.data
-                    except:
-                        vod = "Forfeit"
-                    f.write(f"{race_id}, , {username}, {s.finish_time}, {par_time_str}, {points}, {cr}, {vod}, {s.comment}\n")
-        f.close()
-        await send_message(interaction, "Done!")
+            await send_message(interaction, "✅ Report generated successfully!")
+            
+        except Exception as e:
+            logging.error(f"Error generating custom report: {e}")
+            await send_message(
+                interaction, 
+                f"**ERROR:** Failed to generate report: {str(e)}. Please check logs for details.",
+                ephemeral=True)
 
     ####################################################################################################################
     async def save_pinned_race_states(self, interaction):
-        """Save pinned race states before shutdown"""
-        from db.db_util import save_pinned_race_state, clear_pinned_race_states, PinType
+        """Save pinned race states before shutdown."""
+        from db.db_util import (save_pinned_race_state, clear_pinned_race_states, get_server_messages, PinType)
         
-        # Clear any existing pinned states for this server
-        clear_pinned_race_states(interaction.guild_id)
+        try:
+            # Clear any existing pinned states for this server
+            clear_pinned_race_states(interaction.guild_id)
+            logging.info(
+                f"Cleared existing pinned race states for server "
+                f"{interaction.guild_id}")
+        except Exception as e:
+            logging.error(
+                f"Failed to clear existing pinned race states for server "
+                f"{interaction.guild_id}: {e}")
+            # Continue with the process - this is non-critical
         
         # Get all messages for this server
         message_list = get_server_messages(interaction.guild_id)
         
         saved_count = 0
+        failed_count = 0
         for message in message_list:
             # Only process RaceInfo messages (pinned race info)
             if message.message_type == RaceMessageType.RaceInfo:
-                if message.race_id is not None:
-                    # Individual race pin
-                    save_pinned_race_state(
-                        server_id=interaction.guild_id,
-                        race_id=message.race_id,
-                        category_id=None,
-                        channel_id=message.channel_id,
-                        pin_type=PinType.Individual
-                    )
-                    saved_count += 1
-                elif message.category_id is not None:
-                    # Category pin
-                    save_pinned_race_state(
-                        server_id=interaction.guild_id,
-                        race_id=None,
-                        category_id=message.category_id,
-                        channel_id=message.channel_id,
-                        pin_type=PinType.Category
-                    )
-                    saved_count += 1
+                try:
+                    if message.race_id is not None:
+                        # Individual race pin
+                        save_pinned_race_state(
+                            server_id=interaction.guild_id,
+                            race_id=message.race_id,
+                            category_id=None,
+                            channel_id=message.channel_id,
+                            pin_type=PinType.Individual
+                        )
+                        saved_count += 1
+                    elif message.category_id is not None:
+                        # Category pin
+                        save_pinned_race_state(
+                            server_id=interaction.guild_id,
+                            race_id=None,
+                            category_id=message.category_id,
+                            channel_id=message.channel_id,
+                            pin_type=PinType.Category
+                        )
+                        saved_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    logging.error(
+                        f"Failed to save pinned race state for message "
+                        f"{message.id}: {e}")
         
-        logging.info(f"Saved {saved_count} pinned race states for server {interaction.guild_id}")
+        logging.info(
+            f"Saved {saved_count} pinned race states for server "
+            f"{interaction.guild_id} (failed: {failed_count})")
+        return saved_count, failed_count
 
     ####################################################################################################################
     async def restore_pinned_race_states(self, interaction):

@@ -990,7 +990,12 @@ def is_value_empty(value):
 
 ########################################################################################################################
 def get_server_messages(server_id):
-    return AsyncRaceMessage.select().where(AsyncRaceMessage.server_id == server_id)
+    """Get all messages for a server. Returns empty list on failure."""
+    try:
+        return list(AsyncRaceMessage.select().where(AsyncRaceMessage.server_id == server_id)) # type: ignore
+    except Exception as e:
+        logging.error(f"**ERROR** Failed to query server messages for server {server_id}: {e}")
+        return []
 
 ########################################################################################################################
 def get_messages_by_race_id(race_id, message_type=RaceMessageType.Leaderboard):

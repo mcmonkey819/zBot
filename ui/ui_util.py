@@ -87,17 +87,52 @@ def save_message(server_id, channel_id, message_id, *, message_type=RaceMessageT
 # Takes an AsyncRaceMessage, finds the corresponding Discord message and deletes message and optionally deletes or
 # zeroes the DB entry
 async def delete_message(server, async_race_msg_id):
-    async_race_msg = get_race_message(async_race_msg_id)
+    """Delete a race message. Returns True on success, False on failure."""
+    try:
+        async_race_msg = get_race_message(async_race_msg_id)
+    except Exception as e:
+        logging.error(f"Failed to get race message {async_race_msg_id}: {e}")
+        return False
 
     if async_race_msg is not None and server is not None:
         if async_race_msg.message_id is not None:
-            channel = server.get_channel(async_race_msg.channel_id)
             try:
-                msg = await channel.fetch_message(async_race_msg.message_id)
-                await msg.delete()
-            except:
-                logging.info(f"Failed to find message with message ID {async_race_msg.message_id}")
+                channel = server.get_channel(async_race_msg.channel_id)
+                if channel is None:
+                    logging.warning(
+                        f"Channel {async_race_msg.channel_id} not found "
+                        f"for message {async_race_msg_id}")
+                else:
+                    msg = await channel.fetch_message(async_race_msg.message_id)
+                    await msg.delete()
+            except nextcord.NotFound:
+                logging.info(
+                    f"Message {async_race_msg.message_id} not found in "
+                    f"channel (may already be deleted)")
+            except nextcord.Forbidden:
+                logging.warning(
+                    f"No permission to delete message "
+                    f"{async_race_msg.message_id} in channel "
+                    f"{async_race_msg.channel_id}")
+            except Exception as e:
+                logging.error(
+                    f"Failed to delete message {async_race_msg.message_id}: "
+                    f"{e}")
+        
+        try:
             async_race_msg.delete_instance()
+            return True
+        except Exception as e:
+            logging.error(
+                f"Failed to delete race message instance "
+                f"{async_race_msg_id}: {e}")
+            return False
+    else:
+        logging.warning(
+            f"Message {async_race_msg_id} not found or server is None")
+        return False
+    # Everything went well, return True
+    return True
 
 #####################################################################################################################
 async def has_text_channel_permission(user_id, server, channel):
