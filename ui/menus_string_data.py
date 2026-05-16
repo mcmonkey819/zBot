@@ -224,6 +224,7 @@ toggle_leaderboard_id = "toggle_leaderboard"
 toggle_category_active_id = "toggle_category_active"
 toggle_category_pin_recent_id = "toggle_category_pin_recent"
 toggle_category_allow_completed_submit_id = "toggle_category_allow_completed_submit"
+toggle_category_disable_edit_time_limit_id = "toggle_category_disable_edit_time_limit"
 toggle_category_activate_new_races_id = "toggle_category_activate_new_races"
 toggle_category_mod_view_leaderboard_id = 'toggle_category_mod_view_leaderboard_id'
 category_ping_assigned_id = "category_ping_assigned"

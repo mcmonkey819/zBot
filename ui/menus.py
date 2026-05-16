@@ -490,7 +490,7 @@ class zRaceInfoButtonView(nextcord.ui.View):
             
             # Check if the user has already submitted, if so they can edit that submission only for 4 hours after the intial submission
             submission = get_race_submission(interaction.user.id, self.race_id)
-            if submission is not None:
+            if submission is not None and not race.category_id.disable_edit_time_limit:
                 ts = datetime.fromisoformat(submission.submit_datetime) if type(submission.submit_datetime) is str else submission.submit_datetime
                 delta = datetime.now() - ts
                 edit_time_limit = timedelta(minutes=2) if bot_config.TEST_MODE else timedelta(hours=4)
@@ -1387,6 +1387,7 @@ async def category_misc_toggles(interaction, category):
     toggle_list.append(get_category_active_toggle_field(category))
     toggle_list.append(get_category_pin_recent_toggle_field(category))
     toggle_list.append(get_category_allow_completed_submit_toggle_field(category))
+    toggle_list.append(get_category_disable_edit_time_limit_toggle_field(category))
     toggle_list.append(get_category_activate_new_races_toggle_field(category))
     toggle_list.append(get_category_mod_view_leaderboard_toggle_field(category))
     
@@ -1447,6 +1448,18 @@ def get_category_allow_completed_submit_toggle_field(category):
         emoji=TimeEmoji,
         embed_field=EmbedField(name=f"{TimeEmoji} - Allow Submissions on Completed Races",
                                value=bool_field_to_str(category.allow_completed_submit),
+                               inline=False))
+
+########################################################################################################################
+def get_category_disable_edit_time_limit_toggle_field(category):
+    return ToggleField(
+        toggle_func=toggle_category_disable_edit_time_limit,
+        payload=category,
+        button_style=bool_field_button_style(category.disable_edit_time_limit),
+        custom_id=toggle_category_disable_edit_time_limit_id,
+        emoji=TimeEmoji,
+        embed_field=EmbedField(name=f"{TimeEmoji} - Allow Unlimited Submission Edits",
+                               value=bool_field_to_str(category.disable_edit_time_limit),
                                inline=False))
 
 ########################################################################################################################
@@ -2817,6 +2830,27 @@ async def toggle_category_allow_completed_submit(interaction, payload):
 
     # Then update the embed field value
     toggle_field.embed_field.value = bool_field_to_str(category.allow_completed_submit)
+
+    # Finally update the menu
+    await update_menu_embed_field(menu, toggle_field)
+
+########################################################################################################################
+async def toggle_category_disable_edit_time_limit(interaction, payload):
+    # The button payload is a tuple with the menu and ToggleField
+    menu = payload[0]
+    toggle_field = payload[1]
+
+    # ToggleField payload is the category
+    category = toggle_field.payload
+
+    category.disable_edit_time_limit = not category.disable_edit_time_limit
+    category.save()
+
+    # Then update the button style
+    toggle_field.button_style = bool_field_button_style(category.disable_edit_time_limit)
+
+    # Then update the embed field value
+    toggle_field.embed_field.value = bool_field_to_str(category.disable_edit_time_limit)
 
     # Finally update the menu
     await update_menu_embed_field(menu, toggle_field)
