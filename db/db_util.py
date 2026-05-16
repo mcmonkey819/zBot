@@ -538,7 +538,7 @@ def get_extra_info_type_select_list(server_id, race =None):
     # Populate the SelectOption list with the race information
     select_list = []
     for t in types:
-        select_list.append(nextcord.SelectOption(label=f"{t.name}", value=t.id, description=t.description, default=t.id in default_list))
+        select_list.append(nextcord.SelectOption(label=f"{t.name}", value=t.id, description=t.description[:99], default=t.id in default_list))
     return select_list
 
 ########################################################################################################################
