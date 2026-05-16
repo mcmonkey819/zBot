@@ -1,5 +1,33 @@
 Exception Handling Cleanup
 -------------------------------------------------------
+
+**In-Progress Stash**
+Stash: "exception-handling-race-mgmt" (stash@{0} as of 2026-05-16)
+Run `git stash list` to confirm the stash index before popping.
+
+What is stashed:
+- ui/menus.py: Exception handling complete for sections 2.1 (race creation), 2.2 (race editing),
+  and 2.3 (race deletion). handle_activate_race (2.4.2 role management, pin, leaderboard) also
+  wrapped with per-step try/except, but the rest of section 2.4 is NOT done and 2.4 items are
+  not checked in this stash.
+- ui/ui_util.py: Two changes beyond exception handling that need attention before committing:
+    1. save_message() now does update-vs-create — queries for an existing row by server/channel/
+       message and updates it if found, rather than always inserting. This prevents duplicate
+       AsyncRaceMessage rows and is a meaningful behavior change, not just defensive wrapping.
+    2. delete_message() control flow refactored — inverted the main conditional and separated
+       the Discord API delete from the DB record delete. Functionally equivalent to the committed
+       version but with improved logging and cleaner structure.
+- TODO: Checkboxes for 1.4, 1.5, 2.1, 2.2, 2.3 checked off to match the stashed code changes.
+
+Before committing the stash:
+- Finish section 2.4 (race state changes: activation, scoring, category points, leaderboard,
+  pinned race management) or explicitly scope and note what is being left for a later pass.
+- Add 2.5 tests for race management workflows.
+- Decide whether save_message update-vs-create logic should be its own clearly-labeled commit
+  or folded into the exception handling commit with an explicit note in the message.
+- Check 12.1 (user_has_role) and 12.2 (send_message) — flagged as critical but not yet touched.
+
+-------------------------------------------------------
 This section focuses on adding comprehensive exception handling to network-facing interfaces (Discord API calls) and database operations throughout the async_races cog and supporting code. The goal is to ensure graceful error handling, maintain data integrity, and provide meaningful error messages to users while preventing the bot from crashing due to unhandled exceptions. Each workflow should be audited for potential failure points and have appropriate try/except blocks with proper error logging and user feedback.
 
 **Key Areas of Focus:**
