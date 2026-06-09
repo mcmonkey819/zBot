@@ -2785,10 +2785,12 @@ async def toggle_category_active(interaction, payload):
 
 ########################################################################################################################
 async def toggle_category_pin_recent(interaction, payload):
+    await defer(interaction)
+
     # The button payload is a tuple with the menu and ToggleField
     menu = payload[0]
     toggle_field = payload[1]
-    
+
     # ToggleField payload is the category
     category = toggle_field.payload
 

@@ -103,8 +103,7 @@ async def delete_message(server, async_race_msg_id):
         async_race_msg.delete_instance()
 
 #####################################################################################################################
-async def has_text_channel_permission(user_id, server, channel):
-    member = await server.fetch_member(user_id)
+def has_text_channel_permission(member, channel):
     perms = channel.permissions_for(member)
     return (perms.view_channel and
             perms.send_messages and
@@ -114,9 +113,10 @@ async def has_text_channel_permission(user_id, server, channel):
 
 #####################################################################################################################
 async def get_permitted_channel_select_list(user_id, server):
+    member = await server.fetch_member(user_id)
     select_list = []
     for c in server.text_channels:
-        if await has_text_channel_permission(user_id, server, c):
+        if has_text_channel_permission(member, c):
             select_list.append(nextcord.SelectOption(label=c.name, value=c.id, description=c.name))
     return select_list
 
