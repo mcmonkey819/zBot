@@ -505,20 +505,17 @@ class zRaceInfoButtonView(nextcord.ui.View):
                     await send_message(interaction, "Can't submit: This is an assigned race and you are not assigned to it")
                     return False
             
-                # The racer has 4 hours from getting the seed to submit a time. This limit can be made configurable in a future update if needed
-                if roster.seed_time is not None:
+                auto_forfeit_disabled = race.disable_auto_forfeit or race.category_id.disable_auto_forfeit
+                if not auto_forfeit_disabled and roster.seed_time is not None:
                     ts = datetime.fromisoformat(roster.seed_time) if type(roster.seed_time) is str else roster.seed_time
                     delta = datetime.now() - ts
                     submit_time_limit = timedelta(minutes=2) if bot_config.TEST_MODE else timedelta(hours=4)
-                    # If we are outside that window let the racer know
                     if delta > submit_time_limit:
                         await send_message(interaction, "It is past the allowable window after getting the seed to submit. You have been forfeited from this race.")
 
-                        # And submit the forfeit for them
                         sub = AsyncRaceSubmission()
                         sub.race_id = self.race_id
                         sub.user_id = interaction.user.id
-                        # We'll set the submit date/time as the seed access time so they can't just edit the forfeit
                         sub.submit_datetime = roster.seed_time
                         sub.finish_time = ForfeitFinishTime
                         sub.save()
@@ -1389,6 +1386,7 @@ async def category_misc_toggles(interaction, category):
     toggle_list.append(get_category_pin_recent_toggle_field(category))
     toggle_list.append(get_category_allow_completed_submit_toggle_field(category))
     toggle_list.append(get_category_disable_edit_time_limit_toggle_field(category))
+    toggle_list.append(get_category_disable_auto_forfeit_toggle_field(category))
     toggle_list.append(get_category_activate_new_races_toggle_field(category))
     toggle_list.append(get_category_mod_view_leaderboard_toggle_field(category))
     
@@ -1461,6 +1459,18 @@ def get_category_disable_edit_time_limit_toggle_field(category):
         emoji=TimeEmoji,
         embed_field=EmbedField(name=f"{TimeEmoji} - Allow Unlimited Submission Edits",
                                value=bool_field_to_str(category.disable_edit_time_limit),
+                               inline=False))
+
+########################################################################################################################
+def get_category_disable_auto_forfeit_toggle_field(category):
+    return ToggleField(
+        toggle_func=toggle_category_disable_auto_forfeit,
+        payload=category,
+        button_style=bool_field_button_style(category.disable_auto_forfeit),
+        custom_id=toggle_category_disable_auto_forfeit_id,
+        emoji=TimeEmoji,
+        embed_field=EmbedField(name=f"{TimeEmoji} - Disable Auto-Forfeit After Seed View",
+                               value=bool_field_to_str(category.disable_auto_forfeit),
                                inline=False))
 
 ########################################################################################################################
@@ -1961,6 +1971,7 @@ async def race_misc_toggles(interaction, race):
     toggle_list.append(get_delete_race_field(race))
     toggle_list.append(get_remove_race_leaderboard_field(race))
     toggle_list.append(get_is_team_race_field(race))
+    toggle_list.append(get_race_disable_auto_forfeit_field(race))
     
     # Get extra info assignments for this category
     extra_infos = get_race_extra_info_assignments(race.id)
@@ -2007,6 +2018,18 @@ def get_is_team_race_field(race):
         emoji=TrophyEmoji,
         embed_field=EmbedField(name=f"{TrophyEmoji} - Is Team Race",
                                value=bool_field_to_str(race.is_team_race),
+                               inline=False))
+
+########################################################################################################################
+def get_race_disable_auto_forfeit_field(race):
+    return ToggleField(
+        toggle_func=race_toggle_disable_auto_forfeit,
+        payload=race,
+        button_style=bool_field_button_style(race.disable_auto_forfeit),
+        custom_id=toggle_race_disable_auto_forfeit_id,
+        emoji=TimeEmoji,
+        embed_field=EmbedField(name=f"{TimeEmoji} - Disable Auto-Forfeit After Seed View",
+                               value=bool_field_to_str(race.disable_auto_forfeit),
                                inline=False))
 
 ########################################################################################################################
@@ -2743,6 +2766,17 @@ async def race_toggle_is_team_race(interaction, payload):
             await send_message(interaction, f"Team Name Field {get_extra_info_type(team_name_info_id).name} saved")
                                                  
 ########################################################################################################################
+async def race_toggle_disable_auto_forfeit(interaction, payload):
+    menu = payload[0]
+    toggle_field = payload[1]
+    race = toggle_field.payload
+    race.disable_auto_forfeit = not race.disable_auto_forfeit
+    race.save()
+    toggle_field.button_style = bool_field_button_style(race.disable_auto_forfeit)
+    toggle_field.embed_field.value = bool_field_to_str(race.disable_auto_forfeit)
+    await update_menu_embed_field(menu, toggle_field)
+
+########################################################################################################################
 async def toggle_required_extra_info(interaction, payload):
     # The button payload is a tuple with the menu and ToggleField
     menu = payload[0]
@@ -2854,6 +2888,17 @@ async def toggle_category_disable_edit_time_limit(interaction, payload):
     toggle_field.embed_field.value = bool_field_to_str(category.disable_edit_time_limit)
 
     # Finally update the menu
+    await update_menu_embed_field(menu, toggle_field)
+
+########################################################################################################################
+async def toggle_category_disable_auto_forfeit(interaction, payload):
+    menu = payload[0]
+    toggle_field = payload[1]
+    category = toggle_field.payload
+    category.disable_auto_forfeit = not category.disable_auto_forfeit
+    category.save()
+    toggle_field.button_style = bool_field_button_style(category.disable_auto_forfeit)
+    toggle_field.embed_field.value = bool_field_to_str(category.disable_auto_forfeit)
     await update_menu_embed_field(menu, toggle_field)
 
 ########################################################################################################################

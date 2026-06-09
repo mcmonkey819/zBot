@@ -48,6 +48,7 @@ class AsyncRaceCategory(Model):
     activate_new_races       = BooleanField(default=False)
     mod_can_view_leaderboard = BooleanField(default=True)
     disable_edit_time_limit  = BooleanField(default=False)
+    disable_auto_forfeit     = BooleanField(default=False)
 
     class Meta:
         table_name = 'async_race_categories'
@@ -66,6 +67,7 @@ class AsyncRace(Model):
     state                   = IntegerField()
     is_team_race            = BooleanField(default=False)
     team_name_info_id       = ForeignKeyField(AsyncRaceExtraInfoType, backref='team_name_info_id', null=True)
+    disable_auto_forfeit    = BooleanField(default=False)
 
     class Meta:
         table_name = 'async_races'
