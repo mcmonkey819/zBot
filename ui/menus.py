@@ -3006,17 +3006,7 @@ async def pin_race_info(channel_id, race, interaction):
         logging.info(f"Could not find channel with id {channel_id}")
         return False
     
-    msg = await post_race_info_message(race, channel)
-    db_msg = AsyncRaceMessage(
-        server_id=interaction.guild_id,
-        channel_id=channel_id,
-        message_id=msg.id,
-        race_id=race.id,
-        message_type=RaceMessageType.RaceInfo)
-    try:
-        db_msg.save()
-    except:
-        logging.info("Failed to save race info message to DB in `pin_race_info`")
+    await post_race_info_message(race, channel)
     return True
 
 ####################################################################################################################
@@ -3027,7 +3017,7 @@ async def post_race_info_message(race, channel, for_category=False):
     category_id = None
     if for_category:
         category_id = race.category_id.id
-    save_message(race.server_id, channel.id, msg.id, category_id=category_id, message_type=RaceMessageType.RaceInfo)
+    save_message(race.server_id, channel.id, msg.id, race_id=race.id, category_id=category_id, message_type=RaceMessageType.RaceInfo)
     return msg
 
 ####################################################################################################################
