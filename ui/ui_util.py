@@ -89,12 +89,18 @@ async def delete_message(server, async_race_msg_id):
     if async_race_msg is not None and server is not None:
         if async_race_msg.message_id is not None:
             channel = server.get_channel(async_race_msg.channel_id)
-            try:
-                msg = await channel.fetch_message(async_race_msg.message_id)
-                await msg.delete()
-            except:
-                logging.info(f"Failed to find message with message ID {async_race_msg.message_id}")
-            async_race_msg.delete_instance()
+            deleted = False
+            for attempt in range(2):
+                try:
+                    msg = await channel.fetch_message(async_race_msg.message_id)
+                    await msg.delete()
+                    deleted = True
+                    break
+                except:
+                    pass
+            if not deleted:
+                logging.info(f"Failed to find/delete message {async_race_msg.message_id} after retry")
+        async_race_msg.delete_instance()
 
 #####################################################################################################################
 async def has_text_channel_permission(user_id, server, channel):

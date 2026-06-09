@@ -109,6 +109,18 @@ class AsyncRaceMessage(Model):
         table_name = 'async_race_messages'
         database = db
 
+class StartupRestoreState(Model):
+    id           = IntegerField(primary_key=True)
+    server_id    = IntegerField()
+    channel_id   = IntegerField()
+    message_type = IntegerField()
+    category_id  = ForeignKeyField(AsyncRaceCategory, null=True)
+    race_id      = ForeignKeyField(AsyncRace, null=True)
+
+    class Meta:
+        table_name = 'startup_restore_state'
+        database = db
+
 class AsyncRaceExtraInfo(Model):
     id                      = IntegerField(primary_key= True)
     submission_id           = ForeignKeyField(AsyncRaceSubmission, backref='extra_info')
@@ -220,7 +232,8 @@ def add_db_tables():
         AsyncRaceTrueSkillParams,
         AsyncRaceTrueSkillRacerParams,
         AsyncRaceCategoryDrawThreshold,
-        ServerUtilsVcList])
+        ServerUtilsVcList,
+        StartupRestoreState])
 
 ####################################################################################################################
 # Recreates the indicated table
@@ -270,6 +283,9 @@ def recreate_table(table_name):
         case "ServerUtilsVcList":
             db.drop_tables([ServerUtilsVcList])
             db.create_tables([ServerUtilsVcList])
+        case "StartupRestoreState":
+            db.drop_tables([StartupRestoreState])
+            db.create_tables([StartupRestoreState])
         case _:
             logging.info(f"Unrecognized table name {table_name}")
             result = False

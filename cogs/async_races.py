@@ -62,11 +62,13 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         self,
         interaction,
         mod_channel: nextcord.TextChannel = nextcord.SlashOption(
-            description="Channel that will be used for race moderation",
-            required=True),
+            description="Channel for race moderation (overrides saved state; required for first-time setup)",
+            required=False,
+            default=None),
         racer_channel: nextcord.TextChannel = nextcord.SlashOption(
-            description="Channel that racers will use to interact with the bot",
-            required=True)):
+            description="Channel for racers to interact with the bot (overrides saved state; required for first-time setup)",
+            required=False,
+            default=None)):
         self.log_command(interaction.user, "STARTUP")
 
         await interaction.response.defer(ephemeral=True)
@@ -75,7 +77,6 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         server = self.get_server(interaction)
         if server is None:
             if interaction.user.id == bot_config.CoolestGuy:
-                # Query for the moderator and admin roles and then create a DB entry for this server
                 admin_role = await prompt_for_role(interaction, placeholder="Select Race Admin Role...")
                 mod_role = await prompt_for_role(interaction, placeholder="Select Race Moderator Role...")
                 server = AsyncRaceServer(id=interaction.guild_id, admin_role=admin_role, mod_role=mod_role)
@@ -92,13 +93,78 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             await send_message(interaction, "Only Race Admins can use this command", ephemeral=True)
             return
 
-        mod_message = await send_moderator_menu(interaction, mod_channel)
-        save_message(interaction.guild_id, mod_channel.id, mod_message.id, message_type=RaceMessageType.Menu)
-        
-        racer_message = await send_racer_menu(interaction, racer_channel)
-        save_message(interaction.guild_id, racer_channel.id, racer_message.id, message_type=RaceMessageType.Menu)
-        
-        await send_message(interaction, "Done!", ephemeral=True)
+        restore_rows = get_restore_state(interaction.guild_id)
+        discord_server = get_server_from_interaction(interaction)
+
+        if not restore_rows and not mod_channel and not racer_channel:
+            await send_message(interaction, "Nothing to restore. Provide mod_channel and racer_channel for fresh setup.", ephemeral=True)
+            return
+
+        # Remove restore entries overridden by explicit channel params
+        if restore_rows and mod_channel:
+            restore_rows = [r for r in restore_rows if r.message_type != RaceMessageType.ModMenu]
+        if restore_rows and racer_channel:
+            restore_rows = [r for r in restore_rows if r.message_type != RaceMessageType.RacerMenu]
+
+        # Build summary counts across both restore rows and explicit channel overrides
+        leaderboard_count = sum(1 for r in restore_rows if r.message_type == RaceMessageType.Leaderboard)
+        race_info_count   = sum(1 for r in restore_rows if r.message_type == RaceMessageType.RaceInfo)
+        mod_menu_count    = sum(1 for r in restore_rows if r.message_type == RaceMessageType.ModMenu) + (1 if mod_channel else 0)
+        racer_menu_count  = sum(1 for r in restore_rows if r.message_type == RaceMessageType.RacerMenu) + (1 if racer_channel else 0)
+        total = leaderboard_count + race_info_count + mod_menu_count + racer_menu_count
+
+        parts = []
+        if leaderboard_count: parts.append(f"{leaderboard_count} category leaderboard(s)")
+        if race_info_count:   parts.append(f"{race_info_count} pinned race info message(s)")
+        if mod_menu_count:    parts.append(f"{mod_menu_count} mod menu(s)")
+        if racer_menu_count:  parts.append(f"{racer_menu_count} racer menu(s)")
+        await send_message(interaction, f"Restoring {total} message(s): {', '.join(parts)}...", ephemeral=True)
+
+        failures = []
+        for row in restore_rows:
+            try:
+                channel = discord_server.get_channel(row.channel_id)
+                if channel is None:
+                    failures.append(f"Channel <#{row.channel_id}> not found (type {row.message_type})")
+                    continue
+                if row.message_type == RaceMessageType.ModMenu:
+                    msg = await send_moderator_menu(interaction, channel)
+                    save_message(interaction.guild_id, channel.id, msg.id, message_type=RaceMessageType.ModMenu)
+                elif row.message_type == RaceMessageType.RacerMenu:
+                    msg = await send_racer_menu(interaction, channel)
+                    save_message(interaction.guild_id, channel.id, msg.id, message_type=RaceMessageType.RacerMenu)
+                elif row.message_type == RaceMessageType.Leaderboard:
+                    await post_channel_category_leaderboard(interaction, channel, row.category_id_id, interaction.client)
+                elif row.message_type == RaceMessageType.RaceInfo:
+                    race = get_race(row.race_id_id)
+                    if race is None:
+                        failures.append(f"Race #{row.race_id_id} not found for race info in <#{row.channel_id}>")
+                        continue
+                    await pin_race_info(channel.id, race, interaction)
+            except Exception as e:
+                failures.append(f"Failed to restore message type {row.message_type} in <#{row.channel_id}>: {e}")
+
+        clear_restore_state(interaction.guild_id)
+
+        if mod_channel:
+            try:
+                msg = await send_moderator_menu(interaction, mod_channel)
+                save_message(interaction.guild_id, mod_channel.id, msg.id, message_type=RaceMessageType.ModMenu)
+            except Exception as e:
+                failures.append(f"Failed to create mod menu in <#{mod_channel.id}>: {e}")
+
+        if racer_channel:
+            try:
+                msg = await send_racer_menu(interaction, racer_channel)
+                save_message(interaction.guild_id, racer_channel.id, msg.id, message_type=RaceMessageType.RacerMenu)
+            except Exception as e:
+                failures.append(f"Failed to create racer menu in <#{racer_channel.id}>: {e}")
+
+        if failures:
+            failure_list = "\n".join(failures)
+            await send_message(interaction, f"Complete with errors:\n{failure_list}", ephemeral=True)
+        else:
+            await send_message(interaction, "Done!", ephemeral=True)
         
 
 
@@ -111,17 +177,27 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         await interaction.response.defer(ephemeral=True)
 
-        # Check if this server is in the DB and that the user is an admin
         server = self.get_server(interaction)
         if server is not None:
             if not user_is_admin(interaction.guild, interaction.user):
                 await send_message(interaction, "Only Race Admins can use this command", ephemeral=True)
                 return
 
+        RESTORABLE_TYPES = {RaceMessageType.ModMenu, RaceMessageType.RacerMenu,
+                            RaceMessageType.Leaderboard, RaceMessageType.RaceInfo}
+
+        discord_server = get_server_from_interaction(interaction)
         message_list = get_server_messages(interaction.guild_id)
         for m in message_list:
-            await delete_message(get_server_from_interaction(interaction), m.id)
-        
+            if m.message_type == RaceMessageType.Announcement:
+                continue
+            if m.message_type in RESTORABLE_TYPES:
+                save_restore_state(
+                    m.server_id, m.channel_id, m.message_type,
+                    category_id=m.category_id_id,
+                    race_id=m.race_id_id)
+            await delete_message(discord_server, m.id)
+
         await send_message(interaction, "Done!", ephemeral=True)
     
     ####################################################################################################################

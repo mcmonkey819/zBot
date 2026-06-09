@@ -77,8 +77,10 @@ class RaceLeaderboardType:
 class RaceMessageType:
     Leaderboard  = 0
     RaceInfo     = 1
-    Menu         = 2
-    Announcement = 3
+    Menu         = 2   # legacy — kept for backward compatibility, not restored on startup
+    Announcement = 3   # static messages, never deleted or restored by shutdown/startup
+    ModMenu      = 4
+    RacerMenu    = 5
 
 class VcChannelType:
     Ignore        = 0  # Ignore this channel for dynamic VC creation
@@ -995,3 +997,23 @@ def get_messages_by_race_id(race_id, message_type=RaceMessageType.Leaderboard):
 ########################################################################################################################
 def get_messages_by_category_id(category_id):
     return AsyncRaceMessage.select().where(AsyncRaceMessage.category_id == category_id)
+
+########################################################################################################################
+def save_restore_state(server_id, channel_id, message_type, category_id=None, race_id=None):
+    try:
+        StartupRestoreState.create(
+            server_id=server_id,
+            channel_id=channel_id,
+            message_type=message_type,
+            category_id=category_id,
+            race_id=race_id)
+    except:
+        logging.info(f"Failed to save restore state for server {server_id}, channel {channel_id}, type {message_type}")
+
+########################################################################################################################
+def get_restore_state(server_id):
+    return list(StartupRestoreState.select().where(StartupRestoreState.server_id == server_id))
+
+########################################################################################################################
+def clear_restore_state(server_id):
+    StartupRestoreState.delete().where(StartupRestoreState.server_id == server_id).execute()
