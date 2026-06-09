@@ -104,16 +104,13 @@ async def delete_message(server, async_race_msg_id):
 
 #####################################################################################################################
 async def has_text_channel_permission(user_id, server, channel):
-    ret = False
-
     member = await server.fetch_member(user_id)
     perms = channel.permissions_for(member)
-    bot_text_permission = nextcord.Permissions.text()
-    bot_text_permission.update(manage_messages=False, manage_threads=False, send_tts_messages=False)
-    if perms.is_superset(bot_text_permission):
-        ret = True
-
-    return ret
+    return (perms.view_channel and
+            perms.send_messages and
+            perms.embed_links and
+            perms.read_message_history and
+            perms.add_reactions)
 
 #####################################################################################################################
 async def get_permitted_channel_select_list(user_id, server):
