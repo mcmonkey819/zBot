@@ -806,6 +806,7 @@ class zRaceAddEditModal(zModal):
                 label="Additional Instructions",
                 required=False,
                 custom_id=self.extra_info_id,
+                style=nextcord.TextInputStyle.paragraph,
                 row=4,
                 default_value=race.additional_instructions if race is not None else None),
         }
