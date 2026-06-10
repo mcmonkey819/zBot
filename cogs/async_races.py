@@ -120,8 +120,13 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         if racer_menu_count:  parts.append(f"{racer_menu_count} racer menu(s)")
         await send_message(interaction, f"Restoring {total} message(s): {', '.join(parts)}...", ephemeral=True)
 
+        MENU_TYPES = {RaceMessageType.ModMenu, RaceMessageType.RacerMenu}
+        menu_rows    = [r for r in restore_rows if r.message_type in MENU_TYPES]
+        content_rows = [r for r in restore_rows if r.message_type not in MENU_TYPES]
+
         failures = []
-        for row in restore_rows:
+
+        for row in menu_rows:
             try:
                 channel = discord_server.get_channel(row.channel_id)
                 if channel is None:
@@ -133,18 +138,8 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 elif row.message_type == RaceMessageType.RacerMenu:
                     msg = await send_racer_menu(interaction, channel)
                     save_message(interaction.guild_id, channel.id, msg.id, message_type=RaceMessageType.RacerMenu)
-                elif row.message_type == RaceMessageType.Leaderboard:
-                    await post_channel_category_leaderboard(interaction, channel, row.category_id_id, interaction.client)
-                elif row.message_type == RaceMessageType.RaceInfo:
-                    race = get_race(row.race_id_id)
-                    if race is None:
-                        failures.append(f"Race #{row.race_id_id} not found for race info in <#{row.channel_id}>")
-                        continue
-                    await pin_race_info(channel.id, race, interaction)
             except Exception as e:
                 failures.append(f"Failed to restore message type {row.message_type} in <#{row.channel_id}>: {e}")
-
-        clear_restore_state(interaction.guild_id)
 
         if mod_channel:
             try:
@@ -159,6 +154,25 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 save_message(interaction.guild_id, racer_channel.id, msg.id, message_type=RaceMessageType.RacerMenu)
             except Exception as e:
                 failures.append(f"Failed to create racer menu in <#{racer_channel.id}>: {e}")
+
+        for row in content_rows:
+            try:
+                channel = discord_server.get_channel(row.channel_id)
+                if channel is None:
+                    failures.append(f"Channel <#{row.channel_id}> not found (type {row.message_type})")
+                    continue
+                if row.message_type == RaceMessageType.Leaderboard:
+                    await post_channel_category_leaderboard(interaction, channel, row.category_id_id, interaction.client)
+                elif row.message_type == RaceMessageType.RaceInfo:
+                    race = get_race(row.race_id_id)
+                    if race is None:
+                        failures.append(f"Race #{row.race_id_id} not found for race info in <#{row.channel_id}>")
+                        continue
+                    await pin_race_info(channel.id, race, interaction)
+            except Exception as e:
+                failures.append(f"Failed to restore message type {row.message_type} in <#{row.channel_id}>: {e}")
+
+        clear_restore_state(interaction.guild_id)
 
         if failures:
             failure_list = "\n".join(failures)
