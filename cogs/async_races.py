@@ -188,14 +188,24 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         discord_server = get_server_from_interaction(interaction)
         message_list = get_server_messages(interaction.guild_id)
+        seen_leaderboards = set()
         for m in message_list:
             if m.message_type == RaceMessageType.Announcement:
                 continue
             if m.message_type in RESTORABLE_TYPES:
-                save_restore_state(
-                    m.server_id, m.channel_id, m.message_type,
-                    category_id=m.category_id_id,
-                    race_id=m.race_id_id)
+                if m.message_type == RaceMessageType.Leaderboard:
+                    key = (m.category_id_id, m.race_id_id)
+                    if key not in seen_leaderboards:
+                        seen_leaderboards.add(key)
+                        save_restore_state(
+                            m.server_id, m.channel_id, m.message_type,
+                            category_id=m.category_id_id,
+                            race_id=m.race_id_id)
+                else:
+                    save_restore_state(
+                        m.server_id, m.channel_id, m.message_type,
+                        category_id=m.category_id_id,
+                        race_id=m.race_id_id)
             await delete_message(discord_server, m.id)
 
         await send_message(interaction, "Done!", ephemeral=True)
