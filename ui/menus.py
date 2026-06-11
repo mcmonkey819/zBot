@@ -484,6 +484,9 @@ class zRaceInfoButtonView(nextcord.ui.View):
             if race.state == RaceState.Inactive:
                 await send_message(interaction, "Cannot create a submission, this race is Inactive")
                 return False
+            if race.state == RaceState.Paused:
+                await send_message(interaction, "Submissions for this race are currently paused.")
+                return False
             if race.state == RaceState.Completed and not race.category_id.allow_completed_submit:
                 await send_message(interaction, "The category for this race does not permit submitting to a completed race.")
                 return False
@@ -1171,7 +1174,7 @@ async def category_assign_racer(interaction, category):
     for r in cat_races:
         if r.state == RaceState.Inactive:
             available_races.append(r)
-        elif r.state == RaceState.Active:
+        elif r.state in (RaceState.Active, RaceState.Paused):
             if is_assigned_race(r.id) or not race_has_submissions(r.id):
                 available_races.append(r)
 
@@ -1649,6 +1652,14 @@ async def race_change_state(interaction, race, new_state=None, confirmed: bool=N
     if new_state is None:
         new_state = await prompt_for_race_state(interaction, race)
 
+    # Enforce Paused transition constraints
+    if new_state == RaceState.Paused and race.state != RaceState.Active:
+        await send_message(interaction, "A race can only be paused from Active state.")
+        return
+    if race.state == RaceState.Paused and new_state != RaceState.Active:
+        await send_message(interaction, "A paused race can only be set back to Active.")
+        return
+
     # Do some sanity checks of the new state
     if new_state == RaceState.Inactive:
         # If the new state is inactive, make sure there are no submissions
@@ -1684,11 +1695,13 @@ async def race_change_state(interaction, race, new_state=None, confirmed: bool=N
                     await send_message(interaction, "Cancelled")
                     return
     # Now that all checks are done, save the new race state
+    previous_state = race.state
     race.state = new_state
     race.save()
-    
+
     if new_state == RaceState.Active:
-        await handle_activate_race(interaction, race)
+        if previous_state != RaceState.Paused:
+            await handle_activate_race(interaction, race)
     elif new_state == RaceState.Completed:
         # If the new state is completed, score the race
         score_race(race)
@@ -1740,8 +1753,8 @@ async def race_assign_racer(interaction, race):
         await send_message(interaction, "Can't assign racers in the `Complete` state.")
         return
     
-    if race.state == RaceState.Active:
-        # Can't assign racers in the active state if there are no assigned racers yet and there are submissions
+    if race.state in (RaceState.Active, RaceState.Paused):
+        # Can't assign racers if there are no assigned racers yet and there are submissions
         if race_has_submissions(race.id) and not is_assigned_race(race.id):
             await send_message(interaction, "Can't assign racers because the race is active and there are already submissions as an open race.")
             return

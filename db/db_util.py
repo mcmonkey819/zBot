@@ -24,11 +24,13 @@ class RaceState:
     Inactive  = 0
     Active    = 1
     Completed = 2
+    Paused    = 3
 
     SelectOptionList = [
         nextcord.SelectOption(label="Inactive",  value=Inactive,  description="Mark the race as inactive"),
         nextcord.SelectOption(label="Active",    value=Active,    description="Mark the race as active (accepting submissions)"),
         nextcord.SelectOption(label="Completed", value=Completed, description="Close the race to further submissions (and calculate score, if applicable)"),
+        nextcord.SelectOption(label="Paused",    value=Paused,    description="Temporarily pause submissions without closing the race"),
     ]
 
     def to_str(state: int):
@@ -38,6 +40,8 @@ class RaceState:
             return "Active"
         elif state == RaceState.Completed:
             return "Completed"
+        elif state == RaceState.Paused:
+            return "Paused"
         else:
             return "Unknown State"
 
@@ -248,11 +252,11 @@ def get_available_open_races(server_id):
     return ret_list
 
 ########################################################################################################################
-def get_assigned_races(user_id, server_id, states=[RaceState.Active, RaceState.Completed]):
+def get_assigned_races(user_id, server_id, states=[RaceState.Active, RaceState.Completed, RaceState.Paused]):
     races = AsyncRace.select().join(AsyncRaceRoster).where(
         (AsyncRaceRoster.user_id == user_id) &
         (AsyncRace.server_id == server_id)).order_by(AsyncRace.create_datetime.desc())
-    
+
     if RaceState.Inactive not in states:
         races = list(filter(lambda r: r.state != RaceState.Inactive, races))
 
@@ -261,6 +265,9 @@ def get_assigned_races(user_id, server_id, states=[RaceState.Active, RaceState.C
 
     if RaceState.Completed not in states:
         races = list(filter(lambda r: r.state != RaceState.Completed, races))
+
+    if RaceState.Paused not in states:
+        races = list(filter(lambda r: r.state != RaceState.Paused, races))
 
     return races
 
