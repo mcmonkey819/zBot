@@ -2452,9 +2452,10 @@ async def show_race_leaderboard(interaction, race_id):
     await menu.start(interaction=interaction, ephemeral=True)
 
 ########################################################################################################################
-async def post_channel_race_leaderboard(interaction, channel, race_id, bot_client, emojis, save_as_category_message=False):
+async def post_channel_race_leaderboard(interaction, channel, race_id, bot_client, emojis, save_as_category_message=False, server_id=None):
     per_page=10
     submissions = get_sorted_race_submissions(race_id)
+    effective_server_id = server_id if server_id is not None else interaction.guild_id
 
     title = get_race_leaderboard_title(race_id)
     body_text = get_race_leaderboard_description(race_id)
@@ -2464,28 +2465,28 @@ async def post_channel_race_leaderboard(interaction, channel, race_id, bot_clien
         msg_text = f"**{title}**\n\n{body_text}\n\nNo submissions yet"
         msg = await channel.send(msg_text)
         if save_as_category_message:
-            save_message(interaction.guild_id, channel.id, msg.id, category_id=race.category_id.id)
+            save_message(effective_server_id, channel.id, msg.id, category_id=race.category_id.id)
         else:
-            save_message(interaction.guild_id, channel.id, msg.id, race_id=race_id)
+            save_message(effective_server_id, channel.id, msg.id, race_id=race_id)
         return
-    
+
     num_pages = math.ceil(len(submissions) / per_page)
     race_id = submissions[0].race_id
-    
+
     embed_list = []
     for p in range(0, num_pages):
         slice = submissions[p*per_page:(p+1)*per_page]
         embed = await get_race_leaderboard_embed(title, body_text, slice, p, per_page, bot_client)
         embed_list.append(embed)
-    
+
     for e in embed_list:
         msg = await channel.send(embed=e)
         if save_as_category_message:
             logging.info(f"Saving race leaderboard {race_id} as a category message")
-            save_message(interaction.guild_id, channel.id, msg.id, category_id=race.category_id.id)
+            save_message(effective_server_id, channel.id, msg.id, category_id=race.category_id.id)
         else:
             logging.info(f"Saving race leaderboard {race_id} as a race message")
-            save_message(interaction.guild_id, channel.id, msg.id, race_id=race_id)
+            save_message(effective_server_id, channel.id, msg.id, race_id=race_id)
 
 ########################################################################################################################
 async def show_team_leaderboard(interaction, race_id):
@@ -2595,29 +2596,31 @@ async def race_edit_leaderboard_channel(interaction, race):
     await send_message(interaction, "Category Leaderboard Channel Saved")
 
 ########################################################################################################################
-async def post_channel_category_leaderboard(interaction, channel, category_id, bot_client):
+async def post_channel_category_leaderboard(interaction, channel, category_id, bot_client, server_id=None):
     per_page = 8
+    effective_server_id = server_id if server_id is not None else interaction.guild_id
     category = get_category(category_id)
     if category is None:
         await send_message(interaction, f"**ERROR** Fetching category with ID {category_id}. Please contact a bot admin.")
         return
-    
+
     if category.leaderboard_type == RaceLeaderboardType.RecentRace:
         # Determine the most recent completed race
         race = get_most_recent_race(category_id)
         if race is None:
             await send_message(interaction, f"No active or completed races yet for category {category.name}")
-        else:    
-            await post_channel_race_leaderboard(interaction, channel, race.id, bot_client, get_emoji_list(), save_as_category_message=True)
+        else:
+            await post_channel_race_leaderboard(interaction, channel, race.id, bot_client, get_emoji_list(),
+                                                save_as_category_message=True, server_id=effective_server_id)
     else:
         embed_list = await get_category_leaderboard_embed_list(category_id, per_page, bot_client)
         if embed_list is None or len(embed_list) == 0:
             msg = await channel.send(f"No points scored yet for category {category.name}. This is likely due to no completed races.")
-            save_message(interaction.guild_id, channel.id, msg.id, category_id=category_id)
+            save_message(effective_server_id, channel.id, msg.id, category_id=category_id)
         else:
             for e in embed_list:
                 msg = await channel.send(embed=e)
-                save_message(interaction.guild_id, channel.id, msg.id, category_id=category_id)
+                save_message(effective_server_id, channel.id, msg.id, category_id=category_id)
 
 ########################################################################################################################
 async def get_category_leaderboard_embed_list(category_id, per_page, bot_client):
