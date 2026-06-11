@@ -1,0 +1,22 @@
+[
+  {
+    "datetime": "2026-06-09T12:07:00",
+    "branch": "main",
+    "commit": "7620194",
+    "from_commit": null,
+    "description": "Added per-category toggle to disable the submission edit time limit, added startup/shutdown automation with restore state so menus, leaderboards, and race info survive restarts, fixed double-save of race info messages in pin_race_info, and fixed channel list dropdown returning empty on new servers.",
+    "files": []
+  },
+  {
+    "datetime": "2026-06-11T16:33:00",
+    "branch": "main",
+    "commit": "2324bc1",
+    "from_commit": "7620194",
+    "description": "Added disable_auto_forfeit toggle for race and category with 2-minute test mode limit, fixed interaction hang in toggle_category_pin_recent by removing defer, added Paused race state for temporarily blocking submissions without closing the race, fixed leaderboard duplication on shutdown/startup cycle, and fixed restore ordering so menus post before leaderboards and race info.",
+    "files": [
+      "cogs/async_races.py",
+      "db/db_util.py",
+      "ui/menus.py"
+    ]
+  }
+]

@@ -31,3 +31,8 @@ bot_tokens.py
 *.zip
 test.py
 workflows.md
+
+# Deployment staging
+deploy/
+.deploy_state.json
+.deploy_description.txt
