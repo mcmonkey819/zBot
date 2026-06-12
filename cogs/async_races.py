@@ -269,7 +269,64 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         await self._do_shutdown(server_id, discord_server)
         await send_message(interaction, "Done!", ephemeral=True)
-    
+
+    ####################################################################################################################
+    @async_admin.subcommand(description="Restarts the bot across all configured servers (CoolestGuy only)")
+    async def restart(self, interaction):
+        if interaction.user.id != bot_config.CoolestGuy:
+            await interaction.response.send_message("You are not authorized to run this command.", ephemeral=True)
+            return
+
+        self.log_command(interaction.user, "RESTART")
+        await interaction.response.defer(ephemeral=True)
+
+        servers = list(AsyncRaceServer.select())
+        total = len(servers)
+
+        if total == 0:
+            await interaction.edit_original_message(content="No servers found in the database.")
+            return
+
+        restarted = []
+        skipped   = []
+        errors    = []
+
+        for i, server in enumerate(servers):
+            await interaction.edit_original_message(content=f"Processing **{server.name}** ({i + 1}/{total})...")
+
+            discord_server = interaction.client.get_guild(server.id)
+            if discord_server is None:
+                errors.append(f"**{server.name}** — bot is not in this server")
+                continue
+
+            await self._do_shutdown(server.id, discord_server)
+
+            restore_rows = get_restore_state(server.id)
+            has_mod_menu   = any(r.message_type == RaceMessageType.ModMenu   for r in restore_rows)
+            has_racer_menu = any(r.message_type == RaceMessageType.RacerMenu for r in restore_rows)
+
+            if not has_mod_menu or not has_racer_menu:
+                skipped.append(f"**{server.name}**")
+                clear_restore_state(server.id)
+                continue
+
+            failures = await self._do_startup(server.id, discord_server, interaction)
+            restarted.append(f"**{server.name}**")
+            for f in failures:
+                errors.append(f"**{server.name}** — {f}")
+
+        lines = ["Restart complete.\n"]
+        if restarted:
+            lines.append(f"Restarted ({len(restarted)}): {', '.join(restarted)}")
+        if skipped:
+            lines.append(f"Skipped ({len(skipped)}): {', '.join(skipped)}")
+        if errors:
+            lines.append(f"Errors ({len(errors)}):")
+            for e in errors:
+                lines.append(f"  {e}")
+
+        await interaction.edit_original_message(content="\n".join(lines))
+
     ####################################################################################################################
     @async_admin.subcommand(description="For development purposes only, creates/recreates the specified database table")
     async def recreate_db_table(
