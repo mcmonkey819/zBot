@@ -69,7 +69,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             description="Channel for racers to interact with the bot (overrides saved state; required for first-time setup)",
             required=False,
             default=None),
-        server_id: int = nextcord.SlashOption(
+        server_id: str = nextcord.SlashOption(
             description="Server ID to start up (CoolestGuy only; ignores mod_channel/racer_channel)",
             required=False,
             default=None)):
@@ -81,6 +81,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             if interaction.user.id != bot_config.CoolestGuy:
                 await send_message(interaction, "You are not authorized to run startup for another server.", ephemeral=True)
                 return
+            server_id = int(server_id)
             discord_server = interaction.client.get_guild(server_id)
             if discord_server is None:
                 await send_message(interaction, f"Cannot find server with ID {server_id}.", ephemeral=True)
@@ -240,7 +241,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     async def shutdown(
         self,
         interaction,
-        server_id: int = nextcord.SlashOption(
+        server_id: str = nextcord.SlashOption(
             description="Server ID to shut down (CoolestGuy only)",
             required=False,
             default=None)):
@@ -252,6 +253,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             if interaction.user.id != bot_config.CoolestGuy:
                 await send_message(interaction, "You are not authorized to run shutdown for another server.", ephemeral=True)
                 return
+            server_id = int(server_id)
             discord_server = interaction.client.get_guild(server_id)
             if discord_server is None:
                 await send_message(interaction, f"Cannot find server with ID {server_id}.", ephemeral=True)
