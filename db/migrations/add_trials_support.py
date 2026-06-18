@@ -63,7 +63,7 @@ def run(db_path: str) -> None:
         cur.execute("""
             CREATE TABLE "trials" (
                 "id"                       INTEGER NOT NULL PRIMARY KEY,
-                "server_id_id"             INTEGER NOT NULL REFERENCES "async_race_servers" ("id"),
+                "server_id"                INTEGER NOT NULL REFERENCES "async_race_servers" ("id"),
                 "short_name"               VARCHAR(255) NOT NULL,
                 "display_name"             VARCHAR(255) NOT NULL,
                 "short_description"        VARCHAR(255) NOT NULL DEFAULT '',
@@ -76,8 +76,8 @@ def run(db_path: str) -> None:
                 "spoilers_channel_id"      INTEGER,
                 "participant_role_id"      INTEGER,
                 "finisher_role_id"         INTEGER,
-                "category_id_id"           INTEGER REFERENCES "async_race_categories" ("id"),
-                "current_race_id_id"       INTEGER REFERENCES "async_races" ("id"),
+                "category_id"              INTEGER REFERENCES "async_race_categories" ("id"),
+                "current_race_id"          INTEGER REFERENCES "async_races" ("id"),
                 "organizer_user_id"        INTEGER,
                 "min_signups"              INTEGER,
                 "min_signups_notified"     INTEGER NOT NULL DEFAULT 0
