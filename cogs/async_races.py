@@ -94,14 +94,13 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             server = self.get_server(interaction)
             if server is None:
                 if interaction.user.id == bot_config.CoolestGuy:
-                    admin_role = await prompt_for_role(interaction, placeholder="Select Race Admin Role...")
-                    mod_role = await prompt_for_role(interaction, placeholder="Select Race Moderator Role...")
-                    server = AsyncRaceServer(id=interaction.guild_id, admin_role=admin_role, mod_role=mod_role)
+                    server = AsyncRaceServer(id=interaction.guild_id, name=interaction.guild.name)
                     try:
                         server.save()
-                    except:
-                        await send_message(interaction, "**ERROR** Could not save server information")
+                    except Exception as e:
+                        await send_message(interaction, f"**ERROR** Could not save server information: {e}")
                         return
+                    await send_message(interaction, "Server registered with no roles configured. Run `/async_admin server_config` to set up roles before using.", ephemeral=True)
                 else:
                     await send_message(interaction, "**ERROR** This server is not setup for use with this bot, please contact the bot owner")
                     return
@@ -159,6 +158,22 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             await send_message(interaction, "Done!", ephemeral=True)
         
 
+
+    ####################################################################################################################
+    @async_admin.subcommand(description="View and update server configuration (roles, VC, trials)")
+    async def server_config(self, interaction):
+        if not user_is_admin(interaction.guild, interaction.user):
+            await interaction.response.send_message("Only Race Admins can use this command.", ephemeral=True)
+            return
+        self.log_command(interaction.user, "SERVER_CONFIG")
+        await interaction.response.defer(ephemeral=True)
+        server = self.get_server(interaction)
+        if server is None:
+            await interaction.followup.send("This server is not registered. Run `/async_admin startup` first.", ephemeral=True)
+            return
+        discord_server = get_server_from_interaction(interaction)
+        view = ServerConfigView(server, discord_server, interaction)
+        await interaction.followup.send(embed=view.build_embed(), view=view, ephemeral=True)
 
     ####################################################################################################################
     async def _do_shutdown(self, server_id, discord_server):

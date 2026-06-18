@@ -116,6 +116,13 @@ class ValidationStatus:
         else:
             return "Unknown"
 
+class TrialState:
+    Announcing = 0
+    Active     = 1
+    Ended      = 2
+    Archived   = 3
+    Cancelled  = 4
+
 ForfeitFinishTime = "23:59:59"
 ForfeitFinishTimeSeconds = (3600 * 23) + (60 * 59) + 59
 

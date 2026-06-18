@@ -3320,3 +3320,149 @@ RacerInfoButtonMenuItems = [
     MenuItem(EyesEmoji          , racer_info_view_other_racer    , 'racer_info_view_other_racer'    , 'View Another Racer'  , RacerViewOtherRacerDescription),
     MenuItem(HelpEmoji          , show_racer_info_help           , 'show_racer_info_help'           , 'Racer Command Help'  , RacerHelpDescription),
 ]
+
+########################################################################################################################
+class ServerConfigView(nextcord.ui.View):
+    """Ephemeral view for /async_admin server_config. Lets admins update server-level settings."""
+
+    def __init__(self, db_server, discord_server, original_interaction):
+        super().__init__(timeout=300)
+        self.db_server = db_server
+        self.discord_server = discord_server
+        self.original_interaction = original_interaction
+        # Initialise toggle button labels/styles to reflect current DB state
+        self.toggle_vc.label = f"VC Creation: {'ON' if db_server.enable_vc_create else 'OFF'}"
+        self.toggle_vc.style = nextcord.ButtonStyle.green if db_server.enable_vc_create else nextcord.ButtonStyle.grey
+        self.toggle_trials.label = f"Trials: {'Enabled' if db_server.trials_enabled else 'Disabled'}"
+        self.toggle_trials.style = nextcord.ButtonStyle.green if db_server.trials_enabled else nextcord.ButtonStyle.grey
+
+    def build_embed(self):
+        embed = nextcord.Embed(title="Server Configuration", color=nextcord.Colour.blurple())
+
+        if self.db_server.admin_role_id:
+            role = self.discord_server.get_role(self.db_server.admin_role_id)
+            embed.add_field(name="Admin Role",
+                            value=f"✅ {role.name}" if role else f"✅ ID {self.db_server.admin_role_id} (not found)",
+                            inline=True)
+        else:
+            embed.add_field(name="Admin Role", value="❌ Not set", inline=True)
+
+        if self.db_server.mod_role_id:
+            role = self.discord_server.get_role(self.db_server.mod_role_id)
+            embed.add_field(name="Mod Role",
+                            value=f"✅ {role.name}" if role else f"✅ ID {self.db_server.mod_role_id} (not found)",
+                            inline=True)
+        else:
+            embed.add_field(name="Mod Role", value="❌ Not set", inline=True)
+
+        embed.add_field(name="VC Creation",
+                        value="✅ Enabled" if self.db_server.enable_vc_create else "❌ Disabled",
+                        inline=True)
+        embed.add_field(name="Trials",
+                        value="✅ Enabled" if self.db_server.trials_enabled else "❌ Disabled",
+                        inline=True)
+
+        if self.db_server.trials_enabled:
+            if self.db_server.trials_announcement_channel_id:
+                ch = self.discord_server.get_channel(self.db_server.trials_announcement_channel_id)
+                ch_val = f"✅ #{ch.name}" if ch else f"✅ ID {self.db_server.trials_announcement_channel_id} (not found)"
+            else:
+                ch_val = "❌ Not set"
+            embed.add_field(name="Trial Announcements Channel", value=ch_val, inline=True)
+
+            if self.db_server.trials_discord_category_id:
+                cat = self.discord_server.get_channel(self.db_server.trials_discord_category_id)
+                cat_val = f"✅ {cat.name}" if cat else f"✅ ID {self.db_server.trials_discord_category_id} (not found)"
+            else:
+                cat_val = "❌ Not set"
+            embed.add_field(name="Trials Channel Category", value=cat_val, inline=True)
+
+        return embed
+
+    async def _refresh(self):
+        await self.original_interaction.edit_original_message(embed=self.build_embed(), view=self)
+
+    async def on_timeout(self):
+        try:
+            await self.original_interaction.edit_original_message(view=None)
+        except Exception:
+            pass
+
+    @nextcord.ui.button(label="Set Admin Role", style=nextcord.ButtonStyle.blurple, row=0)
+    async def set_admin_role(self, button, interaction):
+        role_list = get_role_select_list(self.discord_server)
+        view = zSingleSelectView(role_list, None, "Select Admin Role...")
+        await interaction.response.send_message("Select the admin role:", view=view, ephemeral=True)
+        await view.wait()
+        role_id = view.get_selected_value()
+        if role_id is not None and role_id != 0:
+            self.db_server.admin_role_id = role_id
+            self.db_server.save()
+        await self._refresh()
+
+    @nextcord.ui.button(label="Set Mod Role", style=nextcord.ButtonStyle.blurple, row=0)
+    async def set_mod_role(self, button, interaction):
+        role_list = get_role_select_list(self.discord_server)
+        view = zSingleSelectView(role_list, None, "Select Mod Role...")
+        await interaction.response.send_message("Select the mod role:", view=view, ephemeral=True)
+        await view.wait()
+        role_id = view.get_selected_value()
+        if role_id is not None and role_id != 0:
+            self.db_server.mod_role_id = role_id
+            self.db_server.save()
+        await self._refresh()
+
+    @nextcord.ui.button(label="VC Creation: OFF", style=nextcord.ButtonStyle.grey, row=1)
+    async def toggle_vc(self, button, interaction):
+        self.db_server.enable_vc_create = not self.db_server.enable_vc_create
+        self.db_server.save()
+        button.label = f"VC Creation: {'ON' if self.db_server.enable_vc_create else 'OFF'}"
+        button.style = nextcord.ButtonStyle.green if self.db_server.enable_vc_create else nextcord.ButtonStyle.grey
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @nextcord.ui.button(label="Trials: Disabled", style=nextcord.ButtonStyle.grey, row=1)
+    async def toggle_trials(self, button, interaction):
+        self.db_server.trials_enabled = not self.db_server.trials_enabled
+        self.db_server.save()
+        button.label = f"Trials: {'Enabled' if self.db_server.trials_enabled else 'Disabled'}"
+        button.style = nextcord.ButtonStyle.green if self.db_server.trials_enabled else nextcord.ButtonStyle.grey
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @nextcord.ui.button(label="Set Announcement Channel", style=nextcord.ButtonStyle.blurple, row=2)
+    async def set_announcement_channel(self, button, interaction):
+        if not self.db_server.trials_enabled:
+            await interaction.response.send_message("Enable Trials first.", ephemeral=True)
+            return
+        channel_list = await get_permitted_channel_select_list(interaction.client.user.id, self.discord_server)
+        view = zSingleSelectView(channel_list, None, "Select Announcement Channel...")
+        await interaction.response.send_message("Select the trial announcements channel:", view=view, ephemeral=True)
+        await view.wait()
+        channel_id = view.get_selected_value()
+        if channel_id is not None and channel_id != 0:
+            self.db_server.trials_announcement_channel_id = channel_id
+            self.db_server.save()
+        await self._refresh()
+
+    @nextcord.ui.button(label="Set Trials Category", style=nextcord.ButtonStyle.blurple, row=2)
+    async def set_trials_category(self, button, interaction):
+        if not self.db_server.trials_enabled:
+            await interaction.response.send_message("Enable Trials first.", ephemeral=True)
+            return
+        cat_list = [nextcord.SelectOption(label=c.name, value=c.id, description=c.name)
+                    for c in self.discord_server.categories]
+        if not cat_list:
+            await interaction.response.send_message("No Discord channel categories found in this server.", ephemeral=True)
+            return
+        view = zSingleSelectView(cat_list, None, "Select Trials Channel Category...")
+        await interaction.response.send_message("Select the Discord category for trial channels:", view=view, ephemeral=True)
+        await view.wait()
+        cat_id = view.get_selected_value()
+        if cat_id is not None:
+            self.db_server.trials_discord_category_id = cat_id
+            self.db_server.save()
+        await self._refresh()
+
+    @nextcord.ui.button(label="Done", style=nextcord.ButtonStyle.green, row=4)
+    async def done(self, button, interaction):
+        await interaction.response.edit_message(view=None)
+        self.stop()
