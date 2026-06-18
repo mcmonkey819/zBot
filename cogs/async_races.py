@@ -96,7 +96,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 if interaction.user.id == bot_config.CoolestGuy:
                     server = AsyncRaceServer(id=interaction.guild_id, name=interaction.guild.name)
                     try:
-                        server.save()
+                        server.save(force_insert=True)
                     except Exception as e:
                         await send_message(interaction, f"**ERROR** Could not save server information: {e}")
                         return
@@ -135,7 +135,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         if racer_menu_count:  parts.append(f"{racer_menu_count} racer menu(s)")
         await send_message(interaction, f"Restoring {total} message(s): {', '.join(parts)}...", ephemeral=True)
 
-        failures = await self._do_startup(server_id, discord_server, interaction)
+        failures = await self._do_startup(server_id, discord_server, interaction, restore_rows)
 
         if mod_channel:
             try:
@@ -203,9 +203,10 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             await delete_message(discord_server, m.id)
 
     ####################################################################################################################
-    async def _do_startup(self, server_id, discord_server, interaction):
+    async def _do_startup(self, server_id, discord_server, interaction, restore_rows=None):
         """Core startup logic. Restores messages from saved state. Returns list of failure strings."""
-        restore_rows = get_restore_state(server_id)
+        if restore_rows is None:
+            restore_rows = get_restore_state(server_id)
         if not restore_rows:
             return []
 
