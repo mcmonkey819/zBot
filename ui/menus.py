@@ -3466,3 +3466,315 @@ class ServerConfigView(nextcord.ui.View):
     async def done(self, button, interaction):
         await interaction.response.edit_message(view=None)
         self.stop()
+
+########################################################################################################################
+# TRIAL ANNOUNCEMENT FLOW
+########################################################################################################################
+
+def _parse_user_id(text):
+    """Parse a Discord user mention (<@123> or <@!123>) or plain numeric ID. Returns int or None."""
+    text = text.strip()
+    match = re.match(r'^<@!?(\d+)>$', text)
+    if match:
+        return int(match.group(1))
+    if text.isdigit():
+        return int(text)
+    return None
+
+########################################################################################################################
+class TrialIdentityModal(zModal):
+    """Modal A: trial identity — short name, display name, description, and optional announcement text."""
+
+    def __init__(self, has_text, submit_handler):
+        fields = {
+            'short_name': nextcord.ui.TextInput(
+                label="Short Name (e.g. TTPFour-enzy)",
+                required=True,
+                custom_id='short_name',
+                placeholder="Used for channel/role names",
+                row=1),
+            'display_name': nextcord.ui.TextInput(
+                label="Display Name (e.g. TTP Season 4 Frenzy)",
+                required=True,
+                custom_id='display_name',
+                placeholder="Used for the bot category name",
+                row=2),
+            'short_description': nextcord.ui.TextInput(
+                label="Short Description",
+                required=False,
+                custom_id='short_description',
+                placeholder="Bot category description (~100 chars)",
+                row=3),
+        }
+        if has_text:
+            fields['announcement_text'] = nextcord.ui.TextInput(
+                label="Announcement Text",
+                required=True,
+                custom_id='announcement_text',
+                style=nextcord.TextInputStyle.paragraph,
+                row=4)
+        super().__init__(fields, submit_handler, "Trial Details")
+
+########################################################################################################################
+class TrialSignupModal(zModal):
+    """Modal B: signup settings — organizer and minimum signup threshold."""
+
+    def __init__(self, submit_handler):
+        fields = {
+            'organizer': nextcord.ui.TextInput(
+                label="Organizer (user ID or @mention)",
+                required=False,
+                custom_id='organizer',
+                placeholder="Leave blank to disable DM notification",
+                row=1),
+            'min_signups': nextcord.ui.TextInput(
+                label="Minimum Signups to Notify Organizer",
+                required=False,
+                custom_id='min_signups',
+                placeholder="Leave blank to disable",
+                row=2),
+        }
+        super().__init__(fields, submit_handler, "Signup Settings")
+
+########################################################################################################################
+class TrialRoleNameView(nextcord.ui.View):
+    """Shows the proposed participant role name with [Edit Name] and [Create Role] buttons."""
+
+    def __init__(self, flow, proposed_name):
+        super().__init__(timeout=300)
+        self.flow = flow
+        self.current_name = proposed_name
+
+    @nextcord.ui.button(label="Edit Name", style=nextcord.ButtonStyle.blurple)
+    async def edit_name(self, button, interaction):
+        modal = zModal(
+            {'name': nextcord.ui.TextInput(
+                label="Role Name",
+                default_value=self.current_name,
+                required=True,
+                custom_id='name',
+                row=1)},
+            self._on_name_edit,
+            "Edit Role Name")
+        await interaction.response.send_modal(modal)
+
+    async def _on_name_edit(self, interaction, modal):
+        for child in modal.children:
+            if child.custom_id == 'name':
+                self.current_name = child.value
+        new_view = TrialRoleNameView(self.flow, self.current_name)
+        await send_message(
+            interaction,
+            f"Updated role name: **{self.current_name}**\nClick **Edit Name** to change or **Create Role** to proceed.",
+            view=new_view)
+
+    @nextcord.ui.button(label="Create Role", style=nextcord.ButtonStyle.green)
+    async def create_role(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self.flow.on_role_name_confirmed(interaction, self.current_name)
+        self.stop()
+
+########################################################################################################################
+class TrialAnnounceFlow:
+    """Manages the multi-step /announce_trial flow across modals and views."""
+
+    def __init__(self, db_server, discord_server, message_id, trial_cache):
+        self.db_server = db_server
+        self.discord_server = discord_server
+        self.existing_message_id = message_id  # int or None
+        self.trial_cache = trial_cache
+        # Accumulated across modals
+        self.short_name = None
+        self.display_name = None
+        self.short_description = None
+        self.announcement_text = None
+        self.organizer_user_id = None
+        self.min_signups = None
+
+    async def start(self, interaction):
+        modal = TrialIdentityModal(
+            has_text=(self.existing_message_id is None),
+            submit_handler=self._on_identity_submit)
+        await interaction.response.send_modal(modal)
+
+    async def _on_identity_submit(self, interaction, modal):
+        for child in modal.children:
+            match child.custom_id:
+                case 'short_name':       self.short_name = child.value.strip()
+                case 'display_name':     self.display_name = child.value.strip()
+                case 'short_description': self.short_description = child.value.strip()
+                case 'announcement_text': self.announcement_text = child.value.strip()
+        await interaction.response.send_modal(
+            TrialSignupModal(submit_handler=self._on_signup_submit))
+
+    async def _on_signup_submit(self, interaction, modal):
+        for child in modal.children:
+            match child.custom_id:
+                case 'organizer':
+                    raw = child.value.strip()
+                    self.organizer_user_id = _parse_user_id(raw) if raw else None
+                case 'min_signups':
+                    raw = child.value.strip()
+                    self.min_signups = int(raw) if raw.isdigit() else None
+        proposed = self.short_name
+        view = TrialRoleNameView(self, proposed)
+        await send_message(
+            interaction,
+            f"Proposed participant role name: **{proposed}**\nClick **Edit Name** to change or **Create Role** to proceed.",
+            view=view)
+
+    async def on_role_name_confirmed(self, interaction, role_name):
+        # Create participant role
+        try:
+            role = await self.discord_server.create_role(name=role_name, reason="Trial participant role")
+        except Exception as e:
+            await send_message(interaction, f"**ERROR** Could not create participant role: {e}")
+            return
+
+        # Post announcement message if the bot is posting it
+        announcement_message_id = self.existing_message_id
+        if announcement_message_id is None:
+            channel = self.discord_server.get_channel(self.db_server.trials_announcement_channel_id)
+            if channel is None:
+                await role.delete(reason="Trial creation failed — announcement channel not found")
+                await send_message(interaction, "**ERROR** Announcement channel not found.")
+                return
+            try:
+                msg = await channel.send(self.announcement_text)
+                announcement_message_id = msg.id
+            except Exception as e:
+                await role.delete(reason="Trial creation failed — could not post announcement")
+                await send_message(interaction, f"**ERROR** Could not post announcement: {e}")
+                return
+
+        # Save Trial record
+        trial = Trial()
+        trial.server_id = self.db_server.id
+        trial.short_name = self.short_name
+        trial.display_name = self.display_name
+        trial.short_description = self.short_description or ''
+        trial.announcement_text = self.announcement_text
+        trial.state = TrialState.Announcing
+        trial.accept_signups = True
+        trial.announcement_message_id = announcement_message_id
+        trial.announcement_channel_id = self.db_server.trials_announcement_channel_id
+        trial.participant_role_id = role.id
+        trial.organizer_user_id = self.organizer_user_id
+        trial.min_signups = self.min_signups
+        try:
+            trial.save()
+        except Exception as e:
+            await role.delete(reason="Trial creation failed — DB error")
+            await send_message(interaction, f"**ERROR** Could not save trial: {e}")
+            return
+
+        # Add to reaction cache
+        self.trial_cache[announcement_message_id] = trial
+
+        if self.existing_message_id is not None:
+            await send_message(interaction, f"Attached to existing message. Tracking reactions for **{self.display_name}** signups.")
+        else:
+            await send_message(interaction, f"Announcement posted. Tracking reactions for **{self.display_name}** signups.")
+
+########################################################################################################################
+# TRIAL CANCEL FLOW
+########################################################################################################################
+
+async def send_cancel_trial_confirm(interaction, trial, discord_server, trial_cache):
+    """Check for blockers and show the cancel confirmation view."""
+    # Hard error if any race has submissions
+    if trial.current_race_id_id is not None:
+        num_subs = get_num_submissions(trial.current_race_id_id)
+        if num_subs > 0:
+            await send_message(
+                interaction,
+                "Cannot cancel — this trial has races with submissions. "
+                "Use `/async_mod end_trial` and `/async_mod archive_trial` instead.")
+            return
+
+    embed = nextcord.Embed(
+        title=f"Cancel '{trial.display_name}'?",
+        description="This will delete the participant role and announcement message.",
+        color=nextcord.Colour.red())
+    view = CancelTrialView(trial, discord_server, trial_cache)
+    await send_message(interaction, embed=embed, view=view)
+
+########################################################################################################################
+class CancelTrialView(nextcord.ui.View):
+    def __init__(self, trial, discord_server, trial_cache):
+        super().__init__(timeout=300)
+        self.trial = trial
+        self.discord_server = discord_server
+        self.trial_cache = trial_cache
+
+    @nextcord.ui.button(label="Confirm Cancel", style=nextcord.ButtonStyle.danger)
+    async def confirm(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._do_cancel(interaction)
+        self.stop()
+
+    @nextcord.ui.button(label="Abort", style=nextcord.ButtonStyle.secondary)
+    async def abort(self, button, interaction):
+        await interaction.response.edit_message(content="Cancelled.", embed=None, view=None)
+        self.stop()
+
+    async def _do_cancel(self, interaction):
+        results = []
+        errors = []
+
+        # Delete announcement message
+        if self.trial.announcement_message_id and self.trial.announcement_channel_id:
+            channel = self.discord_server.get_channel(self.trial.announcement_channel_id)
+            if channel:
+                try:
+                    msg = await channel.fetch_message(self.trial.announcement_message_id)
+                    await msg.delete()
+                    results.append("Announcement message deleted")
+                except Exception:
+                    errors.append("Warning: Announcement message not found or already deleted")
+
+        # Remove and delete participant role
+        if self.trial.participant_role_id:
+            role = self.discord_server.get_role(self.trial.participant_role_id)
+            if role:
+                try:
+                    await role.delete(reason="Trial cancelled")
+                    results.append("Participant role deleted")
+                except Exception as e:
+                    errors.append(f"Warning: Could not delete participant role: {e}")
+
+        # Delete any associated race with no submissions (defensive; normally null in Announcing state)
+        if self.trial.current_race_id_id is not None:
+            try:
+                AsyncRaceRoster.delete().where(
+                    AsyncRaceRoster.race_id == self.trial.current_race_id_id).execute()
+                AsyncRace.delete().where(
+                    AsyncRace.id == self.trial.current_race_id_id).execute()
+                results.append("Associated race deleted")
+            except Exception as e:
+                errors.append(f"Warning: Could not delete associated race: {e}")
+
+        # Deactivate bot category if one was created (defensive; normally null in Announcing state)
+        if self.trial.category_id_id is not None:
+            try:
+                cat = AsyncRaceCategory.get_by_id(self.trial.category_id_id)
+                cat.active = False
+                cat.save()
+                results.append("Bot category deactivated")
+            except Exception as e:
+                errors.append(f"Warning: Could not deactivate category: {e}")
+
+        # Remove from reaction cache
+        if self.trial.announcement_message_id in self.trial_cache:
+            del self.trial_cache[self.trial.announcement_message_id]
+
+        # Delete Trial DB record
+        try:
+            self.trial.delete_instance()
+            results.append("Trial record deleted")
+        except Exception as e:
+            errors.append(f"**ERROR** Could not delete trial record: {e}")
+
+        summary_lines = results + errors
+        summary = "\n".join(f"• {l}" for l in summary_lines) if summary_lines else "Nothing to clean up."
+        await send_message(interaction, f"Trial cancelled.\n{summary}")
