@@ -279,6 +279,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         RESTORABLE_TYPES = {RaceMessageType.ModMenu, RaceMessageType.RacerMenu,
                             RaceMessageType.Leaderboard, RaceMessageType.RaceInfo}
 
+        clear_restore_state(server_id)
         message_list = get_server_messages(server_id)
         seen_leaderboards = set()
         for m in message_list:
@@ -670,8 +671,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             select_list = [
                 nextcord.SelectOption(
                     label=t.display_name,
-                    value=str(t.id),
-                    description=f"Short name: {t.short_name}")
+                    value=str(t.id))
                 for t in trials
             ]
             view = zSingleSelectView(select_list, None, "Select trial to cancel...")
@@ -683,6 +683,53 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 if trial is not None:
                     await send_cancel_trial_confirm(
                         interaction, trial, discord_server, self.trial_reaction_cache)
+
+    ####################################################################################################################
+    @async_mod.subcommand(description="Create channels, finisher role, and bot category; transition trial to Active")
+    async def start_trial(self, interaction):
+        if not user_is_mod(interaction.guild, interaction.user):
+            await interaction.response.send_message("Only Race Mods can use this command.", ephemeral=True)
+            return
+
+        self.log_command(interaction.user, "START_TRIAL")
+        await interaction.response.defer(ephemeral=True)
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await send_message(interaction, "Server not registered. Run `/async_admin startup` first.")
+            return
+
+        if db_server.trials_discord_category_id is None:
+            await send_message(interaction, "No Discord category configured for trials. Run `/async_admin server_config`.")
+            return
+
+        trials = get_announcing_trials(db_server.id)
+        if not trials:
+            await send_message(interaction, "No trials in Announcing state to start.")
+            return
+
+        discord_server = get_server_from_interaction(interaction)
+
+        if len(trials) == 1:
+            trial = trials[0]
+        else:
+            select_list = [
+                nextcord.SelectOption(label=t.display_name, value=str(t.id))
+                for t in trials
+            ]
+            view = zSingleSelectView(select_list, None, "Select trial to start...")
+            await send_message(interaction, view=view)
+            await view.wait()
+            trial_id = view.get_selected_value()
+            if trial_id is None:
+                return
+            trial = get_trial(trial_id)
+            if trial is None:
+                await send_message(interaction, "Trial not found.")
+                return
+
+        flow = TrialStartFlow(trial, db_server, discord_server)
+        await flow.start(interaction)
 
 
 def setup(bot):
