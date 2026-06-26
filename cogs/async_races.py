@@ -687,10 +687,6 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     ####################################################################################################################
     @async_mod.subcommand(description="Create channels, finisher role, and bot category; transition trial to Active")
     async def start_trial(self, interaction):
-        if not user_is_mod(interaction.guild, interaction.user):
-            await interaction.response.send_message("Only Race Mods can use this command.", ephemeral=True)
-            return
-
         self.log_command(interaction.user, "START_TRIAL")
         await interaction.response.defer(ephemeral=True)
 
@@ -704,8 +700,10 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             return
 
         trials = get_announcing_trials(db_server.id)
+        if not user_is_mod(interaction.guild, interaction.user):
+            trials = [t for t in trials if t.organizer_user_id == interaction.user.id]
         if not trials:
-            await send_message(interaction, "No trials in Announcing state to start.")
+            await send_message(interaction, "No trials in Announcing state that you have permission to start.")
             return
 
         discord_server = get_server_from_interaction(interaction)
@@ -748,6 +746,84 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         flow = TrialStartFlow(trial, db_server, discord_server)
         await flow.start(interaction)
+
+    @async_mod.subcommand(description="End the current race and start a new one for an active trial")
+    async def start_trial_race(self, interaction):
+        self.log_command(interaction.user, "START_TRIAL_RACE")
+        await interaction.response.defer(ephemeral=True)
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await send_message(interaction, "Server not registered. Run `/async_admin startup` first.")
+            return
+
+        trials = get_active_trials(db_server.id)
+        if not user_is_mod(interaction.guild, interaction.user):
+            trials = [t for t in trials if t.organizer_user_id == interaction.user.id]
+        if not trials:
+            await send_message(interaction, "No active trials that you have permission to manage.")
+            return
+
+        discord_server = get_server_from_interaction(interaction)
+
+        if len(trials) == 1:
+            trial = trials[0]
+        else:
+            select_list = [
+                nextcord.SelectOption(label=t.display_name, value=str(t.id))
+                for t in trials
+            ]
+            view = zSingleSelectView(select_list, None, "Select trial...")
+            await send_message(interaction, view=view)
+            await view.wait()
+            trial_id = view.get_selected_value()
+            if trial_id is None:
+                return
+            trial = get_trial(trial_id)
+            if trial is None:
+                await send_message(interaction, "Trial not found.")
+                return
+
+        flow = TrialStartRaceFlow(trial, db_server, discord_server)
+        await flow.start(interaction)
+
+    ####################################################################################################################
+    @async_mod.subcommand(description="End an active trial, scoring the final race and stopping reaction tracking")
+    async def end_trial(self, interaction):
+        self.log_command(interaction.user, "END_TRIAL")
+        await interaction.response.defer(ephemeral=True)
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await send_message(interaction, "Server not registered. Run `/async_admin startup` first.")
+            return
+
+        trials = get_active_trials(db_server.id)
+        if not user_is_mod(interaction.guild, interaction.user):
+            trials = [t for t in trials if t.organizer_user_id == interaction.user.id]
+        if not trials:
+            await send_message(interaction, "No active trials that you have permission to end.")
+            return
+
+        if len(trials) == 1:
+            trial = trials[0]
+        else:
+            select_list = [
+                nextcord.SelectOption(label=t.display_name, value=str(t.id))
+                for t in trials
+            ]
+            view = zSingleSelectView(select_list, None, "Select trial to end...")
+            await send_message(interaction, view=view)
+            await view.wait()
+            trial_id = view.get_selected_value()
+            if trial_id is None:
+                return
+            trial = get_trial(trial_id)
+            if trial is None:
+                await send_message(interaction, "Trial not found.")
+                return
+
+        await send_end_trial_confirm(interaction, trial, self.trial_reaction_cache)
 
 
 def setup(bot):

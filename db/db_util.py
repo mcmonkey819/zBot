@@ -1050,6 +1050,23 @@ def get_announcing_trials(server_id):
     ))
 
 ########################################################################################################################
+def get_active_trials(server_id):
+    return list(Trial.select().where(
+        (Trial.server_id == server_id) &
+        (Trial.state == TrialState.Active)
+    ))
+
+########################################################################################################################
+def get_trial_by_category(category_id):
+    try:
+        return Trial.get(
+            (Trial.category_id == category_id) &
+            (Trial.state == TrialState.Active)
+        )
+    except Trial.DoesNotExist:
+        return None
+
+########################################################################################################################
 def get_all_tracked_trials():
     """Return all Announcing/Active trials that have a tracked announcement message."""
     return list(Trial.select().where(

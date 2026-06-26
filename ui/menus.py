@@ -3764,6 +3764,69 @@ class CancelTrialView(nextcord.ui.View):
         await send_message(interaction, f"Trial cancelled.\n{summary}")
 
 ########################################################################################################################
+# TRIAL END FLOW
+########################################################################################################################
+
+async def send_end_trial_confirm(interaction, trial, trial_cache):
+    race_note = ""
+    if trial.current_race_id_id is not None:
+        try:
+            race = AsyncRace.get_by_id(trial.current_race_id_id)
+            if race.state == RaceState.Active:
+                race_note = "\nThe current active race will be ended and scored."
+        except Exception:
+            pass
+
+    embed = nextcord.Embed(
+        title=f"End '{trial.display_name}'?",
+        description=f"This will mark the trial as Ended.{race_note}",
+        color=nextcord.Colour.orange())
+    view = EndTrialView(trial, trial_cache)
+    await send_message(interaction, embed=embed, view=view)
+
+########################################################################################################################
+class EndTrialView(nextcord.ui.View):
+    def __init__(self, trial, trial_cache):
+        super().__init__(timeout=300)
+        self.trial = trial
+        self.trial_cache = trial_cache
+
+    @nextcord.ui.button(label="Confirm End Trial", style=nextcord.ButtonStyle.danger)
+    async def confirm(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        results = []
+
+        # End current race if still active
+        if self.trial.current_race_id_id is not None:
+            try:
+                race = AsyncRace.get_by_id(self.trial.current_race_id_id)
+                if race.state == RaceState.Active:
+                    race.state = RaceState.Completed
+                    race.save()
+                    score_race(race)
+                    await update_race_leaderboard(interaction, race)
+                    results.append("Final race ended and scored")
+            except Exception as e:
+                results.append(f"Warning: could not end current race: {e}")
+
+        self.trial.state         = TrialState.Ended
+        self.trial.accept_signups = False
+        self.trial.save()
+        results.append(f"**{self.trial.display_name}** marked as Ended")
+
+        if self.trial.announcement_message_id in self.trial_cache:
+            del self.trial_cache[self.trial.announcement_message_id]
+            results.append("Reaction tracking stopped")
+
+        await send_message(interaction, "\n".join(f"• {r}" for r in results))
+        self.stop()
+
+    @nextcord.ui.button(label="Abort", style=nextcord.ButtonStyle.secondary)
+    async def abort(self, button, interaction):
+        await interaction.response.edit_message(content="Aborted.", embed=None, view=None)
+        self.stop()
+
+########################################################################################################################
 # TRIAL START FLOW
 ########################################################################################################################
 
@@ -4164,6 +4227,7 @@ class TrialStartFlow:
             cat.active                   = True
             cat.pin_recent_race          = False
             cat.activate_new_races       = False
+            cat.submit_role              = self.finisher_role.id
             cat.mod_can_view_leaderboard = self.mod_can_view_leaderboard
             cat.disable_edit_time_limit  = self.disable_edit_time_limit
             cat.disable_auto_forfeit     = self.disable_auto_forfeit
@@ -4334,3 +4398,144 @@ class TrialStartFlow:
         if detail:
             msg += f"\n\nRolled back:\n{detail}"
         await send_message(interaction, msg)
+
+########################################################################################################################
+# PHASE 3 — TRIAL RACE LIFECYCLE
+########################################################################################################################
+
+def user_can_manage_trial(interaction, trial):
+    """Returns True if the user is a mod/admin or the trial's designated organizer."""
+    return user_is_mod(interaction.guild, interaction.user) or \
+           (trial.organizer_user_id is not None and interaction.user.id == trial.organizer_user_id)
+
+########################################################################################################################
+class TrialSignupView(nextcord.ui.View):
+    """Asks whether to close signups before starting the next race."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+
+    @nextcord.ui.button(label="Close Signups", style=nextcord.ButtonStyle.red)
+    async def close_signups(self, button, interaction):
+        self.flow.close_signups = True
+        await interaction.response.send_modal(
+            TrialRaceDetailsModal(self.flow._on_race_details_submit))
+        self.stop()
+
+    @nextcord.ui.button(label="Keep Signups Open", style=nextcord.ButtonStyle.green)
+    async def keep_signups(self, button, interaction):
+        self.flow.close_signups = False
+        await interaction.response.send_modal(
+            TrialRaceDetailsModal(self.flow._on_race_details_submit))
+        self.stop()
+
+########################################################################################################################
+class TrialRaceDetailsModal(zModal):
+    def __init__(self, submit_handler):
+        fields = {
+            'description': nextcord.ui.TextInput(
+                label="Race Description", required=True, custom_id='description', row=1),
+            'seed': nextcord.ui.TextInput(
+                label="Seed", required=True, custom_id='seed', row=2),
+            'hash': nextcord.ui.TextInput(
+                label="Hash (optional)", required=False, custom_id='hash', row=3),
+        }
+        super().__init__(fields, submit_handler, "Race Details")
+
+########################################################################################################################
+class TrialStartRaceFlow:
+    """Orchestrates the /start_trial_race flow: end previous race → signup prompt → race details → create & activate."""
+
+    def __init__(self, trial, db_server, discord_server):
+        self.trial          = trial
+        self.db_server      = db_server
+        self.discord_server = discord_server
+        self.close_signups  = True
+        self.description    = ""
+        self.seed           = ""
+        self.hash           = None
+
+    async def start(self, interaction):
+        prev_text = ""
+        if self.trial.current_race_id_id is not None:
+            try:
+                prev_race = AsyncRace.get_by_id(self.trial.current_race_id_id)
+                if prev_race.state == RaceState.Active:
+                    prev_race.state = RaceState.Completed
+                    prev_race.save()
+                    score_race(prev_race)
+                    await update_race_leaderboard(interaction, prev_race)
+                    prev_text = "Previous race ended.\n\n"
+            except Exception as e:
+                prev_text = f"Warning: could not end previous race: {e}\n\n"
+
+        view = TrialSignupView(self)
+        await send_message(
+            interaction,
+            f"{prev_text}**{self.trial.display_name}** — close signups for the new race?",
+            view=view)
+
+    async def _on_race_details_submit(self, interaction, modal):
+        for child in modal.children:
+            match child.custom_id:
+                case 'description': self.description = child.value.strip()
+                case 'seed':        self.seed        = child.value.strip()
+                case 'hash':        self.hash        = child.value.strip() or None
+        await interaction.response.defer(ephemeral=True)
+        await self._create_and_activate(interaction)
+
+    async def _create_and_activate(self, interaction):
+        # Build the new race record
+        race = AsyncRace()
+        race.server_id            = self.db_server.id
+        race.create_datetime      = zBot_now()
+        race.seed                 = self.seed
+        race.hash                 = self.hash
+        race.description          = self.description
+        race.category_id          = self.trial.category_id_id
+        race.state                = RaceState.Inactive
+        race.disable_auto_forfeit = self.trial.category_id.disable_auto_forfeit
+        race.save()
+
+        # Copy extra info assignments from category
+        for a in get_category_extra_info_assignments(self.trial.category_id_id):
+            ra = AsyncRaceExtraInfoAssignment()
+            ra.info_type_id = a.info_type_id
+            ra.race_id      = race.id
+            ra.required     = a.required
+            ra.save()
+
+        # Auto-assign all current participant role holders
+        assigned_count = 0
+        participant_role = self.discord_server.get_role(self.trial.participant_role_id) if self.trial.participant_role_id else None
+        if participant_role:
+            for member in participant_role.members:
+                if assign_racer(member.id, race.id):
+                    assigned_count += 1
+
+        # Apply signup decision and activate
+        self.trial.accept_signups   = not self.close_signups
+        race.state                  = RaceState.Active
+        race.save()
+        self.trial.current_race_id  = race.id
+        self.trial.save()
+
+        await handle_activate_race(interaction, race)
+
+        # Post race info to general channel
+        general_channel = self.discord_server.get_channel(self.trial.general_channel_id) if self.trial.general_channel_id else None
+        if general_channel:
+            try:
+                await post_race_info_message(race, general_channel)
+            except Exception as e:
+                await send_message(interaction, f"Warning: could not post race info to general channel: {e}")
+
+        signup_status = "Signups closed" if self.close_signups else "Signups remain open"
+        await send_message(
+            interaction,
+            f"Race started for **{self.trial.display_name}**!\n"
+            f"• Description: {self.description}\n"
+            f"• {assigned_count} participant(s) assigned\n"
+            f"• {signup_status}"
+            + (f"\n• Race info posted in <#{self.trial.general_channel_id}>" if general_channel else ""))
