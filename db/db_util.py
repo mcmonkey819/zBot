@@ -1057,6 +1057,13 @@ def get_active_trials(server_id):
     ))
 
 ########################################################################################################################
+def get_ended_trials(server_id):
+    return list(Trial.select().where(
+        (Trial.server_id == server_id) &
+        (Trial.state == TrialState.Ended)
+    ))
+
+########################################################################################################################
 def get_trial_by_category(category_id):
     try:
         return Trial.get(

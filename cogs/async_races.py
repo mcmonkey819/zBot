@@ -825,6 +825,46 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
         await send_end_trial_confirm(interaction, trial, self.trial_reaction_cache)
 
+    ####################################################################################################################
+    @async_mod.subcommand(description="Remove channels, roles, and archive a trial that has ended")
+    async def archive_trial(self, interaction):
+        self.log_command(interaction.user, "ARCHIVE_TRIAL")
+        await interaction.response.defer(ephemeral=True)
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await send_message(interaction, "Server not registered. Run `/async_admin startup` first.")
+            return
+
+        trials = get_ended_trials(db_server.id)
+        if not user_is_mod(interaction.guild, interaction.user):
+            trials = [t for t in trials if t.organizer_user_id == interaction.user.id]
+        if not trials:
+            await send_message(interaction, "No ended trials that you have permission to archive.")
+            return
+
+        discord_server = get_server_from_interaction(interaction)
+
+        if len(trials) == 1:
+            trial = trials[0]
+        else:
+            select_list = [
+                nextcord.SelectOption(label=t.display_name, value=str(t.id))
+                for t in trials
+            ]
+            view = zSingleSelectView(select_list, None, "Select trial to archive...")
+            await send_message(interaction, view=view)
+            await view.wait()
+            trial_id = view.get_selected_value()
+            if trial_id is None:
+                return
+            trial = get_trial(trial_id)
+            if trial is None:
+                await send_message(interaction, "Trial not found.")
+                return
+
+        await send_archive_trial_prompt(interaction, trial, discord_server, self.trial_reaction_cache)
+
 
 def setup(bot):
     bot.add_cog(AsyncRaces(bot))

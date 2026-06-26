@@ -4539,3 +4539,119 @@ class TrialStartRaceFlow:
             f"• {assigned_count} participant(s) assigned\n"
             f"• {signup_status}"
             + (f"\n• Race info posted in <#{self.trial.general_channel_id}>" if general_channel else ""))
+
+########################################################################################################################
+# PHASE 4 — TRIAL ARCHIVE
+########################################################################################################################
+
+async def send_archive_trial_prompt(interaction, trial, discord_server, trial_cache):
+    embed = nextcord.Embed(
+        title=f"Archive '{trial.display_name}'",
+        description="Select what to remove. The bot category is always deactivated (not deleted — race history is preserved). Dismiss this message to abort.",
+        color=nextcord.Colour.blurple())
+
+    ch_lines = []
+    if trial.general_channel_id:
+        ch_lines.append(f"<#{trial.general_channel_id}> (general)")
+    if trial.spoilers_channel_id:
+        ch_lines.append(f"<#{trial.spoilers_channel_id}> (spoilers)")
+    embed.add_field(name="Channels", value="\n".join(ch_lines) if ch_lines else "None", inline=True)
+
+    role_lines = []
+    if trial.participant_role_id:
+        role_lines.append(f"<@&{trial.participant_role_id}> (participant)")
+    if trial.finisher_role_id:
+        role_lines.append(f"<@&{trial.finisher_role_id}> (finisher)")
+    embed.add_field(name="Roles", value="\n".join(role_lines) if role_lines else "None", inline=True)
+
+    cat_name = "None"
+    if trial.category_id_id:
+        try:
+            cat = AsyncRaceCategory.get_by_id(trial.category_id_id)
+            cat_name = cat.name
+        except Exception:
+            cat_name = f"ID {trial.category_id_id}"
+    embed.add_field(name="Bot Category", value=cat_name, inline=True)
+
+    view = ArchiveTrialView(trial, discord_server, trial_cache)
+    await send_message(interaction, embed=embed, view=view)
+
+########################################################################################################################
+class ArchiveTrialView(nextcord.ui.View):
+    def __init__(self, trial, discord_server, trial_cache):
+        super().__init__(timeout=300)
+        self.trial = trial
+        self.discord_server = discord_server
+        self.trial_cache = trial_cache
+
+    @nextcord.ui.button(label="Category Only", style=nextcord.ButtonStyle.blurple, row=0)
+    async def category_only(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._do_archive(interaction, channels=False, roles=False)
+        self.stop()
+
+    @nextcord.ui.button(label="Remove Roles & Category", style=nextcord.ButtonStyle.blurple, row=0)
+    async def roles_and_category(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._do_archive(interaction, channels=False, roles=True)
+        self.stop()
+
+    @nextcord.ui.button(label="Remove Channels & Category", style=nextcord.ButtonStyle.blurple, row=1)
+    async def channels_and_category(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._do_archive(interaction, channels=True, roles=False)
+        self.stop()
+
+    @nextcord.ui.button(label="Remove All", style=nextcord.ButtonStyle.danger, row=1)
+    async def remove_all(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._do_archive(interaction, channels=True, roles=True)
+        self.stop()
+
+    async def _do_archive(self, interaction, channels, roles):
+        results = []
+
+        if channels:
+            for cid, label in [(self.trial.spoilers_channel_id, "spoilers"), (self.trial.general_channel_id, "general")]:
+                if cid:
+                    ch = self.discord_server.get_channel(cid)
+                    if ch:
+                        try:
+                            await ch.delete(reason=f"Trial archived: {self.trial.display_name}")
+                            results.append(f"{label.capitalize()} channel deleted")
+                        except Exception as e:
+                            results.append(f"Warning: could not delete {label} channel: {e}")
+                    else:
+                        results.append(f"{label.capitalize()} channel not found (already deleted?)")
+
+        if roles:
+            for rid, label in [(self.trial.finisher_role_id, "finisher"), (self.trial.participant_role_id, "participant")]:
+                if rid:
+                    role = self.discord_server.get_role(rid)
+                    if role:
+                        try:
+                            await role.delete(reason=f"Trial archived: {self.trial.display_name}")
+                            results.append(f"{label.capitalize()} role deleted")
+                        except Exception as e:
+                            results.append(f"Warning: could not delete {label} role: {e}")
+                    else:
+                        results.append(f"{label.capitalize()} role not found (already deleted?)")
+
+        if self.trial.category_id_id:
+            try:
+                cat = AsyncRaceCategory.get_by_id(self.trial.category_id_id)
+                cat.active = False
+                cat.save()
+                results.append(f"Bot category '{cat.name}' deactivated")
+            except Exception as e:
+                results.append(f"Warning: could not deactivate bot category: {e}")
+
+        self.trial.state = TrialState.Archived
+        self.trial.save()
+        results.append(f"**{self.trial.display_name}** marked as Archived")
+
+        # Defensive — should already be removed by end_trial
+        if self.trial.announcement_message_id in self.trial_cache:
+            del self.trial_cache[self.trial.announcement_message_id]
+
+        await send_message(interaction, "Archive complete:\n" + "\n".join(f"• {r}" for r in results))
