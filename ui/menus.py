@@ -3560,10 +3560,10 @@ class TrialRoleNameView(nextcord.ui.View):
         new_view = TrialRoleNameView(self.flow, self.current_name)
         await send_message(
             interaction,
-            f"Updated role name: **{self.current_name}**\nClick **Edit Name** to change or **Create Role** to proceed.",
+            f"Updated role name: **{self.current_name}**\nClick **Edit Name** to change or **Next** to proceed.",
             view=new_view)
 
-    @nextcord.ui.button(label="Create Role", style=nextcord.ButtonStyle.green)
+    @nextcord.ui.button(label="Next", style=nextcord.ButtonStyle.green)
     async def create_role(self, button, interaction):
         await interaction.response.defer(ephemeral=True)
         await self.flow.on_role_name_confirmed(interaction, self.current_name)
@@ -3604,7 +3604,7 @@ class TrialAnnounceFlow:
         view = TrialRoleNameView(self, self.name)
         await send_message(
             interaction,
-            f"Proposed participant role name: **{self.name}**\nClick **Edit Name** to change or **Create Role** to proceed.",
+            f"Proposed participant role name: **{self.name}**\nClick **Edit Name** to change or **Next** to proceed.",
             view=view)
 
     async def on_role_name_confirmed(self, interaction, role_name):
@@ -3798,15 +3798,15 @@ class TrialChannelNamesView(nextcord.ui.View):
     async def _on_edit(self, interaction, modal):
         for child in modal.children:
             match child.custom_id:
-                case 'general':  self.flow.general_channel_name  = child.value.strip()
-                case 'spoilers': self.flow.spoilers_channel_name = child.value.strip()
+                case 'general':  self.flow.general_channel_name  = child.value.strip().replace(' ', '-')
+                case 'spoilers': self.flow.spoilers_channel_name = child.value.strip().replace(' ', '-')
         new_view = TrialChannelNamesView(self.flow)
         await send_message(
             interaction,
-            f"Updated channel names:\n• General: `#{self.flow.general_channel_name}`\n• Spoilers: `#{self.flow.spoilers_channel_name}`\n\nClick **Create Channels** to proceed.",
+            f"Updated channel names:\n• General: `#{self.flow.general_channel_name}`\n• Spoilers: `#{self.flow.spoilers_channel_name}`\n\nClick **Next** to proceed.",
             view=new_view)
 
-    @nextcord.ui.button(label="Create Channels", style=nextcord.ButtonStyle.green)
+    @nextcord.ui.button(label="Next", style=nextcord.ButtonStyle.green)
     async def create_channels(self, button, interaction):
         await interaction.response.defer(ephemeral=True)
         await self.flow.on_channels_confirmed(interaction)
@@ -3911,15 +3911,118 @@ class TrialExtraInfoYesNoView(nextcord.ui.View):
         self.flow = flow
         self.prompt_text = prompt_text
 
-    @nextcord.ui.button(label="Yes, Add Extra Field", style=nextcord.ButtonStyle.green)
+    @nextcord.ui.button(label="Edit Extra Info", style=nextcord.ButtonStyle.green)
     async def yes(self, button, interaction):
         await self.flow.on_add_extra_info(interaction)
         self.stop()
 
-    @nextcord.ui.button(label="No, Finish", style=nextcord.ButtonStyle.grey)
+    @nextcord.ui.button(label="Done", style=nextcord.ButtonStyle.grey)
     async def no(self, button, interaction):
         await interaction.response.defer(ephemeral=True)
         await self.flow.on_extra_info_done(interaction)
+        self.stop()
+
+########################################################################################################################
+class TrialPartialStartView(nextcord.ui.View):
+    """Shown when a trial has partial start state (some Discord objects were created but the flow was abandoned)."""
+
+    def __init__(self, trial, db_server, discord_server):
+        super().__init__(timeout=300)
+        self.trial = trial
+        self.db_server = db_server
+        self.discord_server = discord_server
+
+    @nextcord.ui.button(label="Rollback Partial Start", style=nextcord.ButtonStyle.red)
+    async def rollback(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        trial = self.trial
+        cleanup = []
+
+        if trial.general_channel_id:
+            ch = self.discord_server.get_channel(trial.general_channel_id)
+            if ch:
+                try:
+                    await ch.delete(reason="Trial start rollback")
+                    cleanup.append("general channel deleted")
+                except Exception as e:
+                    cleanup.append(f"could not delete general channel: {e}")
+            else:
+                cleanup.append("general channel not found (may have been deleted already)")
+            trial.general_channel_id = None
+
+        if trial.spoilers_channel_id:
+            ch = self.discord_server.get_channel(trial.spoilers_channel_id)
+            if ch:
+                try:
+                    await ch.delete(reason="Trial start rollback")
+                    cleanup.append("spoilers channel deleted")
+                except Exception as e:
+                    cleanup.append(f"could not delete spoilers channel: {e}")
+            else:
+                cleanup.append("spoilers channel not found (may have been deleted already)")
+            trial.spoilers_channel_id = None
+
+        if trial.finisher_role_id:
+            role = self.discord_server.get_role(trial.finisher_role_id)
+            if role:
+                try:
+                    await role.delete(reason="Trial start rollback")
+                    cleanup.append("finisher role deleted")
+                except Exception as e:
+                    cleanup.append(f"could not delete finisher role: {e}")
+            else:
+                cleanup.append("finisher role not found (may have been deleted already)")
+            trial.finisher_role_id = None
+
+        if trial.category_id:
+            try:
+                cat = AsyncRaceCategory.get_by_id(trial.category_id)
+                for a in get_category_extra_info_assignments(cat.id):
+                    a.delete_instance()
+                cat.delete_instance()
+                cleanup.append("bot category deleted")
+            except Exception as e:
+                cleanup.append(f"could not delete bot category: {e}")
+            trial.category_id = None
+
+        trial.save()
+        detail = "\n".join(f"• {c}" for c in cleanup) if cleanup else "• Nothing to clean up"
+        await send_message(interaction, f"Rollback complete:\n{detail}\n\nRun `/async_mod start_trial` again to restart.")
+        self.stop()
+
+    @nextcord.ui.button(label="Continue Setup", style=nextcord.ButtonStyle.green)
+    async def continue_setup(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        trial = self.trial
+
+        # Resolve Discord objects from cached IDs
+        general_channel  = self.discord_server.get_channel(trial.general_channel_id)  if trial.general_channel_id  else None
+        spoilers_channel = self.discord_server.get_channel(trial.spoilers_channel_id) if trial.spoilers_channel_id else None
+        finisher_role    = self.discord_server.get_role(trial.finisher_role_id)        if trial.finisher_role_id    else None
+        category = None
+        if trial.category_id:
+            try:
+                category = AsyncRaceCategory.get_by_id(trial.category_id)
+            except Exception:
+                pass
+
+        missing = []
+        if not general_channel:  missing.append("general channel")
+        if not spoilers_channel: missing.append("spoilers channel")
+        if not finisher_role:    missing.append("finisher role")
+        if not category:         missing.append("bot category")
+        if missing:
+            await send_message(interaction, f"Cannot continue — could not resolve: {', '.join(missing)}.\nUse **Rollback Partial Start** to clean up and restart.")
+            return
+
+        flow = TrialStartFlow(trial, self.db_server, self.discord_server)
+        flow.general_channel  = general_channel
+        flow.spoilers_channel = spoilers_channel
+        flow.finisher_role    = finisher_role
+        flow.category         = category
+
+        view = TrialExtraInfoYesNoView(flow, "")
+        await send_message(interaction, "Resuming trial setup — add extra submission fields beyond Finish Time and Comment?", view=view)
         self.stop()
 
 ########################################################################################################################
@@ -3931,7 +4034,7 @@ class TrialStartFlow:
         self.db_server = db_server
         self.discord_server = discord_server
         # Proposed names
-        base = trial.short_name.lower()
+        base = trial.short_name.lower().replace(' ', '-')
         self.general_channel_name  = base
         self.spoilers_channel_name = f"{base}-spoilers"
         self.finisher_role_name    = f"{trial.short_name} Finisher"
@@ -3941,7 +4044,7 @@ class TrialStartFlow:
         self.leaderboard_type         = RaceLeaderboardType.RecentRace
         self.mod_can_view_leaderboard = True
         self.disable_edit_time_limit  = False
-        self.disable_auto_forfeit     = False
+        self.disable_auto_forfeit     = True
         # Created objects (tracked for rollback)
         self.general_channel  = None
         self.spoilers_channel = None
@@ -3964,7 +4067,7 @@ class TrialStartFlow:
             f"Proposed channel names:\n"
             f"• General: `#{self.general_channel_name}`\n"
             f"• Spoilers: `#{self.spoilers_channel_name}`\n\n"
-            f"Click **Edit Names** to change or **Create Channels** to proceed.",
+            f"Click **Edit Names** to change or **Next** to proceed.",
             view=view)
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -3972,16 +4075,13 @@ class TrialStartFlow:
         view = TrialRoleNameView(self, self.finisher_role_name)
         await send_message(
             interaction,
-            f"Proposed finisher role name: **{self.finisher_role_name}**\nClick **Edit Name** to change or **Create Role** to proceed.",
+            f"Proposed finisher role name: **{self.finisher_role_name}**\nClick **Edit Name** to change or **Next** to proceed.",
             view=view)
 
     # Called by TrialRoleNameView (reused from announce flow)
     async def on_role_name_confirmed(self, interaction, role_name):
         self.finisher_role_name = role_name
         select_list = copy.deepcopy(PointsType.SelectOptionList)
-        for s in select_list:
-            if s.value == self.points_type:
-                s.default = True
         selected = await zSingleSelectView(select_list, None, "Select scoring type...").prompt(interaction)
         if selected is None:
             await self._rollback(interaction, "Scoring type selection timed out.")
@@ -3989,7 +4089,11 @@ class TrialStartFlow:
         self.points_type = selected
 
         view = TrialCategorySettingsView(self)
-        await send_message(interaction, embed=view._build_embed(), view=view)
+        await send_message(
+            interaction,
+            "Review the bot category settings below. Click any toggle button to change it, then click **Confirm Settings** when done.",
+            embed=view._build_embed(),
+            view=view)
 
     # ------------------------------------------------------------------------------------------------------------------
     async def on_settings_confirmed(self, interaction):
@@ -4002,14 +4106,19 @@ class TrialStartFlow:
                 name=self.general_channel_name,
                 category=discord_category,
                 reason=f"Trial: {self.trial.display_name}")
+            self.trial.general_channel_id = self.general_channel.id
+            self.trial.save()
         except Exception as e:
             await self._rollback(interaction, f"Could not create general channel: {e}")
             return
 
         # Create spoilers channel (viewable only by finisher role and admin role)
+        # Bot must have an explicit allow overwrite or it loses access when @everyone is denied,
+        # which would cause the subsequent set_permissions call to fail with 50001.
         try:
             overwrites = {
                 self.discord_server.default_role: nextcord.PermissionOverwrite(read_messages=False),
+                self.discord_server.me: nextcord.PermissionOverwrite(read_messages=True),
             }
             if admin_role:
                 overwrites[admin_role] = nextcord.PermissionOverwrite(read_messages=True)
@@ -4018,6 +4127,8 @@ class TrialStartFlow:
                 category=discord_category,
                 overwrites=overwrites,
                 reason=f"Trial: {self.trial.display_name}")
+            self.trial.spoilers_channel_id = self.spoilers_channel.id
+            self.trial.save()
         except Exception as e:
             await self._rollback(interaction, f"Could not create spoilers channel: {e}")
             return
@@ -4027,6 +4138,8 @@ class TrialStartFlow:
             self.finisher_role = await self.discord_server.create_role(
                 name=self.finisher_role_name,
                 reason=f"Trial finisher role: {self.trial.display_name}")
+            self.trial.finisher_role_id = self.finisher_role.id
+            self.trial.save()
         except Exception as e:
             await self._rollback(interaction, f"Could not create finisher role: {e}")
             return
@@ -4056,6 +4169,8 @@ class TrialStartFlow:
             cat.disable_auto_forfeit     = self.disable_auto_forfeit
             cat.save()
             self.category = cat
+            self.trial.category_id = self.category.id
+            self.trial.save()
         except Exception as e:
             await self._rollback(interaction, f"Could not create bot category: {e}")
             return
@@ -4070,19 +4185,23 @@ class TrialStartFlow:
         view = TrialExtraInfoYesNoView(self, "")
         await send_message(
             interaction,
-            "Add extra submission fields beyond Finish Time and Comment?",
+            "Configure extra submission fields beyond Finish Time and Comment? Click **Edit Extra Info** to add or remove fields, or **Done** to finish.",
             view=view)
 
     # ------------------------------------------------------------------------------------------------------------------
     async def on_add_extra_info(self, interaction):
+        assigned_ids = {a.info_type_id_id for a in get_category_extra_info_assignments(self.category.id)}
         select_list = get_extra_info_type_select_list(self.db_server.id)
+        for opt in select_list:
+            if int(opt.value) in assigned_ids:
+                opt.label = f"✅ {opt.label}"
         select_list.insert(0, nextcord.SelectOption(
             label="Create New...", value='0', description="Define a new extra info type"))
 
         view = nextcord.ui.View(timeout=300)
-        select = zSingleSelect(select_list, self._on_extra_info_selected, "Select extra info type...")
+        select = zSingleSelect(select_list, self._on_extra_info_selected, "Select an extra info type to add or remove...", None)
         view.add_item(select)
-        await send_message(interaction, "Select an extra info type to add:", view=view)
+        await send_message(interaction, "Select an extra info type to add or remove:", view=view)
 
     async def _on_extra_info_selected(self, selected_id, interaction):
         if selected_id == 0:
@@ -4098,14 +4217,18 @@ class TrialStartFlow:
                 "New Extra Info Type")
             await interaction.response.send_modal(modal)
         else:
-            if not check_category_assignment_exists(selected_id, self.category.id):
+            type_obj = get_extra_info_type(selected_id)
+            name = type_obj.name if type_obj else f"ID {selected_id}"
+            if check_category_assignment_exists(selected_id, self.category.id):
+                delete_category_assignment(selected_id, self.category.id)
+                action = "Removed"
+            else:
                 assignment = AsyncRaceExtraInfoAssignment(
                     info_type_id=selected_id, category_id=self.category.id)
                 assignment.save()
-            type_obj = get_extra_info_type(selected_id)
-            name = type_obj.name if type_obj else f"ID {selected_id}"
+                action = "Added"
             view = TrialExtraInfoYesNoView(self, "")
-            await send_message(interaction, f"Added **{name}**. Add another extra field?", view=view)
+            await send_message(interaction, f"{action} **{name}**.", view=view)
 
     async def _on_extra_info_name_submit(self, interaction, modal):
         self._pending_info_name = ""
@@ -4117,7 +4240,7 @@ class TrialStartFlow:
 
         select_list = copy.deepcopy(VarType.SelectOptionList)
         view = nextcord.ui.View(timeout=300)
-        select = zSingleSelect(select_list, self._on_extra_info_vartype_selected, "Select data type...")
+        select = zSingleSelect(select_list, self._on_extra_info_vartype_selected, "Select data type...", None)
         view.add_item(select)
         await send_message(interaction, f"Select data type for **{self._pending_info_name}**:", view=view)
 
@@ -4135,13 +4258,13 @@ class TrialStartFlow:
             view = TrialExtraInfoYesNoView(self, "")
             await send_message(
                 interaction,
-                f"Created and added **{info_type.name}**. Add another extra field?",
+                f"Created and added **{info_type.name}**.",
                 view=view)
         except Exception as e:
             view = TrialExtraInfoYesNoView(self, "")
             await send_message(
                 interaction,
-                f"**ERROR** Could not save extra info type: {e}\nAdd another extra field?",
+                f"**ERROR** Could not save extra info type: {e}",
                 view=view)
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -4198,6 +4321,13 @@ class TrialStartFlow:
             except Exception as e:
                 cleanup.append(f"could not delete bot category: {e}")
             self.category = None
+
+        # Clear partial IDs from trial record so a retry starts clean
+        self.trial.general_channel_id  = None
+        self.trial.spoilers_channel_id = None
+        self.trial.finisher_role_id    = None
+        self.trial.category_id         = None
+        self.trial.save()
 
         detail = "\n".join(f"• {c}" for c in cleanup)
         msg = f"**ERROR** {error_msg}"

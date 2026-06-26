@@ -728,6 +728,24 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                 await send_message(interaction, "Trial not found.")
                 return
 
+        # Detect partial start (objects created in a previous session that was abandoned)
+        partial_ids = [trial.general_channel_id, trial.spoilers_channel_id,
+                       trial.finisher_role_id, trial.category_id]
+        if any(v is not None for v in partial_ids):
+            lines = [f"**{trial.display_name}** has a partial start from a previous session:"]
+            if trial.general_channel_id:
+                lines.append(f"• General channel: <#{trial.general_channel_id}>")
+            if trial.spoilers_channel_id:
+                lines.append(f"• Spoilers channel: <#{trial.spoilers_channel_id}>")
+            if trial.finisher_role_id:
+                lines.append(f"• Finisher role: <@&{trial.finisher_role_id}>")
+            if trial.category_id:
+                lines.append(f"• Bot category ID: {trial.category_id}")
+            lines.append("\nUse **Rollback Partial Start** to clean up and restart, or **Continue Setup** to proceed from the extra info step.")
+            view = TrialPartialStartView(trial, db_server, discord_server)
+            await send_message(interaction, "\n".join(lines), view=view)
+            return
+
         flow = TrialStartFlow(trial, db_server, discord_server)
         await flow.start(interaction)
 
