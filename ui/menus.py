@@ -3894,13 +3894,13 @@ class TrialCategorySettingsView(nextcord.ui.View):
             b.callback = cb
             self.add_item(b)
 
-        # Row 0: Post leaderboard toggle; LB type toggle (shown whenever leaderboard is enabled)
+        # Row 0: Post leaderboard toggle; LB type toggle (only shown with a scoring type — Points LB requires scoring)
         _btn(
             label=f"Post Leaderboard: {'✅' if lb_on else '❌'}",
             style=nextcord.ButtonStyle.green if lb_on else nextcord.ButtonStyle.grey,
             row=0, cb=self._toggle_post_lb)
 
-        if lb_on:
+        if lb_on and f.points_type != PointsType.NoScoring:
             lb_type_str = "Points" if f.leaderboard_type == RaceLeaderboardType.Points else "Recent Race"
             _btn(label=f"LB Type: {lb_type_str}", style=nextcord.ButtonStyle.blurple, row=0, cb=self._toggle_lb_type)
 
