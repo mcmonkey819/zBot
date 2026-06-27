@@ -403,3 +403,89 @@ A simple DB query on submission; no caching needed.
   needed for modals, and handle large option lists the same way existing Selects do.
 
 ---
+
+## Post-Implementation Gaps & Enhancements
+
+Identified after initial implementation and testing. All three items are unimplemented as of the
+`feature/trials-phase0` merge.
+
+---
+
+### Gap 1 — Reaction Signup During Active Race
+
+**Problem:** `on_raw_reaction_add_handler` assigns the participant role when a user reacts to the
+announcement. However, if a race is already active and `accept_signups` is True (signups kept open
+through the race), the new participant is not assigned to the current race. They will be picked up
+on the next `start_trial_race` call but miss the current one.
+
+**Fix:** In `on_raw_reaction_add_handler`, after assigning the participant role, check if
+`trial.current_race_id` is set and `trial.accept_signups` is True. If so, call
+`assign_racer(member.id, trial.current_race_id)` to immediately add them to the active race.
+
+**Scope:** `cogs/async_races.py` — `on_raw_reaction_add_handler`. No DB changes needed.
+
+---
+
+### Gap 2 — Additional Instructions Field Missing from Trial Race Details Modal
+
+**Problem:** `TrialRaceDetailsModal` has three fields (description, seed, hash) but the standard
+race creation flow also includes an "Additional Instructions" optional field. Trial races have no
+way to provide per-race instructions beyond the description.
+
+**Fix:** Add a 4th `paragraph`-style `TextInput` field ("Additional Instructions", optional) to
+`TrialRaceDetailsModal`. Read it in `TrialStartRaceFlow._on_race_details_submit`, store it on the
+flow, and pass it to the race record in `_create_and_activate`. Verify the exact field name on
+`AsyncRace` before implementing.
+
+**Scope:** `ui/menus.py` — `TrialRaceDetailsModal`, `TrialStartRaceFlow`. No DB changes needed.
+
+**Document update:** Add "Additional Instructions (optional)" to the Race Details form fields list
+in Step 4 of `TRIALS_BOT_COMMANDS.md`.
+
+---
+
+### Enhancement — Leaderboard Channel Selection in `start_trial`
+
+**Problem:** `start_trial` lets the organizer enable a leaderboard via the category settings, but
+provides no way to set the leaderboard channel. Currently the organizer must set this manually
+through the mod menu after the trial starts.
+
+**Design:**
+
+After the organizer clicks **Confirm Settings** in `TrialCategorySettingsView`:
+- If `post_leaderboard` is False → proceed directly to extra info loop (no change)
+- If `post_leaderboard` is True → show `TrialLeaderboardChannelView` with two buttons:
+  - **Create New Channel** — bot creates a dedicated leaderboard channel and stores its ID on the
+    trial record for archive cleanup
+  - **Use Existing Channel** — presents a channel picker; selected channel is linked to the
+    category but NOT stored on the trial record (it is not bot-owned and must not be deleted on
+    archive)
+
+After the channel decision, proceed to extra info loop as normal, then call `on_settings_confirmed`
+where the channel is linked to the category.
+
+**Channel creation — permissions by leaderboard type:**
+- **Points leaderboard** — open to `@everyone` (read access); created inside
+  `trials_discord_category_id`
+- **Most Recent Race leaderboard** — same permissions as the spoilers channel: `@everyone:
+  read_messages=False`, `finisher_role: read_messages=True`, `bot: read_messages=True`. Because
+  the finisher role does not exist yet at the time the user makes this decision, the actual channel
+  creation must happen inside `on_settings_confirmed` after the finisher role is created.
+
+**Archive cleanup:**
+- `Trial.leaderboard_channel_id` is only set when the bot created the channel (Create New path).
+- `archive_trial` deletes this channel if the field is non-null, same as general/spoilers channels.
+- If the field is null (Use Existing path), no channel deletion is attempted.
+- The archive summary embed should include the leaderboard channel in the Channels field only when
+  `leaderboard_channel_id` is non-null.
+
+**DB changes:**
+- Add `leaderboard_channel_id = IntegerField(null=True)` to the `Trial` table (migration required)
+- Verify the field name for leaderboard channel on `AsyncRaceCategory` before implementing
+
+**Scope:** `ui/menus.py` — `TrialCategorySettingsView`, `TrialStartFlow`, new
+`TrialLeaderboardChannelView`; `db/db_util.py` — new helper if needed; migration script.
+
+**Document update:** Add a new sub-step after Confirm Settings in Step 3 of
+`TRIALS_BOT_COMMANDS.md` describing the leaderboard channel prompt. Update Step 6 (Archive) to
+note that a bot-created leaderboard channel is included in the "Remove Channels" cleanup.
