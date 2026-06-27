@@ -4463,16 +4463,18 @@ class TrialSignupView(nextcord.ui.View):
 
     @nextcord.ui.button(label="Close Signups", style=nextcord.ButtonStyle.red)
     async def close_signups(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
         self.flow.close_signups = True
-        await interaction.response.send_modal(
-            TrialRaceDetailsModal(self.flow._on_race_details_submit))
+        await send_message(interaction, "Review the participant list before starting the race.",
+                           view=TrialRacerManagementView(self.flow))
         self.stop()
 
     @nextcord.ui.button(label="Keep Signups Open", style=nextcord.ButtonStyle.green)
     async def keep_signups(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
         self.flow.close_signups = False
-        await interaction.response.send_modal(
-            TrialRaceDetailsModal(self.flow._on_race_details_submit))
+        await send_message(interaction, "Review the participant list before starting the race.",
+                           view=TrialRacerManagementView(self.flow))
         self.stop()
 
 ########################################################################################################################
@@ -4487,6 +4489,88 @@ class TrialRaceDetailsModal(zModal):
                 label="Hash (optional)", required=False, custom_id='hash', row=3),
         }
         super().__init__(fields, submit_handler, "Race Details")
+
+########################################################################################################################
+class TrialRacerManagementView(nextcord.ui.View):
+    """Lets the organizer add/remove participants before the race is created."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+
+    def _participant_count(self):
+        role = self.flow.discord_server.get_role(self.flow.trial.participant_role_id) \
+               if self.flow.trial.participant_role_id else None
+        return len(role.members) if role else 0
+
+    @nextcord.ui.button(label="Add Racer", style=nextcord.ButtonStyle.green)
+    async def add_racer(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await send_message(
+            interaction,
+            f"Select a member to add as a participant ({self._participant_count()} currently signed up):",
+            view=TrialAddRacerView(self.flow))
+        self.stop()
+
+    @nextcord.ui.button(label="Remove Racer", style=nextcord.ButtonStyle.red)
+    async def remove_racer(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        role = self.flow.discord_server.get_role(self.flow.trial.participant_role_id) \
+               if self.flow.trial.participant_role_id else None
+        if not role or not role.members:
+            await send_message(interaction, "No participants to remove.", view=TrialRacerManagementView(self.flow))
+            self.stop()
+            return
+        select_list = [
+            nextcord.SelectOption(label=m.display_name, value=str(m.id))
+            for m in sorted(role.members, key=lambda m: m.display_name)[:25]
+        ]
+        select = zSingleSelect(select_list, self.flow._on_remove_racer_selected,
+                               "Select a participant to remove...", None)
+        view = nextcord.ui.View(timeout=300)
+        view.add_item(select)
+        await send_message(
+            interaction,
+            f"Select a participant to remove ({self._participant_count()} currently signed up):",
+            view=view)
+        self.stop()
+
+    @nextcord.ui.button(label="Done", style=nextcord.ButtonStyle.blurple)
+    async def done(self, button, interaction):
+        await interaction.response.send_modal(TrialRaceDetailsModal(self.flow._on_race_details_submit))
+        self.stop()
+
+########################################################################################################################
+class TrialAddRacerView(nextcord.ui.View):
+    """Discord UserSelect for adding a member to the trial participant role."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+
+    @nextcord.ui.user_select(placeholder="Select member to add as participant...")
+    async def user_select(self, select, interaction):
+        await interaction.response.defer(ephemeral=True)
+        member = select.values[0]
+        participant_role = self.flow.discord_server.get_role(self.flow.trial.participant_role_id) \
+                           if self.flow.trial.participant_role_id else None
+        if participant_role is None:
+            await send_message(interaction, "Participant role not found.", view=TrialRacerManagementView(self.flow))
+            self.stop()
+            return
+        if participant_role in member.roles:
+            await send_message(interaction, f"**{member.display_name}** is already a participant.",
+                               view=TrialRacerManagementView(self.flow))
+            self.stop()
+            return
+        try:
+            await member.add_roles(participant_role, reason=f"Added to trial {self.flow.trial.display_name}")
+            await send_message(interaction, f"Added **{member.display_name}** as a participant.",
+                               view=TrialRacerManagementView(self.flow))
+        except Exception as e:
+            await send_message(interaction, f"Could not add **{member.display_name}**: {e}",
+                               view=TrialRacerManagementView(self.flow))
+        self.stop()
 
 ########################################################################################################################
 class TrialStartRaceFlow:
@@ -4515,11 +4599,33 @@ class TrialStartRaceFlow:
             except Exception as e:
                 prev_text = f"Warning: could not end previous race: {e}\n\n"
 
+        participant_role = self.discord_server.get_role(self.trial.participant_role_id) \
+                           if self.trial.participant_role_id else None
+        participant_count = len(participant_role.members) if participant_role else 0
         view = TrialSignupView(self)
         await send_message(
             interaction,
-            f"{prev_text}**{self.trial.display_name}** — close signups for the new race?",
+            f"{prev_text}**{self.trial.display_name}** — {participant_count} participant(s) signed up. Close signups for the new race?",
             view=view)
+
+    async def _on_remove_racer_selected(self, selected_id, interaction):
+        await interaction.response.defer(ephemeral=True)
+        participant_role = self.discord_server.get_role(self.trial.participant_role_id) \
+                           if self.trial.participant_role_id else None
+        if participant_role is None:
+            await send_message(interaction, "Participant role not found.", view=TrialRacerManagementView(self))
+            return
+        member = self.discord_server.get_member(selected_id)
+        if member is None:
+            await send_message(interaction, "Member not found.", view=TrialRacerManagementView(self))
+            return
+        try:
+            await member.remove_roles(participant_role, reason=f"Removed from trial {self.trial.display_name}")
+            await send_message(interaction, f"Removed **{member.display_name}** from participants.",
+                               view=TrialRacerManagementView(self))
+        except Exception as e:
+            await send_message(interaction, f"Could not remove **{member.display_name}**: {e}",
+                               view=TrialRacerManagementView(self))
 
     async def _on_race_details_submit(self, interaction, modal):
         for child in modal.children:
