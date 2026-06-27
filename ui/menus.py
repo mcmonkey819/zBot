@@ -2608,7 +2608,9 @@ async def post_channel_category_leaderboard(interaction, channel, category_id, b
         # Determine the most recent completed race
         race = get_most_recent_race(category_id)
         if race is None:
-            await send_message(interaction, f"No active or completed races yet for category {category.name}")
+            # No races yet — post placeholder and save record so update_category_leaderboard can find it later
+            msg = await channel.send(f"No completed races yet for category {category.name}.")
+            save_message(effective_server_id, channel.id, msg.id, category_id=category_id)
         else:
             await post_channel_race_leaderboard(interaction, channel, race.id, bot_client, get_emoji_list(),
                                                 save_as_category_message=True, server_id=effective_server_id)
