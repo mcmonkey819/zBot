@@ -3478,7 +3478,7 @@ class TrialDetailsModal(zModal):
     def __init__(self, has_text, submit_handler):
         fields = {
             'name': nextcord.ui.TextInput(
-                label="Trial Name (e.g. TTP Season 4 Frenzy)",
+                label="Trial Name",
                 required=True,
                 custom_id='name',
                 placeholder="Used for role names, category name, and display",
@@ -3966,6 +3966,34 @@ class TrialCategorySettingsView(nextcord.ui.View):
         return embed
 
 ########################################################################################################################
+class TrialExtraInfoRequiredView(nextcord.ui.View):
+    """Asks whether a newly-added extra info type should be required or optional."""
+
+    def __init__(self, flow, assignment, type_name):
+        super().__init__(timeout=300)
+        self.flow = flow
+        self.assignment = assignment
+        self.type_name = type_name
+
+    @nextcord.ui.button(label="Required", style=nextcord.ButtonStyle.red)
+    async def required(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        self.assignment.required = True
+        self.assignment.save()
+        view = TrialExtraInfoYesNoView(self.flow, "")
+        await send_message(interaction, f"Added **{self.type_name}** as **required**.", view=view)
+        self.stop()
+
+    @nextcord.ui.button(label="Optional", style=nextcord.ButtonStyle.blurple)
+    async def optional(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        self.assignment.required = False
+        self.assignment.save()
+        view = TrialExtraInfoYesNoView(self.flow, "")
+        await send_message(interaction, f"Added **{self.type_name}** as **optional**.", view=view)
+        self.stop()
+
+########################################################################################################################
 class TrialExtraInfoYesNoView(nextcord.ui.View):
     """Asks whether to add another extra info field to the trial's bot category."""
 
@@ -4002,27 +4030,39 @@ class TrialPartialStartView(nextcord.ui.View):
         cleanup = []
 
         if trial.general_channel_id:
-            ch = self.discord_server.get_channel(trial.general_channel_id)
-            if ch:
+            try:
+                ch = await self.discord_server.fetch_channel(trial.general_channel_id)
+            except nextcord.errors.NotFound:
+                logging.warning(f"Partial rollback trial '{trial.display_name}': general channel {trial.general_channel_id} not found in Discord")
+                cleanup.append("general channel not found (may have been deleted already)")
+            except Exception as e:
+                logging.error(f"Partial rollback trial '{trial.display_name}': could not fetch general channel {trial.general_channel_id}: {e}")
+                cleanup.append(f"could not fetch general channel: {e}")
+            else:
                 try:
                     await ch.delete(reason="Trial start rollback")
                     cleanup.append("general channel deleted")
                 except Exception as e:
+                    logging.error(f"Partial rollback trial '{trial.display_name}': could not delete general channel {trial.general_channel_id}: {e}")
                     cleanup.append(f"could not delete general channel: {e}")
-            else:
-                cleanup.append("general channel not found (may have been deleted already)")
             trial.general_channel_id = None
 
         if trial.spoilers_channel_id:
-            ch = self.discord_server.get_channel(trial.spoilers_channel_id)
-            if ch:
+            try:
+                ch = await self.discord_server.fetch_channel(trial.spoilers_channel_id)
+            except nextcord.errors.NotFound:
+                logging.warning(f"Partial rollback trial '{trial.display_name}': spoilers channel {trial.spoilers_channel_id} not found in Discord")
+                cleanup.append("spoilers channel not found (may have been deleted already)")
+            except Exception as e:
+                logging.error(f"Partial rollback trial '{trial.display_name}': could not fetch spoilers channel {trial.spoilers_channel_id}: {e}")
+                cleanup.append(f"could not fetch spoilers channel: {e}")
+            else:
                 try:
                     await ch.delete(reason="Trial start rollback")
                     cleanup.append("spoilers channel deleted")
                 except Exception as e:
+                    logging.error(f"Partial rollback trial '{trial.display_name}': could not delete spoilers channel {trial.spoilers_channel_id}: {e}")
                     cleanup.append(f"could not delete spoilers channel: {e}")
-            else:
-                cleanup.append("spoilers channel not found (may have been deleted already)")
             trial.spoilers_channel_id = None
 
         if trial.finisher_role_id:
@@ -4032,8 +4072,10 @@ class TrialPartialStartView(nextcord.ui.View):
                     await role.delete(reason="Trial start rollback")
                     cleanup.append("finisher role deleted")
                 except Exception as e:
+                    logging.error(f"Partial rollback trial '{trial.display_name}': could not delete finisher role {trial.finisher_role_id}: {e}")
                     cleanup.append(f"could not delete finisher role: {e}")
             else:
+                logging.warning(f"Partial rollback trial '{trial.display_name}': finisher role {trial.finisher_role_id} not found in cache")
                 cleanup.append("finisher role not found (may have been deleted already)")
             trial.finisher_role_id = None
 
@@ -4285,14 +4327,13 @@ class TrialStartFlow:
             name = type_obj.name if type_obj else f"ID {selected_id}"
             if check_category_assignment_exists(selected_id, self.category.id):
                 delete_category_assignment(selected_id, self.category.id)
-                action = "Removed"
+                view = TrialExtraInfoYesNoView(self, "")
+                await send_message(interaction, f"Removed **{name}**.", view=view)
             else:
                 assignment = AsyncRaceExtraInfoAssignment(
                     info_type_id=selected_id, category_id=self.category.id)
-                assignment.save()
-                action = "Added"
-            view = TrialExtraInfoYesNoView(self, "")
-            await send_message(interaction, f"{action} **{name}**.", view=view)
+                view = TrialExtraInfoRequiredView(self, assignment, name)
+                await send_message(interaction, f"Should **{name}** be required or optional?", view=view)
 
     async def _on_extra_info_name_submit(self, interaction, modal):
         self._pending_info_name = ""
@@ -4318,11 +4359,10 @@ class TrialStartFlow:
             info_type.save()
             assignment = AsyncRaceExtraInfoAssignment(
                 info_type_id=info_type.id, category_id=self.category.id)
-            assignment.save()
-            view = TrialExtraInfoYesNoView(self, "")
+            view = TrialExtraInfoRequiredView(self, assignment, info_type.name)
             await send_message(
                 interaction,
-                f"Created and added **{info_type.name}**.",
+                f"Created **{info_type.name}**. Should it be required or optional?",
                 view=view)
         except Exception as e:
             view = TrialExtraInfoYesNoView(self, "")
@@ -4354,12 +4394,14 @@ class TrialStartFlow:
 
     # ------------------------------------------------------------------------------------------------------------------
     async def _rollback(self, interaction, error_msg):
+        logging.error(f"Trial start rollback triggered for '{self.trial.display_name}': {error_msg}")
         cleanup = []
         if self.general_channel:
             try:
                 await self.general_channel.delete(reason="Trial start failed/cancelled")
                 cleanup.append("general channel deleted")
             except Exception as e:
+                logging.error(f"Trial start rollback '{self.trial.display_name}': could not delete general channel: {e}")
                 cleanup.append(f"could not delete general channel: {e}")
             self.general_channel = None
         if self.spoilers_channel:
@@ -4367,6 +4409,7 @@ class TrialStartFlow:
                 await self.spoilers_channel.delete(reason="Trial start failed/cancelled")
                 cleanup.append("spoilers channel deleted")
             except Exception as e:
+                logging.error(f"Trial start rollback '{self.trial.display_name}': could not delete spoilers channel: {e}")
                 cleanup.append(f"could not delete spoilers channel: {e}")
             self.spoilers_channel = None
         if self.finisher_role:
@@ -4374,6 +4417,7 @@ class TrialStartFlow:
                 await self.finisher_role.delete(reason="Trial start failed/cancelled")
                 cleanup.append("finisher role deleted")
             except Exception as e:
+                logging.error(f"Trial start rollback '{self.trial.display_name}': could not delete finisher role: {e}")
                 cleanup.append(f"could not delete finisher role: {e}")
             self.finisher_role = None
         if self.category:
@@ -4383,6 +4427,7 @@ class TrialStartFlow:
                 self.category.delete_instance()
                 cleanup.append("bot category deleted")
             except Exception as e:
+                logging.error(f"Trial start rollback '{self.trial.display_name}': could not delete bot category: {e}")
                 cleanup.append(f"could not delete bot category: {e}")
             self.category = None
 
@@ -4614,15 +4659,22 @@ class ArchiveTrialView(nextcord.ui.View):
         if channels:
             for cid, label in [(self.trial.spoilers_channel_id, "spoilers"), (self.trial.general_channel_id, "general")]:
                 if cid:
-                    ch = self.discord_server.get_channel(cid)
-                    if ch:
-                        try:
-                            await ch.delete(reason=f"Trial archived: {self.trial.display_name}")
-                            results.append(f"{label.capitalize()} channel deleted")
-                        except Exception as e:
-                            results.append(f"Warning: could not delete {label} channel: {e}")
-                    else:
+                    try:
+                        ch = await self.discord_server.fetch_channel(cid)
+                    except nextcord.errors.NotFound:
+                        logging.warning(f"Archive trial '{self.trial.display_name}': {label} channel {cid} not found in Discord (already deleted?)")
                         results.append(f"{label.capitalize()} channel not found (already deleted?)")
+                        continue
+                    except Exception as e:
+                        logging.error(f"Archive trial '{self.trial.display_name}': could not fetch {label} channel {cid}: {e}")
+                        results.append(f"Warning: could not fetch {label} channel: {e}")
+                        continue
+                    try:
+                        await ch.delete(reason=f"Trial archived: {self.trial.display_name}")
+                        results.append(f"{label.capitalize()} channel deleted")
+                    except Exception as e:
+                        logging.error(f"Archive trial '{self.trial.display_name}': could not delete {label} channel {cid}: {e}")
+                        results.append(f"Warning: could not delete {label} channel: {e}")
 
         if roles:
             for rid, label in [(self.trial.finisher_role_id, "finisher"), (self.trial.participant_role_id, "participant")]:
@@ -4633,8 +4685,10 @@ class ArchiveTrialView(nextcord.ui.View):
                             await role.delete(reason=f"Trial archived: {self.trial.display_name}")
                             results.append(f"{label.capitalize()} role deleted")
                         except Exception as e:
+                            logging.error(f"Archive trial '{self.trial.display_name}': could not delete {label} role {rid}: {e}")
                             results.append(f"Warning: could not delete {label} role: {e}")
                     else:
+                        logging.warning(f"Archive trial '{self.trial.display_name}': {label} role {rid} not found in cache (already deleted?)")
                         results.append(f"{label.capitalize()} role not found (already deleted?)")
 
         if self.trial.category_id_id:
@@ -4644,7 +4698,10 @@ class ArchiveTrialView(nextcord.ui.View):
                 cat.save()
                 results.append(f"Bot category '{cat.name}' deactivated")
             except Exception as e:
+                logging.error(f"Archive trial '{self.trial.display_name}': could not deactivate bot category {self.trial.category_id_id}: {e}")
                 results.append(f"Warning: could not deactivate bot category: {e}")
+            delete_messages_by_category_id(self.trial.category_id_id)
+            results.append("Pinned race messages cleared from DB")
 
         self.trial.state = TrialState.Archived
         self.trial.save()

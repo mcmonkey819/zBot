@@ -1013,6 +1013,10 @@ def get_messages_by_category_id(category_id):
     return AsyncRaceMessage.select().where(AsyncRaceMessage.category_id == category_id)
 
 ########################################################################################################################
+def delete_messages_by_category_id(category_id):
+    AsyncRaceMessage.delete().where(AsyncRaceMessage.category_id == category_id).execute()
+
+########################################################################################################################
 def save_restore_state(server_id, channel_id, message_type, category_id=None, race_id=None):
     try:
         StartupRestoreState.create(
