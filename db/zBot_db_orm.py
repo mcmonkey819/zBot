@@ -220,6 +220,7 @@ class Trial(Model):
     organizer_user_id       = IntegerField(null=True)
     min_signups             = IntegerField(null=True)
     min_signups_notified    = BooleanField(default=False)
+    leaderboard_channel_id  = IntegerField(null=True)
 
     class Meta:
         table_name = 'trials'

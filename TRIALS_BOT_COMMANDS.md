@@ -128,6 +128,13 @@ appears; otherwise the bot proceeds directly. The flow:
    | **Disable Edit Timeout** | Normally racers have a 4-hour window to edit their submission. Enabling this removes the time limit. |
    | **Disable Auto-Forfeit** | Normally racers who have not submitted when a race closes are auto-forfeited. Enabling this skips auto-forfeit. Defaults to **ON** for Trials. |
 
+   If **Post Leaderboard** is enabled, you will be asked whether to **Create New Channel** or
+   **Use Existing Channel** for the leaderboard. Creating a new channel lets the bot manage it
+   automatically; using an existing channel posts to it without taking ownership. For **Most Recent
+   Race** leaderboard type, a new channel is created restricted to the finisher role (same access
+   as the spoilers channel). The bot posts an initial placeholder message immediately and updates it
+   after each race completes.
+
 5. **Extra info fields** — optionally assign additional submission fields (e.g. VoD link, attempt
    count). Click **Edit Extra Info** to open the selection menu:
    - Existing types can be selected from the dropdown. Fields already assigned show a ✅.
@@ -172,6 +179,7 @@ Run `/async_mod start_trial_race`. The flow:
    - **Race Description** — label for this week's race (e.g. `Week 3 — Open World Keysanity`)
    - **Seed** — the seed number, link, or identifier
    - **Hash** *(optional)* — hash string for the seed
+   - **Additional Instructions** *(optional)* — extra text shown to racers in the race info message (e.g. rule clarifications or special notes for the week)
 
 5. The bot creates the race, auto-assigns every current participant role holder, activates the race,
    and posts the race info message to the general channel. The finisher role is
@@ -209,7 +217,7 @@ trial (channels, roles, and bot category) and presents four cleanup options:
 |---|---|
 | **Category Only** | Deactivates the bot race category; leaves channels and roles untouched |
 | **Remove Roles & Category** | Deletes participant and finisher roles; deactivates category |
-| **Remove Channels & Category** | Deletes general and spoilers channels; deactivates category |
+| **Remove Channels & Category** | Deletes general, spoilers, and bot-created leaderboard channels; deactivates category |
 | **Remove All** | Deletes channels and roles; deactivates category |
 
 The bot race category is always **deactivated** (never deleted), preserving the full race history,

@@ -3950,7 +3950,16 @@ class TrialCategorySettingsView(nextcord.ui.View):
 
     async def _confirm(self, interaction):
         await interaction.response.defer(ephemeral=True)
-        await self.flow.on_settings_confirmed(interaction)
+        if self.flow.post_leaderboard:
+            lb_type_str = "Most Recent Race (restricted to finishers)" if self.flow.leaderboard_type == RaceLeaderboardType.RecentRace else "Points (open to all)"
+            view = TrialLeaderboardChannelView(self.flow)
+            await send_message(
+                interaction,
+                f"Leaderboard type: **{lb_type_str}**\n"
+                f"Create a new dedicated leaderboard channel, or use an existing one?",
+                view=view)
+        else:
+            await self.flow.on_settings_confirmed(interaction)
         self.stop()
 
     def _build_embed(self):
@@ -3964,6 +3973,44 @@ class TrialCategorySettingsView(nextcord.ui.View):
         embed.add_field(name="Disable Edit Timeout",  value="✅" if f.disable_edit_time_limit else "❌",    inline=True)
         embed.add_field(name="Disable Auto-Forfeit",  value="✅" if f.disable_auto_forfeit else "❌",       inline=True)
         return embed
+
+########################################################################################################################
+class TrialLeaderboardChannelView(nextcord.ui.View):
+    """Asks whether to create a new leaderboard channel or link an existing one."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+
+    @nextcord.ui.button(label="Create New Channel", style=nextcord.ButtonStyle.green)
+    async def create_new(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        self.flow.leaderboard_channel_choice = 'create'
+        await self.flow.on_settings_confirmed(interaction)
+        self.stop()
+
+    @nextcord.ui.button(label="Use Existing Channel", style=nextcord.ButtonStyle.blurple)
+    async def use_existing(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        view = TrialLeaderboardChannelSelectView(self.flow)
+        await send_message(interaction, "Select the channel to post the leaderboard in:", view=view)
+        self.stop()
+
+########################################################################################################################
+class TrialLeaderboardChannelSelectView(nextcord.ui.View):
+    """Channel select for picking an existing leaderboard channel."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+
+    @nextcord.ui.channel_select(placeholder="Select leaderboard channel...",
+                                channel_types=[nextcord.ChannelType.text])
+    async def channel_select(self, select, interaction):
+        await interaction.response.defer(ephemeral=True)
+        self.flow.leaderboard_channel_choice = select.values[0].id
+        await self.flow.on_settings_confirmed(interaction)
+        self.stop()
 
 ########################################################################################################################
 class TrialExtraInfoRequiredView(nextcord.ui.View):
@@ -4090,6 +4137,24 @@ class TrialPartialStartView(nextcord.ui.View):
                 cleanup.append(f"could not delete bot category: {e}")
             trial.category_id = None
 
+        if trial.leaderboard_channel_id:
+            try:
+                ch = await self.discord_server.fetch_channel(trial.leaderboard_channel_id)
+            except nextcord.errors.NotFound:
+                logging.warning(f"Partial rollback trial '{trial.display_name}': leaderboard channel {trial.leaderboard_channel_id} not found in Discord")
+                cleanup.append("leaderboard channel not found (may have been deleted already)")
+            except Exception as e:
+                logging.error(f"Partial rollback trial '{trial.display_name}': could not fetch leaderboard channel {trial.leaderboard_channel_id}: {e}")
+                cleanup.append(f"could not fetch leaderboard channel: {e}")
+            else:
+                try:
+                    await ch.delete(reason="Trial start rollback")
+                    cleanup.append("leaderboard channel deleted")
+                except Exception as e:
+                    logging.error(f"Partial rollback trial '{trial.display_name}': could not delete leaderboard channel {trial.leaderboard_channel_id}: {e}")
+                    cleanup.append(f"could not delete leaderboard channel: {e}")
+            trial.leaderboard_channel_id = None
+
         trial.save()
         detail = "\n".join(f"• {c}" for c in cleanup) if cleanup else "• Nothing to clean up"
         await send_message(interaction, f"Rollback complete:\n{detail}\n\nRun `/async_mod start_trial` again to restart.")
@@ -4104,6 +4169,7 @@ class TrialPartialStartView(nextcord.ui.View):
         general_channel  = self.discord_server.get_channel(trial.general_channel_id)  if trial.general_channel_id  else None
         spoilers_channel = self.discord_server.get_channel(trial.spoilers_channel_id) if trial.spoilers_channel_id else None
         finisher_role    = self.discord_server.get_role(trial.finisher_role_id)        if trial.finisher_role_id    else None
+        leaderboard_channel = self.discord_server.get_channel(trial.leaderboard_channel_id) if trial.leaderboard_channel_id else None
         category = None
         if trial.category_id:
             try:
@@ -4121,10 +4187,11 @@ class TrialPartialStartView(nextcord.ui.View):
             return
 
         flow = TrialStartFlow(trial, self.db_server, self.discord_server)
-        flow.general_channel  = general_channel
-        flow.spoilers_channel = spoilers_channel
-        flow.finisher_role    = finisher_role
-        flow.category         = category
+        flow.general_channel     = general_channel
+        flow.spoilers_channel    = spoilers_channel
+        flow.finisher_role       = finisher_role
+        flow.category            = category
+        flow.leaderboard_channel = leaderboard_channel
 
         view = TrialExtraInfoYesNoView(flow, "")
         await send_message(interaction, "Resuming trial setup — add extra submission fields beyond Finish Time and Comment?", view=view)
@@ -4151,10 +4218,12 @@ class TrialStartFlow:
         self.disable_edit_time_limit  = False
         self.disable_auto_forfeit     = True
         # Created objects (tracked for rollback)
-        self.general_channel  = None
-        self.spoilers_channel = None
-        self.finisher_role    = None
-        self.category         = None
+        self.general_channel         = None
+        self.spoilers_channel        = None
+        self.finisher_role           = None
+        self.category                = None
+        self.leaderboard_channel     = None
+        self.leaderboard_channel_choice = None  # 'create' or int channel_id
 
     # ------------------------------------------------------------------------------------------------------------------
     async def start(self, interaction):
@@ -4287,6 +4356,41 @@ class TrialStartFlow:
             except Exception as e:
                 logging.warning(f"Could not create TrueSkill params for trial category: {e}")
 
+        # Create or link leaderboard channel (if leaderboard posting is enabled)
+        if self.post_leaderboard and self.leaderboard_channel_choice is not None:
+            if self.leaderboard_channel_choice == 'create':
+                try:
+                    lb_name = f"{self.general_channel_name}-leaderboard"
+                    if self.leaderboard_type == RaceLeaderboardType.RecentRace:
+                        lb_overwrites = {
+                            self.discord_server.default_role: nextcord.PermissionOverwrite(read_messages=False),
+                            self.discord_server.me: nextcord.PermissionOverwrite(read_messages=True),
+                            self.finisher_role: nextcord.PermissionOverwrite(read_messages=True),
+                        }
+                        if admin_role:
+                            lb_overwrites[admin_role] = nextcord.PermissionOverwrite(read_messages=True)
+                    else:
+                        lb_overwrites = {}
+                    self.leaderboard_channel = await self.discord_server.create_text_channel(
+                        name=lb_name,
+                        category=discord_category,
+                        overwrites=lb_overwrites,
+                        reason=f"Trial leaderboard: {self.trial.display_name}")
+                    self.trial.leaderboard_channel_id = self.leaderboard_channel.id
+                    self.trial.save()
+                except Exception as e:
+                    await self._rollback(interaction, f"Could not create leaderboard channel: {e}")
+                    return
+            else:
+                # User selected an existing channel — resolve it but do NOT store the ID on trial
+                self.leaderboard_channel = self.discord_server.get_channel(self.leaderboard_channel_choice)
+
+            if self.leaderboard_channel:
+                try:
+                    await post_channel_category_leaderboard(interaction, self.leaderboard_channel, self.category.id, interaction.client)
+                except Exception as e:
+                    logging.warning(f"Could not post initial leaderboard for trial '{self.trial.display_name}': {e}")
+
         # Start extra info loop
         view = TrialExtraInfoYesNoView(self, "")
         await send_message(
@@ -4384,13 +4488,15 @@ class TrialStartFlow:
             await send_message(interaction, f"**ERROR** Could not update trial record: {e}")
             return
 
+        lb_line = f"\n• Leaderboard: <#{self.trial.leaderboard_channel_id}>" if self.trial.leaderboard_channel_id else ""
         await send_message(
             interaction,
             f"Trial **{self.trial.display_name}** is now Active!\n"
             f"• General: <#{self.general_channel.id}>\n"
             f"• Spoilers: <#{self.spoilers_channel.id}>\n"
             f"• Finisher role: {self.finisher_role.mention}\n"
-            f"• Bot category ID: {self.category.id}")
+            f"• Bot category ID: {self.category.id}"
+            f"{lb_line}")
 
     # ------------------------------------------------------------------------------------------------------------------
     async def _rollback(self, interaction, error_msg):
@@ -4430,12 +4536,21 @@ class TrialStartFlow:
                 logging.error(f"Trial start rollback '{self.trial.display_name}': could not delete bot category: {e}")
                 cleanup.append(f"could not delete bot category: {e}")
             self.category = None
+        if self.leaderboard_channel and self.trial.leaderboard_channel_id:
+            try:
+                await self.leaderboard_channel.delete(reason="Trial start failed/cancelled")
+                cleanup.append("leaderboard channel deleted")
+            except Exception as e:
+                logging.error(f"Trial start rollback '{self.trial.display_name}': could not delete leaderboard channel: {e}")
+                cleanup.append(f"could not delete leaderboard channel: {e}")
+            self.leaderboard_channel = None
 
         # Clear partial IDs from trial record so a retry starts clean
-        self.trial.general_channel_id  = None
-        self.trial.spoilers_channel_id = None
-        self.trial.finisher_role_id    = None
-        self.trial.category_id         = None
+        self.trial.general_channel_id     = None
+        self.trial.spoilers_channel_id    = None
+        self.trial.finisher_role_id       = None
+        self.trial.category_id            = None
+        self.trial.leaderboard_channel_id = None
         self.trial.save()
 
         detail = "\n".join(f"• {c}" for c in cleanup)
@@ -4487,6 +4602,10 @@ class TrialRaceDetailsModal(zModal):
                 label="Seed", required=True, custom_id='seed', row=2),
             'hash': nextcord.ui.TextInput(
                 label="Hash (optional)", required=False, custom_id='hash', row=3),
+            'instructions': nextcord.ui.TextInput(
+                label="Additional Instructions (optional)", required=False,
+                custom_id='instructions', row=4,
+                style=nextcord.TextInputStyle.paragraph),
         }
         super().__init__(fields, submit_handler, "Race Details")
 
@@ -4584,6 +4703,7 @@ class TrialStartRaceFlow:
         self.description    = ""
         self.seed           = ""
         self.hash           = None
+        self.instructions   = None
 
     async def start(self, interaction):
         prev_text = ""
@@ -4630,9 +4750,10 @@ class TrialStartRaceFlow:
     async def _on_race_details_submit(self, interaction, modal):
         for child in modal.children:
             match child.custom_id:
-                case 'description': self.description = child.value.strip()
-                case 'seed':        self.seed        = child.value.strip()
-                case 'hash':        self.hash        = child.value.strip() or None
+                case 'description':  self.description  = child.value.strip()
+                case 'seed':         self.seed         = child.value.strip()
+                case 'hash':         self.hash         = child.value.strip() or None
+                case 'instructions': self.instructions = child.value.strip() or None
         await interaction.response.defer(ephemeral=True)
         await self._create_and_activate(interaction)
 
@@ -4641,12 +4762,13 @@ class TrialStartRaceFlow:
         race = AsyncRace()
         race.server_id            = self.db_server.id
         race.create_datetime      = zBot_now()
-        race.seed                 = self.seed
-        race.hash                 = self.hash
-        race.description          = self.description
-        race.category_id          = self.trial.category_id_id
-        race.state                = RaceState.Inactive
-        race.disable_auto_forfeit = self.trial.category_id.disable_auto_forfeit
+        race.seed                    = self.seed
+        race.hash                    = self.hash
+        race.description             = self.description
+        race.additional_instructions = self.instructions
+        race.category_id             = self.trial.category_id_id
+        race.state                   = RaceState.Inactive
+        race.disable_auto_forfeit    = self.trial.category_id.disable_auto_forfeit
         race.save()
 
         # Copy extra info assignments from category
@@ -4706,6 +4828,8 @@ async def send_archive_trial_prompt(interaction, trial, discord_server, trial_ca
         ch_lines.append(f"<#{trial.general_channel_id}> (general)")
     if trial.spoilers_channel_id:
         ch_lines.append(f"<#{trial.spoilers_channel_id}> (spoilers)")
+    if trial.leaderboard_channel_id:
+        ch_lines.append(f"<#{trial.leaderboard_channel_id}> (leaderboard)")
     embed.add_field(name="Channels", value="\n".join(ch_lines) if ch_lines else "None", inline=True)
 
     role_lines = []
@@ -4763,7 +4887,12 @@ class ArchiveTrialView(nextcord.ui.View):
         results = []
 
         if channels:
-            for cid, label in [(self.trial.spoilers_channel_id, "spoilers"), (self.trial.general_channel_id, "general")]:
+            channel_ids = [
+                (self.trial.spoilers_channel_id, "spoilers"),
+                (self.trial.general_channel_id, "general"),
+                (self.trial.leaderboard_channel_id, "leaderboard"),
+            ]
+            for cid, label in channel_ids:
                 if cid:
                     try:
                         ch = await self.discord_server.fetch_channel(cid)

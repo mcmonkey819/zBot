@@ -80,13 +80,26 @@ def run(db_path: str) -> None:
                 "current_race_id"          INTEGER REFERENCES "async_races" ("id"),
                 "organizer_user_id"        INTEGER,
                 "min_signups"              INTEGER,
-                "min_signups_notified"     INTEGER NOT NULL DEFAULT 0
+                "min_signups_notified"     INTEGER NOT NULL DEFAULT 0,
+                "leaderboard_channel_id"   INTEGER
             )
         """)
         con.commit()
         print(f"Created trials table in {db_path}.")
     else:
         print(f"trials table already exists in {db_path} — skipping.")
+
+    # -------------------------------------------------------------------------
+    # trials — add leaderboard_channel_id column (if missing)
+    # -------------------------------------------------------------------------
+    cur.execute("PRAGMA table_info(trials)")
+    trial_columns = [row[1] for row in cur.fetchall()]
+    if "leaderboard_channel_id" not in trial_columns:
+        cur.execute("ALTER TABLE trials ADD COLUMN leaderboard_channel_id INTEGER")
+        con.commit()
+        print(f"Added leaderboard_channel_id column to trials in {db_path}.")
+    else:
+        print(f"trials.leaderboard_channel_id already exists in {db_path} — skipping.")
 
     con.close()
 
