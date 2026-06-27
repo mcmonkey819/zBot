@@ -406,12 +406,11 @@ A simple DB query on submission; no caching needed.
 
 ## Post-Implementation Gaps & Enhancements
 
-Identified after initial implementation and testing. All three items are unimplemented as of the
-`feature/trials-phase0` merge.
+All three items implemented, tested, and merged to main.
 
 ---
 
-### Gap 1 — Reaction Signup During Active Race
+### Gap 1 — Reaction Signup During Active Race ✅ COMPLETE
 
 **Problem:** `on_raw_reaction_add_handler` assigns the participant role when a user reacts to the
 announcement. However, if a race is already active and `accept_signups` is True (signups kept open
@@ -426,7 +425,7 @@ on the next `start_trial_race` call but miss the current one.
 
 ---
 
-### Gap 2 — Additional Instructions Field Missing from Trial Race Details Modal
+### Gap 2 — Additional Instructions Field Missing from Trial Race Details Modal ✅ COMPLETE
 
 **Problem:** `TrialRaceDetailsModal` has three fields (description, seed, hash) but the standard
 race creation flow also includes an "Additional Instructions" optional field. Trial races have no
@@ -444,7 +443,7 @@ in Step 4 of `TRIALS_BOT_COMMANDS.md`.
 
 ---
 
-### Enhancement — Leaderboard Channel Selection in `start_trial`
+### Enhancement — Leaderboard Channel Selection in `start_trial` ✅ COMPLETE
 
 **Problem:** `start_trial` lets the organizer enable a leaderboard via the category settings, but
 provides no way to set the leaderboard channel. Currently the organizer must set this manually

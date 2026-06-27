@@ -103,6 +103,15 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         except Exception as e:
             logging.warning(f"Failed to add participant role to {payload.user_id}: {e}")
             return
+        try:
+            current_race_id = Trial.get_by_id(trial.id).current_race_id_id
+        except Exception:
+            current_race_id = None
+        if current_race_id is not None:
+            try:
+                assign_racer(member.id, current_race_id)
+            except Exception as e:
+                logging.warning(f"Failed to assign trial racer {payload.user_id} to race {current_race_id}: {e}")
         if trial.min_signups is not None and not trial.min_signups_notified:
             count = len(role.members)
             if count >= trial.min_signups:
