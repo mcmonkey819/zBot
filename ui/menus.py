@@ -3894,13 +3894,13 @@ class TrialCategorySettingsView(nextcord.ui.View):
             b.callback = cb
             self.add_item(b)
 
-        # Row 0: Post leaderboard toggle; LB type toggle (conditional on lb_on + points scoring)
+        # Row 0: Post leaderboard toggle; LB type toggle (shown whenever leaderboard is enabled)
         _btn(
             label=f"Post Leaderboard: {'✅' if lb_on else '❌'}",
             style=nextcord.ButtonStyle.green if lb_on else nextcord.ButtonStyle.grey,
             row=0, cb=self._toggle_post_lb)
 
-        if lb_on and f.points_type != PointsType.NoScoring:
+        if lb_on:
             lb_type_str = "Points" if f.leaderboard_type == RaceLeaderboardType.Points else "Recent Race"
             _btn(label=f"LB Type: {lb_type_str}", style=nextcord.ButtonStyle.blurple, row=0, cb=self._toggle_lb_type)
 
@@ -4946,4 +4946,9 @@ class ArchiveTrialView(nextcord.ui.View):
         if self.trial.announcement_message_id in self.trial_cache:
             del self.trial_cache[self.trial.announcement_message_id]
 
-        await send_message(interaction, "Archive complete:\n" + "\n".join(f"• {r}" for r in results))
+        summary = "Archive complete:\n" + "\n".join(f"• {r}" for r in results)
+        try:
+            await send_message(interaction, summary)
+        except nextcord.errors.HTTPException as e:
+            # Interaction channel may have been deleted — archive succeeded, log the summary
+            logging.info(f"Archive of '{self.trial.display_name}' complete (could not send response, channel likely deleted): {summary}")
