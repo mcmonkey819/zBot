@@ -3320,3 +3320,1501 @@ RacerInfoButtonMenuItems = [
     MenuItem(EyesEmoji          , racer_info_view_other_racer    , 'racer_info_view_other_racer'    , 'View Another Racer'  , RacerViewOtherRacerDescription),
     MenuItem(HelpEmoji          , show_racer_info_help           , 'show_racer_info_help'           , 'Racer Command Help'  , RacerHelpDescription),
 ]
+
+########################################################################################################################
+class ServerConfigView(nextcord.ui.View):
+    """Ephemeral view for /async_admin server_config. Lets admins update server-level settings."""
+
+    def __init__(self, db_server, discord_server, original_interaction):
+        super().__init__(timeout=300)
+        self.db_server = db_server
+        self.discord_server = discord_server
+        self.original_interaction = original_interaction
+        # Initialise toggle button labels/styles to reflect current DB state
+        self.toggle_vc.label = f"VC Creation: {'ON' if db_server.enable_vc_create else 'OFF'}"
+        self.toggle_vc.style = nextcord.ButtonStyle.green if db_server.enable_vc_create else nextcord.ButtonStyle.grey
+        self.toggle_trials.label = f"Trials: {'Enabled' if db_server.trials_enabled else 'Disabled'}"
+        self.toggle_trials.style = nextcord.ButtonStyle.green if db_server.trials_enabled else nextcord.ButtonStyle.grey
+
+    def build_embed(self):
+        embed = nextcord.Embed(title="Server Configuration", color=nextcord.Colour.blurple())
+
+        if self.db_server.admin_role_id:
+            role = self.discord_server.get_role(self.db_server.admin_role_id)
+            embed.add_field(name="Admin Role",
+                            value=f"✅ {role.name}" if role else f"✅ ID {self.db_server.admin_role_id} (not found)",
+                            inline=True)
+        else:
+            embed.add_field(name="Admin Role", value="❌ Not set", inline=True)
+
+        if self.db_server.mod_role_id:
+            role = self.discord_server.get_role(self.db_server.mod_role_id)
+            embed.add_field(name="Mod Role",
+                            value=f"✅ {role.name}" if role else f"✅ ID {self.db_server.mod_role_id} (not found)",
+                            inline=True)
+        else:
+            embed.add_field(name="Mod Role", value="❌ Not set", inline=True)
+
+        embed.add_field(name="VC Creation",
+                        value="✅ Enabled" if self.db_server.enable_vc_create else "❌ Disabled",
+                        inline=True)
+        embed.add_field(name="Trials",
+                        value="✅ Enabled" if self.db_server.trials_enabled else "❌ Disabled",
+                        inline=True)
+
+        if self.db_server.trials_enabled:
+            if self.db_server.trials_announcement_channel_id:
+                ch = self.discord_server.get_channel(self.db_server.trials_announcement_channel_id)
+                ch_val = f"✅ #{ch.name}" if ch else f"✅ ID {self.db_server.trials_announcement_channel_id} (not found)"
+            else:
+                ch_val = "❌ Not set"
+            embed.add_field(name="Trial Announcements Channel", value=ch_val, inline=True)
+
+            if self.db_server.trials_discord_category_id:
+                cat = self.discord_server.get_channel(self.db_server.trials_discord_category_id)
+                cat_val = f"✅ {cat.name}" if cat else f"✅ ID {self.db_server.trials_discord_category_id} (not found)"
+            else:
+                cat_val = "❌ Not set"
+            embed.add_field(name="Trials Channel Category", value=cat_val, inline=True)
+
+        return embed
+
+    async def _refresh(self):
+        await self.original_interaction.edit_original_message(embed=self.build_embed(), view=self)
+
+    async def on_timeout(self):
+        try:
+            await self.original_interaction.edit_original_message(view=None)
+        except Exception:
+            pass
+
+    @nextcord.ui.button(label="Set Admin Role", style=nextcord.ButtonStyle.blurple, row=0)
+    async def set_admin_role(self, button, interaction):
+        role_list = get_role_select_list(self.discord_server)
+        view = zSingleSelectView(role_list, None, "Select Admin Role...")
+        await interaction.response.send_message("Select the admin role:", view=view, ephemeral=True)
+        await view.wait()
+        role_id = view.get_selected_value()
+        if role_id is not None and role_id != 0:
+            self.db_server.admin_role_id = role_id
+            self.db_server.save()
+        await self._refresh()
+
+    @nextcord.ui.button(label="Set Mod Role", style=nextcord.ButtonStyle.blurple, row=0)
+    async def set_mod_role(self, button, interaction):
+        role_list = get_role_select_list(self.discord_server)
+        view = zSingleSelectView(role_list, None, "Select Mod Role...")
+        await interaction.response.send_message("Select the mod role:", view=view, ephemeral=True)
+        await view.wait()
+        role_id = view.get_selected_value()
+        if role_id is not None and role_id != 0:
+            self.db_server.mod_role_id = role_id
+            self.db_server.save()
+        await self._refresh()
+
+    @nextcord.ui.button(label="VC Creation: OFF", style=nextcord.ButtonStyle.grey, row=1)
+    async def toggle_vc(self, button, interaction):
+        self.db_server.enable_vc_create = not self.db_server.enable_vc_create
+        self.db_server.save()
+        button.label = f"VC Creation: {'ON' if self.db_server.enable_vc_create else 'OFF'}"
+        button.style = nextcord.ButtonStyle.green if self.db_server.enable_vc_create else nextcord.ButtonStyle.grey
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @nextcord.ui.button(label="Trials: Disabled", style=nextcord.ButtonStyle.grey, row=1)
+    async def toggle_trials(self, button, interaction):
+        self.db_server.trials_enabled = not self.db_server.trials_enabled
+        self.db_server.save()
+        button.label = f"Trials: {'Enabled' if self.db_server.trials_enabled else 'Disabled'}"
+        button.style = nextcord.ButtonStyle.green if self.db_server.trials_enabled else nextcord.ButtonStyle.grey
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @nextcord.ui.button(label="Set Announcement Channel", style=nextcord.ButtonStyle.blurple, row=2)
+    async def set_announcement_channel(self, button, interaction):
+        if not self.db_server.trials_enabled:
+            await interaction.response.send_message("Enable Trials first.", ephemeral=True)
+            return
+        channel_list = await get_permitted_channel_select_list(interaction.client.user.id, self.discord_server)
+        view = zSingleSelectView(channel_list, None, "Select Announcement Channel...")
+        await interaction.response.send_message("Select the trial announcements channel:", view=view, ephemeral=True)
+        await view.wait()
+        channel_id = view.get_selected_value()
+        if channel_id is not None and channel_id != 0:
+            self.db_server.trials_announcement_channel_id = channel_id
+            self.db_server.save()
+        await self._refresh()
+
+    @nextcord.ui.button(label="Set Trials Category", style=nextcord.ButtonStyle.blurple, row=2)
+    async def set_trials_category(self, button, interaction):
+        if not self.db_server.trials_enabled:
+            await interaction.response.send_message("Enable Trials first.", ephemeral=True)
+            return
+        cat_list = [nextcord.SelectOption(label=c.name, value=c.id, description=c.name)
+                    for c in self.discord_server.categories]
+        if not cat_list:
+            await interaction.response.send_message("No Discord channel categories found in this server.", ephemeral=True)
+            return
+        view = zSingleSelectView(cat_list, None, "Select Trials Channel Category...")
+        await interaction.response.send_message("Select the Discord category for trial channels:", view=view, ephemeral=True)
+        await view.wait()
+        cat_id = view.get_selected_value()
+        if cat_id is not None:
+            self.db_server.trials_discord_category_id = cat_id
+            self.db_server.save()
+        await self._refresh()
+
+    @nextcord.ui.button(label="Done", style=nextcord.ButtonStyle.green, row=4)
+    async def done(self, button, interaction):
+        await interaction.response.edit_message(view=None)
+        self.stop()
+
+########################################################################################################################
+# TRIAL ANNOUNCEMENT FLOW
+########################################################################################################################
+
+########################################################################################################################
+class TrialDetailsModal(zModal):
+    """Single modal: trial name, description, optional announcement text, and min signups."""
+
+    def __init__(self, has_text, submit_handler):
+        fields = {
+            'name': nextcord.ui.TextInput(
+                label="Trial Name",
+                required=True,
+                custom_id='name',
+                placeholder="Used for role names, category name, and display",
+                row=1),
+            'short_description': nextcord.ui.TextInput(
+                label="Short Description",
+                required=False,
+                custom_id='short_description',
+                placeholder="Bot category description (~100 chars)",
+                row=2),
+            'min_signups': nextcord.ui.TextInput(
+                label="Minimum Signups to Notify Organizer",
+                required=False,
+                custom_id='min_signups',
+                placeholder="Leave blank to disable",
+                row=3),
+        }
+        if has_text:
+            fields['announcement_text'] = nextcord.ui.TextInput(
+                label="Announcement Text",
+                required=True,
+                custom_id='announcement_text',
+                style=nextcord.TextInputStyle.paragraph,
+                row=4)
+        super().__init__(fields, submit_handler, "Trial Details")
+
+########################################################################################################################
+class TrialOrganizerSelectView(nextcord.ui.View):
+    """First step of announce_trial — pick the organizer via UserSelect or skip."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+
+    def _open_details_modal(self, interaction):
+        return interaction.response.send_modal(
+            TrialDetailsModal(
+                has_text=(self.flow.existing_message_id is None),
+                submit_handler=self.flow._on_details_submit))
+
+    @nextcord.ui.user_select(placeholder="Select trial organizer...")
+    async def organizer_select(self, select, interaction):
+        self.flow.organizer_user_id = select.values[0].id
+        await self._open_details_modal(interaction)
+        self.stop()
+
+    @nextcord.ui.button(label="No Organizer", style=nextcord.ButtonStyle.grey, row=1)
+    async def skip_button(self, button, interaction):
+        self.flow.organizer_user_id = None
+        await self._open_details_modal(interaction)
+        self.stop()
+
+########################################################################################################################
+class TrialRoleNameView(nextcord.ui.View):
+    """Shows the proposed participant role name with [Edit Name] and [Create Role] buttons."""
+
+    def __init__(self, flow, proposed_name):
+        super().__init__(timeout=300)
+        self.flow = flow
+        self.current_name = proposed_name
+
+    @nextcord.ui.button(label="Edit Name", style=nextcord.ButtonStyle.blurple)
+    async def edit_name(self, button, interaction):
+        modal = zModal(
+            {'name': nextcord.ui.TextInput(
+                label="Role Name",
+                default_value=self.current_name,
+                required=True,
+                custom_id='name',
+                row=1)},
+            self._on_name_edit,
+            "Edit Role Name")
+        await interaction.response.send_modal(modal)
+
+    async def _on_name_edit(self, interaction, modal):
+        for child in modal.children:
+            if child.custom_id == 'name':
+                self.current_name = child.value
+        new_view = TrialRoleNameView(self.flow, self.current_name)
+        await send_message(
+            interaction,
+            f"Updated role name: **{self.current_name}**\nClick **Edit Name** to change or **Next** to proceed.",
+            view=new_view)
+
+    @nextcord.ui.button(label="Next", style=nextcord.ButtonStyle.green)
+    async def create_role(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self.flow.on_role_name_confirmed(interaction, self.current_name)
+        self.stop()
+
+########################################################################################################################
+class TrialAnnounceFlow:
+    """Manages the multi-step /announce_trial flow across modals and views."""
+
+    def __init__(self, db_server, discord_server, message_id, trial_cache):
+        self.db_server = db_server
+        self.discord_server = discord_server
+        self.existing_message_id = message_id  # int or None
+        self.trial_cache = trial_cache
+        # Accumulated across modals
+        self.name = None
+        self.short_description = None
+        self.announcement_text = None
+        self.organizer_user_id = None
+        self.min_signups = None
+
+    async def start(self, interaction):
+        view = TrialOrganizerSelectView(self)
+        await interaction.response.send_message(
+            "Select the trial organizer (receives a DM when the minimum signup threshold is reached):",
+            view=view,
+            ephemeral=True)
+
+    async def _on_details_submit(self, interaction, modal):
+        for child in modal.children:
+            match child.custom_id:
+                case 'name':              self.name = child.value.strip()
+                case 'short_description': self.short_description = child.value.strip()
+                case 'announcement_text': self.announcement_text = child.value.strip()
+                case 'min_signups':
+                    raw = child.value.strip()
+                    self.min_signups = int(raw) if raw.isdigit() else None
+        view = TrialRoleNameView(self, self.name)
+        await send_message(
+            interaction,
+            f"Proposed participant role name: **{self.name}**\nClick **Edit Name** to change or **Next** to proceed.",
+            view=view)
+
+    async def on_role_name_confirmed(self, interaction, role_name):
+        # Create participant role
+        try:
+            role = await self.discord_server.create_role(name=role_name, reason="Trial participant role")
+        except Exception as e:
+            await send_message(interaction, f"**ERROR** Could not create participant role: {e}")
+            return
+
+        # Post announcement message if the bot is posting it
+        announcement_message_id = self.existing_message_id
+        if announcement_message_id is None:
+            channel = self.discord_server.get_channel(self.db_server.trials_announcement_channel_id)
+            if channel is None:
+                await role.delete(reason="Trial creation failed — announcement channel not found")
+                await send_message(interaction, "**ERROR** Announcement channel not found.")
+                return
+            try:
+                msg = await channel.send(self.announcement_text)
+                announcement_message_id = msg.id
+            except Exception as e:
+                await role.delete(reason="Trial creation failed — could not post announcement")
+                await send_message(interaction, f"**ERROR** Could not post announcement: {e}")
+                return
+
+        # Save Trial record
+        trial = Trial()
+        trial.server_id = self.db_server.id
+        trial.short_name = self.name
+        trial.display_name = self.name
+        trial.short_description = self.short_description or ''
+        trial.announcement_text = self.announcement_text
+        trial.state = TrialState.Announcing
+        trial.accept_signups = True
+        trial.announcement_message_id = announcement_message_id
+        trial.announcement_channel_id = self.db_server.trials_announcement_channel_id
+        trial.participant_role_id = role.id
+        trial.organizer_user_id = self.organizer_user_id
+        trial.min_signups = self.min_signups
+        try:
+            trial.save()
+        except Exception as e:
+            await role.delete(reason="Trial creation failed — DB error")
+            await send_message(interaction, f"**ERROR** Could not save trial: {e}")
+            return
+
+        # Add to reaction cache
+        self.trial_cache[announcement_message_id] = trial
+
+        if self.existing_message_id is not None:
+            await send_message(interaction, f"Attached to existing message. Tracking reactions for **{self.name}** signups.")
+        else:
+            await send_message(interaction, f"Announcement posted. Tracking reactions for **{self.name}** signups.")
+
+########################################################################################################################
+# TRIAL CANCEL FLOW
+########################################################################################################################
+
+async def send_cancel_trial_confirm(interaction, trial, discord_server, trial_cache):
+    """Check for blockers and show the cancel confirmation view."""
+    # Hard error if any race has submissions
+    if trial.current_race_id_id is not None:
+        num_subs = get_num_submissions(trial.current_race_id_id)
+        if num_subs > 0:
+            await send_message(
+                interaction,
+                "Cannot cancel — this trial has races with submissions. "
+                "Use `/async_mod end_trial` and `/async_mod archive_trial` instead.")
+            return
+
+    embed = nextcord.Embed(
+        title=f"Cancel '{trial.display_name}'?",
+        description="This will delete the participant role and announcement message.",
+        color=nextcord.Colour.red())
+    view = CancelTrialView(trial, discord_server, trial_cache)
+    await send_message(interaction, embed=embed, view=view)
+
+########################################################################################################################
+class CancelTrialView(nextcord.ui.View):
+    def __init__(self, trial, discord_server, trial_cache):
+        super().__init__(timeout=300)
+        self.trial = trial
+        self.discord_server = discord_server
+        self.trial_cache = trial_cache
+
+    @nextcord.ui.button(label="Confirm Cancel", style=nextcord.ButtonStyle.danger)
+    async def confirm(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._do_cancel(interaction)
+        self.stop()
+
+    @nextcord.ui.button(label="Abort", style=nextcord.ButtonStyle.secondary)
+    async def abort(self, button, interaction):
+        await interaction.response.edit_message(content="Cancelled.", embed=None, view=None)
+        self.stop()
+
+    async def _do_cancel(self, interaction):
+        results = []
+        errors = []
+
+        # Delete announcement message
+        if self.trial.announcement_message_id and self.trial.announcement_channel_id:
+            channel = self.discord_server.get_channel(self.trial.announcement_channel_id)
+            if channel:
+                try:
+                    msg = await channel.fetch_message(self.trial.announcement_message_id)
+                    await msg.delete()
+                    results.append("Announcement message deleted")
+                except Exception:
+                    errors.append("Warning: Announcement message not found or already deleted")
+
+        # Remove and delete participant role
+        if self.trial.participant_role_id:
+            role = self.discord_server.get_role(self.trial.participant_role_id)
+            if role:
+                try:
+                    await role.delete(reason="Trial cancelled")
+                    results.append("Participant role deleted")
+                except Exception as e:
+                    errors.append(f"Warning: Could not delete participant role: {e}")
+
+        # Delete any associated race with no submissions (defensive; normally null in Announcing state)
+        if self.trial.current_race_id_id is not None:
+            try:
+                AsyncRaceRoster.delete().where(
+                    AsyncRaceRoster.race_id == self.trial.current_race_id_id).execute()
+                AsyncRace.delete().where(
+                    AsyncRace.id == self.trial.current_race_id_id).execute()
+                results.append("Associated race deleted")
+            except Exception as e:
+                errors.append(f"Warning: Could not delete associated race: {e}")
+
+        # Deactivate bot category if one was created (defensive; normally null in Announcing state)
+        if self.trial.category_id_id is not None:
+            try:
+                cat = AsyncRaceCategory.get_by_id(self.trial.category_id_id)
+                cat.active = False
+                cat.save()
+                results.append("Bot category deactivated")
+            except Exception as e:
+                errors.append(f"Warning: Could not deactivate category: {e}")
+
+        # Remove from reaction cache
+        if self.trial.announcement_message_id in self.trial_cache:
+            del self.trial_cache[self.trial.announcement_message_id]
+
+        # Delete Trial DB record
+        try:
+            self.trial.delete_instance()
+            results.append("Trial record deleted")
+        except Exception as e:
+            errors.append(f"**ERROR** Could not delete trial record: {e}")
+
+        summary_lines = results + errors
+        summary = "\n".join(f"• {l}" for l in summary_lines) if summary_lines else "Nothing to clean up."
+        await send_message(interaction, f"Trial cancelled.\n{summary}")
+
+########################################################################################################################
+# TRIAL END FLOW
+########################################################################################################################
+
+async def send_end_trial_confirm(interaction, trial, trial_cache):
+    race_note = ""
+    if trial.current_race_id_id is not None:
+        try:
+            race = AsyncRace.get_by_id(trial.current_race_id_id)
+            if race.state == RaceState.Active:
+                race_note = "\nThe current active race will be ended and scored."
+        except Exception:
+            pass
+
+    embed = nextcord.Embed(
+        title=f"End '{trial.display_name}'?",
+        description=f"This will mark the trial as Ended.{race_note}",
+        color=nextcord.Colour.orange())
+    view = EndTrialView(trial, trial_cache)
+    await send_message(interaction, embed=embed, view=view)
+
+########################################################################################################################
+class EndTrialView(nextcord.ui.View):
+    def __init__(self, trial, trial_cache):
+        super().__init__(timeout=300)
+        self.trial = trial
+        self.trial_cache = trial_cache
+
+    @nextcord.ui.button(label="Confirm End Trial", style=nextcord.ButtonStyle.danger)
+    async def confirm(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        results = []
+
+        # End current race if still active
+        if self.trial.current_race_id_id is not None:
+            try:
+                race = AsyncRace.get_by_id(self.trial.current_race_id_id)
+                if race.state == RaceState.Active:
+                    race.state = RaceState.Completed
+                    race.save()
+                    score_race(race)
+                    await update_race_leaderboard(interaction, race)
+                    results.append("Final race ended and scored")
+            except Exception as e:
+                results.append(f"Warning: could not end current race: {e}")
+
+        self.trial.state         = TrialState.Ended
+        self.trial.accept_signups = False
+        self.trial.save()
+        results.append(f"**{self.trial.display_name}** marked as Ended")
+
+        if self.trial.announcement_message_id in self.trial_cache:
+            del self.trial_cache[self.trial.announcement_message_id]
+            results.append("Reaction tracking stopped")
+
+        await send_message(interaction, "\n".join(f"• {r}" for r in results))
+        self.stop()
+
+    @nextcord.ui.button(label="Abort", style=nextcord.ButtonStyle.secondary)
+    async def abort(self, button, interaction):
+        await interaction.response.edit_message(content="Aborted.", embed=None, view=None)
+        self.stop()
+
+########################################################################################################################
+# TRIAL START FLOW
+########################################################################################################################
+
+class TrialChannelNamesView(nextcord.ui.View):
+    """Shows proposed general and spoilers channel names with [Edit Names] and [Create Channels] buttons."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+
+    @nextcord.ui.button(label="Edit Names", style=nextcord.ButtonStyle.blurple)
+    async def edit_names(self, button, interaction):
+        modal = zModal(
+            {
+                'general': nextcord.ui.TextInput(
+                    label="General Channel Name",
+                    default_value=self.flow.general_channel_name,
+                    required=True,
+                    custom_id='general',
+                    row=1),
+                'spoilers': nextcord.ui.TextInput(
+                    label="Spoilers Channel Name",
+                    default_value=self.flow.spoilers_channel_name,
+                    required=True,
+                    custom_id='spoilers',
+                    row=2),
+            },
+            self._on_edit,
+            "Edit Channel Names")
+        await interaction.response.send_modal(modal)
+
+    async def _on_edit(self, interaction, modal):
+        for child in modal.children:
+            match child.custom_id:
+                case 'general':  self.flow.general_channel_name  = child.value.strip().replace(' ', '-')
+                case 'spoilers': self.flow.spoilers_channel_name = child.value.strip().replace(' ', '-')
+        new_view = TrialChannelNamesView(self.flow)
+        await send_message(
+            interaction,
+            f"Updated channel names:\n• General: `#{self.flow.general_channel_name}`\n• Spoilers: `#{self.flow.spoilers_channel_name}`\n\nClick **Next** to proceed.",
+            view=new_view)
+
+    @nextcord.ui.button(label="Next", style=nextcord.ButtonStyle.green)
+    async def create_channels(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self.flow.on_channels_confirmed(interaction)
+        self.stop()
+
+########################################################################################################################
+class TrialCategorySettingsView(nextcord.ui.View):
+    """Category settings view with dynamic toggle buttons and a [Confirm Settings] button."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+        f = flow
+
+        lb_on    = f.post_leaderboard
+        mod_view = f.mod_can_view_leaderboard
+        edit_off = f.disable_edit_time_limit
+        forf_off = f.disable_auto_forfeit
+
+        def _btn(label, style, row, cb):
+            b = nextcord.ui.Button(label=label, style=style, row=row)
+            b.callback = cb
+            self.add_item(b)
+
+        # Row 0: Post leaderboard toggle; LB type toggle (conditional on lb_on + points scoring)
+        _btn(
+            label=f"Post Leaderboard: {'✅' if lb_on else '❌'}",
+            style=nextcord.ButtonStyle.green if lb_on else nextcord.ButtonStyle.grey,
+            row=0, cb=self._toggle_post_lb)
+
+        if lb_on and f.points_type != PointsType.NoScoring:
+            lb_type_str = "Points" if f.leaderboard_type == RaceLeaderboardType.Points else "Recent Race"
+            _btn(label=f"LB Type: {lb_type_str}", style=nextcord.ButtonStyle.blurple, row=0, cb=self._toggle_lb_type)
+
+        # Row 1: Three boolean toggles
+        _btn(
+            label=f"Mods View LB: {'✅' if mod_view else '❌'}",
+            style=nextcord.ButtonStyle.green if mod_view else nextcord.ButtonStyle.grey,
+            row=1, cb=self._toggle_mod_view)
+        _btn(
+            label=f"Disable Edit Timeout: {'✅' if edit_off else '❌'}",
+            style=nextcord.ButtonStyle.green if edit_off else nextcord.ButtonStyle.grey,
+            row=1, cb=self._toggle_edit_timeout)
+        _btn(
+            label=f"Disable Auto-Forfeit: {'✅' if forf_off else '❌'}",
+            style=nextcord.ButtonStyle.green if forf_off else nextcord.ButtonStyle.grey,
+            row=1, cb=self._toggle_auto_forfeit)
+
+        # Row 2: Confirm
+        _btn(label="Confirm Settings", style=nextcord.ButtonStyle.green, row=2, cb=self._confirm)
+
+    async def _refresh(self, interaction):
+        new_view = TrialCategorySettingsView(self.flow)
+        await send_message(interaction, embed=self._build_embed(), view=new_view)
+
+    async def _toggle_post_lb(self, interaction):
+        self.flow.post_leaderboard = not self.flow.post_leaderboard
+        await self._refresh(interaction)
+
+    async def _toggle_lb_type(self, interaction):
+        if self.flow.leaderboard_type == RaceLeaderboardType.Points:
+            self.flow.leaderboard_type = RaceLeaderboardType.RecentRace
+        else:
+            self.flow.leaderboard_type = RaceLeaderboardType.Points
+        await self._refresh(interaction)
+
+    async def _toggle_mod_view(self, interaction):
+        self.flow.mod_can_view_leaderboard = not self.flow.mod_can_view_leaderboard
+        await self._refresh(interaction)
+
+    async def _toggle_edit_timeout(self, interaction):
+        self.flow.disable_edit_time_limit = not self.flow.disable_edit_time_limit
+        await self._refresh(interaction)
+
+    async def _toggle_auto_forfeit(self, interaction):
+        self.flow.disable_auto_forfeit = not self.flow.disable_auto_forfeit
+        await self._refresh(interaction)
+
+    async def _confirm(self, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self.flow.on_settings_confirmed(interaction)
+        self.stop()
+
+    def _build_embed(self):
+        f = self.flow
+        embed = nextcord.Embed(title="Bot Category Settings", color=nextcord.Colour.blurple())
+        embed.add_field(name="Scoring",               value=PointsType.to_str(f.points_type),              inline=True)
+        embed.add_field(name="Post Leaderboard",      value="✅" if f.post_leaderboard else "❌",           inline=True)
+        if f.post_leaderboard and f.points_type != PointsType.NoScoring:
+            embed.add_field(name="LB Type",           value=RaceLeaderboardType.to_str(f.leaderboard_type), inline=True)
+        embed.add_field(name="Mods View LB",          value="✅" if f.mod_can_view_leaderboard else "❌",   inline=True)
+        embed.add_field(name="Disable Edit Timeout",  value="✅" if f.disable_edit_time_limit else "❌",    inline=True)
+        embed.add_field(name="Disable Auto-Forfeit",  value="✅" if f.disable_auto_forfeit else "❌",       inline=True)
+        return embed
+
+########################################################################################################################
+class TrialExtraInfoRequiredView(nextcord.ui.View):
+    """Asks whether a newly-added extra info type should be required or optional."""
+
+    def __init__(self, flow, assignment, type_name):
+        super().__init__(timeout=300)
+        self.flow = flow
+        self.assignment = assignment
+        self.type_name = type_name
+
+    @nextcord.ui.button(label="Required", style=nextcord.ButtonStyle.red)
+    async def required(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        self.assignment.required = True
+        self.assignment.save()
+        view = TrialExtraInfoYesNoView(self.flow, "")
+        await send_message(interaction, f"Added **{self.type_name}** as **required**.", view=view)
+        self.stop()
+
+    @nextcord.ui.button(label="Optional", style=nextcord.ButtonStyle.blurple)
+    async def optional(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        self.assignment.required = False
+        self.assignment.save()
+        view = TrialExtraInfoYesNoView(self.flow, "")
+        await send_message(interaction, f"Added **{self.type_name}** as **optional**.", view=view)
+        self.stop()
+
+########################################################################################################################
+class TrialExtraInfoYesNoView(nextcord.ui.View):
+    """Asks whether to add another extra info field to the trial's bot category."""
+
+    def __init__(self, flow, prompt_text):
+        super().__init__(timeout=300)
+        self.flow = flow
+        self.prompt_text = prompt_text
+
+    @nextcord.ui.button(label="Edit Extra Info", style=nextcord.ButtonStyle.green)
+    async def yes(self, button, interaction):
+        await self.flow.on_add_extra_info(interaction)
+        self.stop()
+
+    @nextcord.ui.button(label="Done", style=nextcord.ButtonStyle.grey)
+    async def no(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self.flow.on_extra_info_done(interaction)
+        self.stop()
+
+########################################################################################################################
+class TrialPartialStartView(nextcord.ui.View):
+    """Shown when a trial has partial start state (some Discord objects were created but the flow was abandoned)."""
+
+    def __init__(self, trial, db_server, discord_server):
+        super().__init__(timeout=300)
+        self.trial = trial
+        self.db_server = db_server
+        self.discord_server = discord_server
+
+    @nextcord.ui.button(label="Rollback Partial Start", style=nextcord.ButtonStyle.red)
+    async def rollback(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        trial = self.trial
+        cleanup = []
+
+        if trial.general_channel_id:
+            try:
+                ch = await self.discord_server.fetch_channel(trial.general_channel_id)
+            except nextcord.errors.NotFound:
+                logging.warning(f"Partial rollback trial '{trial.display_name}': general channel {trial.general_channel_id} not found in Discord")
+                cleanup.append("general channel not found (may have been deleted already)")
+            except Exception as e:
+                logging.error(f"Partial rollback trial '{trial.display_name}': could not fetch general channel {trial.general_channel_id}: {e}")
+                cleanup.append(f"could not fetch general channel: {e}")
+            else:
+                try:
+                    await ch.delete(reason="Trial start rollback")
+                    cleanup.append("general channel deleted")
+                except Exception as e:
+                    logging.error(f"Partial rollback trial '{trial.display_name}': could not delete general channel {trial.general_channel_id}: {e}")
+                    cleanup.append(f"could not delete general channel: {e}")
+            trial.general_channel_id = None
+
+        if trial.spoilers_channel_id:
+            try:
+                ch = await self.discord_server.fetch_channel(trial.spoilers_channel_id)
+            except nextcord.errors.NotFound:
+                logging.warning(f"Partial rollback trial '{trial.display_name}': spoilers channel {trial.spoilers_channel_id} not found in Discord")
+                cleanup.append("spoilers channel not found (may have been deleted already)")
+            except Exception as e:
+                logging.error(f"Partial rollback trial '{trial.display_name}': could not fetch spoilers channel {trial.spoilers_channel_id}: {e}")
+                cleanup.append(f"could not fetch spoilers channel: {e}")
+            else:
+                try:
+                    await ch.delete(reason="Trial start rollback")
+                    cleanup.append("spoilers channel deleted")
+                except Exception as e:
+                    logging.error(f"Partial rollback trial '{trial.display_name}': could not delete spoilers channel {trial.spoilers_channel_id}: {e}")
+                    cleanup.append(f"could not delete spoilers channel: {e}")
+            trial.spoilers_channel_id = None
+
+        if trial.finisher_role_id:
+            role = self.discord_server.get_role(trial.finisher_role_id)
+            if role:
+                try:
+                    await role.delete(reason="Trial start rollback")
+                    cleanup.append("finisher role deleted")
+                except Exception as e:
+                    logging.error(f"Partial rollback trial '{trial.display_name}': could not delete finisher role {trial.finisher_role_id}: {e}")
+                    cleanup.append(f"could not delete finisher role: {e}")
+            else:
+                logging.warning(f"Partial rollback trial '{trial.display_name}': finisher role {trial.finisher_role_id} not found in cache")
+                cleanup.append("finisher role not found (may have been deleted already)")
+            trial.finisher_role_id = None
+
+        if trial.category_id:
+            try:
+                cat = AsyncRaceCategory.get_by_id(trial.category_id)
+                for a in get_category_extra_info_assignments(cat.id):
+                    a.delete_instance()
+                cat.delete_instance()
+                cleanup.append("bot category deleted")
+            except Exception as e:
+                cleanup.append(f"could not delete bot category: {e}")
+            trial.category_id = None
+
+        trial.save()
+        detail = "\n".join(f"• {c}" for c in cleanup) if cleanup else "• Nothing to clean up"
+        await send_message(interaction, f"Rollback complete:\n{detail}\n\nRun `/async_mod start_trial` again to restart.")
+        self.stop()
+
+    @nextcord.ui.button(label="Continue Setup", style=nextcord.ButtonStyle.green)
+    async def continue_setup(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        trial = self.trial
+
+        # Resolve Discord objects from cached IDs
+        general_channel  = self.discord_server.get_channel(trial.general_channel_id)  if trial.general_channel_id  else None
+        spoilers_channel = self.discord_server.get_channel(trial.spoilers_channel_id) if trial.spoilers_channel_id else None
+        finisher_role    = self.discord_server.get_role(trial.finisher_role_id)        if trial.finisher_role_id    else None
+        category = None
+        if trial.category_id:
+            try:
+                category = AsyncRaceCategory.get_by_id(trial.category_id)
+            except Exception:
+                pass
+
+        missing = []
+        if not general_channel:  missing.append("general channel")
+        if not spoilers_channel: missing.append("spoilers channel")
+        if not finisher_role:    missing.append("finisher role")
+        if not category:         missing.append("bot category")
+        if missing:
+            await send_message(interaction, f"Cannot continue — could not resolve: {', '.join(missing)}.\nUse **Rollback Partial Start** to clean up and restart.")
+            return
+
+        flow = TrialStartFlow(trial, self.db_server, self.discord_server)
+        flow.general_channel  = general_channel
+        flow.spoilers_channel = spoilers_channel
+        flow.finisher_role    = finisher_role
+        flow.category         = category
+
+        view = TrialExtraInfoYesNoView(flow, "")
+        await send_message(interaction, "Resuming trial setup — add extra submission fields beyond Finish Time and Comment?", view=view)
+        self.stop()
+
+########################################################################################################################
+class TrialStartFlow:
+    """Orchestrates the multi-step /start_trial flow: channels → finisher role → category settings → extra info → save."""
+
+    def __init__(self, trial, db_server, discord_server):
+        self.trial = trial
+        self.db_server = db_server
+        self.discord_server = discord_server
+        # Proposed names
+        base = trial.short_name.lower().replace(' ', '-')
+        self.general_channel_name  = base
+        self.spoilers_channel_name = f"{base}-spoilers"
+        self.finisher_role_name    = f"{trial.short_name} Finisher"
+        # Category settings (defaults)
+        self.points_type              = PointsType.NoScoring
+        self.post_leaderboard         = False
+        self.leaderboard_type         = RaceLeaderboardType.RecentRace
+        self.mod_can_view_leaderboard = True
+        self.disable_edit_time_limit  = False
+        self.disable_auto_forfeit     = True
+        # Created objects (tracked for rollback)
+        self.general_channel  = None
+        self.spoilers_channel = None
+        self.finisher_role    = None
+        self.category         = None
+
+    # ------------------------------------------------------------------------------------------------------------------
+    async def start(self, interaction):
+        count = 0
+        if self.trial.participant_role_id:
+            role = self.discord_server.get_role(self.trial.participant_role_id)
+            if role:
+                count = len(role.members)
+
+        view = TrialChannelNamesView(self)
+        await send_message(
+            interaction,
+            f"**Starting trial: {self.trial.display_name}**\n"
+            f"Current signups: **{count}**\n\n"
+            f"Proposed channel names:\n"
+            f"• General: `#{self.general_channel_name}`\n"
+            f"• Spoilers: `#{self.spoilers_channel_name}`\n\n"
+            f"Click **Edit Names** to change or **Next** to proceed.",
+            view=view)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    async def on_channels_confirmed(self, interaction):
+        view = TrialRoleNameView(self, self.finisher_role_name)
+        await send_message(
+            interaction,
+            f"Proposed finisher role name: **{self.finisher_role_name}**\nClick **Edit Name** to change or **Next** to proceed.",
+            view=view)
+
+    # Called by TrialRoleNameView (reused from announce flow)
+    async def on_role_name_confirmed(self, interaction, role_name):
+        self.finisher_role_name = role_name
+        select_list = copy.deepcopy(PointsType.SelectOptionList)
+        selected = await zSingleSelectView(select_list, None, "Select scoring type...").prompt(interaction)
+        if selected is None:
+            await self._rollback(interaction, "Scoring type selection timed out.")
+            return
+        self.points_type = selected
+
+        view = TrialCategorySettingsView(self)
+        await send_message(
+            interaction,
+            "Review the bot category settings below. Click any toggle button to change it, then click **Confirm Settings** when done.",
+            embed=view._build_embed(),
+            view=view)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    async def on_settings_confirmed(self, interaction):
+        discord_category = self.discord_server.get_channel(self.db_server.trials_discord_category_id)
+        admin_role = self.discord_server.get_role(self.db_server.admin_role_id) if self.db_server.admin_role_id else None
+
+        # Create general channel (visible to everyone in the Discord category)
+        try:
+            self.general_channel = await self.discord_server.create_text_channel(
+                name=self.general_channel_name,
+                category=discord_category,
+                reason=f"Trial: {self.trial.display_name}")
+            self.trial.general_channel_id = self.general_channel.id
+            self.trial.save()
+        except Exception as e:
+            await self._rollback(interaction, f"Could not create general channel: {e}")
+            return
+
+        # Create spoilers channel (viewable only by finisher role and admin role)
+        # Bot must have an explicit allow overwrite or it loses access when @everyone is denied,
+        # which would cause the subsequent set_permissions call to fail with 50001.
+        try:
+            overwrites = {
+                self.discord_server.default_role: nextcord.PermissionOverwrite(read_messages=False),
+                self.discord_server.me: nextcord.PermissionOverwrite(read_messages=True),
+            }
+            if admin_role:
+                overwrites[admin_role] = nextcord.PermissionOverwrite(read_messages=True)
+            self.spoilers_channel = await self.discord_server.create_text_channel(
+                name=self.spoilers_channel_name,
+                category=discord_category,
+                overwrites=overwrites,
+                reason=f"Trial: {self.trial.display_name}")
+            self.trial.spoilers_channel_id = self.spoilers_channel.id
+            self.trial.save()
+        except Exception as e:
+            await self._rollback(interaction, f"Could not create spoilers channel: {e}")
+            return
+
+        # Create finisher role
+        try:
+            self.finisher_role = await self.discord_server.create_role(
+                name=self.finisher_role_name,
+                reason=f"Trial finisher role: {self.trial.display_name}")
+            self.trial.finisher_role_id = self.finisher_role.id
+            self.trial.save()
+        except Exception as e:
+            await self._rollback(interaction, f"Could not create finisher role: {e}")
+            return
+
+        # Grant finisher role access to spoilers channel
+        try:
+            await self.spoilers_channel.set_permissions(
+                self.finisher_role,
+                read_messages=True)
+        except Exception as e:
+            await self._rollback(interaction, f"Could not set spoilers channel permissions: {e}")
+            return
+
+        # Create bot category
+        try:
+            cat = AsyncRaceCategory()
+            cat.server_id                = self.db_server.id
+            cat.name                     = self.trial.display_name
+            cat.description              = self.trial.short_description or ''
+            cat.points_type              = self.points_type
+            cat.leaderboard_type         = self.leaderboard_type if self.post_leaderboard else None
+            cat.active                   = True
+            cat.pin_recent_race          = False
+            cat.activate_new_races       = False
+            cat.submit_role              = self.finisher_role.id
+            cat.mod_can_view_leaderboard = self.mod_can_view_leaderboard
+            cat.disable_edit_time_limit  = self.disable_edit_time_limit
+            cat.disable_auto_forfeit     = self.disable_auto_forfeit
+            cat.save()
+            self.category = cat
+            self.trial.category_id = self.category.id
+            self.trial.save()
+        except Exception as e:
+            await self._rollback(interaction, f"Could not create bot category: {e}")
+            return
+
+        if self.points_type == PointsType.Trueskill:
+            try:
+                create_default_trueskill_params(self.category.id)
+            except Exception as e:
+                logging.warning(f"Could not create TrueSkill params for trial category: {e}")
+
+        # Start extra info loop
+        view = TrialExtraInfoYesNoView(self, "")
+        await send_message(
+            interaction,
+            "Configure extra submission fields beyond Finish Time and Comment? Click **Edit Extra Info** to add or remove fields, or **Done** to finish.",
+            view=view)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    async def on_add_extra_info(self, interaction):
+        assigned_ids = {a.info_type_id_id for a in get_category_extra_info_assignments(self.category.id)}
+        select_list = get_extra_info_type_select_list(self.db_server.id)
+        for opt in select_list:
+            if int(opt.value) in assigned_ids:
+                opt.label = f"✅ {opt.label}"
+        select_list.insert(0, nextcord.SelectOption(
+            label="Create New...", value='0', description="Define a new extra info type"))
+
+        view = nextcord.ui.View(timeout=300)
+        select = zSingleSelect(select_list, self._on_extra_info_selected, "Select an extra info type to add or remove...", None)
+        view.add_item(select)
+        await send_message(interaction, "Select an extra info type to add or remove:", view=view)
+
+    async def _on_extra_info_selected(self, selected_id, interaction):
+        if selected_id == 0:
+            # Open modal to create new extra info type
+            modal = zModal(
+                {
+                    'name': nextcord.ui.TextInput(
+                        label="Type Name", required=True, custom_id='name', row=1),
+                    'desc': nextcord.ui.TextInput(
+                        label="Type Description", required=False, custom_id='desc', row=2),
+                },
+                self._on_extra_info_name_submit,
+                "New Extra Info Type")
+            await interaction.response.send_modal(modal)
+        else:
+            type_obj = get_extra_info_type(selected_id)
+            name = type_obj.name if type_obj else f"ID {selected_id}"
+            if check_category_assignment_exists(selected_id, self.category.id):
+                delete_category_assignment(selected_id, self.category.id)
+                view = TrialExtraInfoYesNoView(self, "")
+                await send_message(interaction, f"Removed **{name}**.", view=view)
+            else:
+                assignment = AsyncRaceExtraInfoAssignment(
+                    info_type_id=selected_id, category_id=self.category.id)
+                view = TrialExtraInfoRequiredView(self, assignment, name)
+                await send_message(interaction, f"Should **{name}** be required or optional?", view=view)
+
+    async def _on_extra_info_name_submit(self, interaction, modal):
+        self._pending_info_name = ""
+        self._pending_info_desc = ""
+        for child in modal.children:
+            match child.custom_id:
+                case 'name': self._pending_info_name = child.value.strip()
+                case 'desc': self._pending_info_desc = child.value.strip()
+
+        select_list = copy.deepcopy(VarType.SelectOptionList)
+        view = nextcord.ui.View(timeout=300)
+        select = zSingleSelect(select_list, self._on_extra_info_vartype_selected, "Select data type...", None)
+        view.add_item(select)
+        await send_message(interaction, f"Select data type for **{self._pending_info_name}**:", view=view)
+
+    async def _on_extra_info_vartype_selected(self, vartype, interaction):
+        try:
+            info_type = AsyncRaceExtraInfoType()
+            info_type.server_id      = self.db_server.id
+            info_type.name           = self._pending_info_name
+            info_type.description    = self._pending_info_desc
+            info_type.var_type       = vartype
+            info_type.save()
+            assignment = AsyncRaceExtraInfoAssignment(
+                info_type_id=info_type.id, category_id=self.category.id)
+            view = TrialExtraInfoRequiredView(self, assignment, info_type.name)
+            await send_message(
+                interaction,
+                f"Created **{info_type.name}**. Should it be required or optional?",
+                view=view)
+        except Exception as e:
+            view = TrialExtraInfoYesNoView(self, "")
+            await send_message(
+                interaction,
+                f"**ERROR** Could not save extra info type: {e}",
+                view=view)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    async def on_extra_info_done(self, interaction):
+        try:
+            self.trial.general_channel_id  = self.general_channel.id
+            self.trial.spoilers_channel_id = self.spoilers_channel.id
+            self.trial.finisher_role_id    = self.finisher_role.id
+            self.trial.category_id         = self.category.id
+            self.trial.state               = TrialState.Active
+            self.trial.save()
+        except Exception as e:
+            await send_message(interaction, f"**ERROR** Could not update trial record: {e}")
+            return
+
+        await send_message(
+            interaction,
+            f"Trial **{self.trial.display_name}** is now Active!\n"
+            f"• General: <#{self.general_channel.id}>\n"
+            f"• Spoilers: <#{self.spoilers_channel.id}>\n"
+            f"• Finisher role: {self.finisher_role.mention}\n"
+            f"• Bot category ID: {self.category.id}")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    async def _rollback(self, interaction, error_msg):
+        logging.error(f"Trial start rollback triggered for '{self.trial.display_name}': {error_msg}")
+        cleanup = []
+        if self.general_channel:
+            try:
+                await self.general_channel.delete(reason="Trial start failed/cancelled")
+                cleanup.append("general channel deleted")
+            except Exception as e:
+                logging.error(f"Trial start rollback '{self.trial.display_name}': could not delete general channel: {e}")
+                cleanup.append(f"could not delete general channel: {e}")
+            self.general_channel = None
+        if self.spoilers_channel:
+            try:
+                await self.spoilers_channel.delete(reason="Trial start failed/cancelled")
+                cleanup.append("spoilers channel deleted")
+            except Exception as e:
+                logging.error(f"Trial start rollback '{self.trial.display_name}': could not delete spoilers channel: {e}")
+                cleanup.append(f"could not delete spoilers channel: {e}")
+            self.spoilers_channel = None
+        if self.finisher_role:
+            try:
+                await self.finisher_role.delete(reason="Trial start failed/cancelled")
+                cleanup.append("finisher role deleted")
+            except Exception as e:
+                logging.error(f"Trial start rollback '{self.trial.display_name}': could not delete finisher role: {e}")
+                cleanup.append(f"could not delete finisher role: {e}")
+            self.finisher_role = None
+        if self.category:
+            try:
+                for a in get_category_extra_info_assignments(self.category.id):
+                    a.delete_instance()
+                self.category.delete_instance()
+                cleanup.append("bot category deleted")
+            except Exception as e:
+                logging.error(f"Trial start rollback '{self.trial.display_name}': could not delete bot category: {e}")
+                cleanup.append(f"could not delete bot category: {e}")
+            self.category = None
+
+        # Clear partial IDs from trial record so a retry starts clean
+        self.trial.general_channel_id  = None
+        self.trial.spoilers_channel_id = None
+        self.trial.finisher_role_id    = None
+        self.trial.category_id         = None
+        self.trial.save()
+
+        detail = "\n".join(f"• {c}" for c in cleanup)
+        msg = f"**ERROR** {error_msg}"
+        if detail:
+            msg += f"\n\nRolled back:\n{detail}"
+        await send_message(interaction, msg)
+
+########################################################################################################################
+# PHASE 3 — TRIAL RACE LIFECYCLE
+########################################################################################################################
+
+def user_can_manage_trial(interaction, trial):
+    """Returns True if the user is a mod/admin or the trial's designated organizer."""
+    return user_is_mod(interaction.guild, interaction.user) or \
+           (trial.organizer_user_id is not None and interaction.user.id == trial.organizer_user_id)
+
+########################################################################################################################
+class TrialSignupView(nextcord.ui.View):
+    """Asks whether to close signups before starting the next race."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+
+    @nextcord.ui.button(label="Close Signups", style=nextcord.ButtonStyle.red)
+    async def close_signups(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        self.flow.close_signups = True
+        await send_message(interaction, "Review the participant list before starting the race.",
+                           view=TrialRacerManagementView(self.flow))
+        self.stop()
+
+    @nextcord.ui.button(label="Keep Signups Open", style=nextcord.ButtonStyle.green)
+    async def keep_signups(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        self.flow.close_signups = False
+        await send_message(interaction, "Review the participant list before starting the race.",
+                           view=TrialRacerManagementView(self.flow))
+        self.stop()
+
+########################################################################################################################
+class TrialRaceDetailsModal(zModal):
+    def __init__(self, submit_handler):
+        fields = {
+            'description': nextcord.ui.TextInput(
+                label="Race Description", required=True, custom_id='description', row=1),
+            'seed': nextcord.ui.TextInput(
+                label="Seed", required=True, custom_id='seed', row=2),
+            'hash': nextcord.ui.TextInput(
+                label="Hash (optional)", required=False, custom_id='hash', row=3),
+        }
+        super().__init__(fields, submit_handler, "Race Details")
+
+########################################################################################################################
+class TrialRacerManagementView(nextcord.ui.View):
+    """Lets the organizer add/remove participants before the race is created."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+
+    def _participant_count(self):
+        role = self.flow.discord_server.get_role(self.flow.trial.participant_role_id) \
+               if self.flow.trial.participant_role_id else None
+        return len(role.members) if role else 0
+
+    @nextcord.ui.button(label="Add Racer", style=nextcord.ButtonStyle.green)
+    async def add_racer(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await send_message(
+            interaction,
+            f"Select a member to add as a participant ({self._participant_count()} currently signed up):",
+            view=TrialAddRacerView(self.flow))
+        self.stop()
+
+    @nextcord.ui.button(label="Remove Racer", style=nextcord.ButtonStyle.red)
+    async def remove_racer(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        role = self.flow.discord_server.get_role(self.flow.trial.participant_role_id) \
+               if self.flow.trial.participant_role_id else None
+        if not role or not role.members:
+            await send_message(interaction, "No participants to remove.", view=TrialRacerManagementView(self.flow))
+            self.stop()
+            return
+        select_list = [
+            nextcord.SelectOption(label=m.display_name, value=str(m.id))
+            for m in sorted(role.members, key=lambda m: m.display_name)[:25]
+        ]
+        select = zSingleSelect(select_list, self.flow._on_remove_racer_selected,
+                               "Select a participant to remove...", None)
+        view = nextcord.ui.View(timeout=300)
+        view.add_item(select)
+        await send_message(
+            interaction,
+            f"Select a participant to remove ({self._participant_count()} currently signed up):",
+            view=view)
+        self.stop()
+
+    @nextcord.ui.button(label="Done", style=nextcord.ButtonStyle.blurple)
+    async def done(self, button, interaction):
+        await interaction.response.send_modal(TrialRaceDetailsModal(self.flow._on_race_details_submit))
+        self.stop()
+
+########################################################################################################################
+class TrialAddRacerView(nextcord.ui.View):
+    """Discord UserSelect for adding a member to the trial participant role."""
+
+    def __init__(self, flow):
+        super().__init__(timeout=300)
+        self.flow = flow
+
+    @nextcord.ui.user_select(placeholder="Select member to add as participant...")
+    async def user_select(self, select, interaction):
+        await interaction.response.defer(ephemeral=True)
+        member = select.values[0]
+        participant_role = self.flow.discord_server.get_role(self.flow.trial.participant_role_id) \
+                           if self.flow.trial.participant_role_id else None
+        if participant_role is None:
+            await send_message(interaction, "Participant role not found.", view=TrialRacerManagementView(self.flow))
+            self.stop()
+            return
+        if participant_role in member.roles:
+            await send_message(interaction, f"**{member.display_name}** is already a participant.",
+                               view=TrialRacerManagementView(self.flow))
+            self.stop()
+            return
+        try:
+            await member.add_roles(participant_role, reason=f"Added to trial {self.flow.trial.display_name}")
+            await send_message(interaction, f"Added **{member.display_name}** as a participant.",
+                               view=TrialRacerManagementView(self.flow))
+        except Exception as e:
+            await send_message(interaction, f"Could not add **{member.display_name}**: {e}",
+                               view=TrialRacerManagementView(self.flow))
+        self.stop()
+
+########################################################################################################################
+class TrialStartRaceFlow:
+    """Orchestrates the /start_trial_race flow: end previous race → signup prompt → race details → create & activate."""
+
+    def __init__(self, trial, db_server, discord_server):
+        self.trial          = trial
+        self.db_server      = db_server
+        self.discord_server = discord_server
+        self.close_signups  = True
+        self.description    = ""
+        self.seed           = ""
+        self.hash           = None
+
+    async def start(self, interaction):
+        prev_text = ""
+        if self.trial.current_race_id_id is not None:
+            try:
+                prev_race = AsyncRace.get_by_id(self.trial.current_race_id_id)
+                if prev_race.state == RaceState.Active:
+                    prev_race.state = RaceState.Completed
+                    prev_race.save()
+                    score_race(prev_race)
+                    await update_race_leaderboard(interaction, prev_race)
+                    prev_text = "Previous race ended.\n\n"
+            except Exception as e:
+                prev_text = f"Warning: could not end previous race: {e}\n\n"
+
+        participant_role = self.discord_server.get_role(self.trial.participant_role_id) \
+                           if self.trial.participant_role_id else None
+        participant_count = len(participant_role.members) if participant_role else 0
+        view = TrialSignupView(self)
+        await send_message(
+            interaction,
+            f"{prev_text}**{self.trial.display_name}** — {participant_count} participant(s) signed up. Close signups for the new race?",
+            view=view)
+
+    async def _on_remove_racer_selected(self, selected_id, interaction):
+        await interaction.response.defer(ephemeral=True)
+        participant_role = self.discord_server.get_role(self.trial.participant_role_id) \
+                           if self.trial.participant_role_id else None
+        if participant_role is None:
+            await send_message(interaction, "Participant role not found.", view=TrialRacerManagementView(self))
+            return
+        member = self.discord_server.get_member(selected_id)
+        if member is None:
+            await send_message(interaction, "Member not found.", view=TrialRacerManagementView(self))
+            return
+        try:
+            await member.remove_roles(participant_role, reason=f"Removed from trial {self.trial.display_name}")
+            await send_message(interaction, f"Removed **{member.display_name}** from participants.",
+                               view=TrialRacerManagementView(self))
+        except Exception as e:
+            await send_message(interaction, f"Could not remove **{member.display_name}**: {e}",
+                               view=TrialRacerManagementView(self))
+
+    async def _on_race_details_submit(self, interaction, modal):
+        for child in modal.children:
+            match child.custom_id:
+                case 'description': self.description = child.value.strip()
+                case 'seed':        self.seed        = child.value.strip()
+                case 'hash':        self.hash        = child.value.strip() or None
+        await interaction.response.defer(ephemeral=True)
+        await self._create_and_activate(interaction)
+
+    async def _create_and_activate(self, interaction):
+        # Build the new race record
+        race = AsyncRace()
+        race.server_id            = self.db_server.id
+        race.create_datetime      = zBot_now()
+        race.seed                 = self.seed
+        race.hash                 = self.hash
+        race.description          = self.description
+        race.category_id          = self.trial.category_id_id
+        race.state                = RaceState.Inactive
+        race.disable_auto_forfeit = self.trial.category_id.disable_auto_forfeit
+        race.save()
+
+        # Copy extra info assignments from category
+        for a in get_category_extra_info_assignments(self.trial.category_id_id):
+            ra = AsyncRaceExtraInfoAssignment()
+            ra.info_type_id = a.info_type_id
+            ra.race_id      = race.id
+            ra.required     = a.required
+            ra.save()
+
+        # Auto-assign all current participant role holders
+        assigned_count = 0
+        participant_role = self.discord_server.get_role(self.trial.participant_role_id) if self.trial.participant_role_id else None
+        if participant_role:
+            for member in participant_role.members:
+                if assign_racer(member.id, race.id):
+                    assigned_count += 1
+
+        # Apply signup decision and activate
+        self.trial.accept_signups   = not self.close_signups
+        race.state                  = RaceState.Active
+        race.save()
+        self.trial.current_race_id  = race.id
+        self.trial.save()
+
+        await handle_activate_race(interaction, race)
+
+        # Post race info to general channel
+        general_channel = self.discord_server.get_channel(self.trial.general_channel_id) if self.trial.general_channel_id else None
+        if general_channel:
+            try:
+                await post_race_info_message(race, general_channel)
+            except Exception as e:
+                await send_message(interaction, f"Warning: could not post race info to general channel: {e}")
+
+        signup_status = "Signups closed" if self.close_signups else "Signups remain open"
+        await send_message(
+            interaction,
+            f"Race started for **{self.trial.display_name}**!\n"
+            f"• Description: {self.description}\n"
+            f"• {assigned_count} participant(s) assigned\n"
+            f"• {signup_status}"
+            + (f"\n• Race info posted in <#{self.trial.general_channel_id}>" if general_channel else ""))
+
+########################################################################################################################
+# PHASE 4 — TRIAL ARCHIVE
+########################################################################################################################
+
+async def send_archive_trial_prompt(interaction, trial, discord_server, trial_cache):
+    embed = nextcord.Embed(
+        title=f"Archive '{trial.display_name}'",
+        description="Select what to remove. The bot category is always deactivated (not deleted — race history is preserved). Dismiss this message to abort.",
+        color=nextcord.Colour.blurple())
+
+    ch_lines = []
+    if trial.general_channel_id:
+        ch_lines.append(f"<#{trial.general_channel_id}> (general)")
+    if trial.spoilers_channel_id:
+        ch_lines.append(f"<#{trial.spoilers_channel_id}> (spoilers)")
+    embed.add_field(name="Channels", value="\n".join(ch_lines) if ch_lines else "None", inline=True)
+
+    role_lines = []
+    if trial.participant_role_id:
+        role_lines.append(f"<@&{trial.participant_role_id}> (participant)")
+    if trial.finisher_role_id:
+        role_lines.append(f"<@&{trial.finisher_role_id}> (finisher)")
+    embed.add_field(name="Roles", value="\n".join(role_lines) if role_lines else "None", inline=True)
+
+    cat_name = "None"
+    if trial.category_id_id:
+        try:
+            cat = AsyncRaceCategory.get_by_id(trial.category_id_id)
+            cat_name = cat.name
+        except Exception:
+            cat_name = f"ID {trial.category_id_id}"
+    embed.add_field(name="Bot Category", value=cat_name, inline=True)
+
+    view = ArchiveTrialView(trial, discord_server, trial_cache)
+    await send_message(interaction, embed=embed, view=view)
+
+########################################################################################################################
+class ArchiveTrialView(nextcord.ui.View):
+    def __init__(self, trial, discord_server, trial_cache):
+        super().__init__(timeout=300)
+        self.trial = trial
+        self.discord_server = discord_server
+        self.trial_cache = trial_cache
+
+    @nextcord.ui.button(label="Category Only", style=nextcord.ButtonStyle.blurple, row=0)
+    async def category_only(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._do_archive(interaction, channels=False, roles=False)
+        self.stop()
+
+    @nextcord.ui.button(label="Remove Roles & Category", style=nextcord.ButtonStyle.blurple, row=0)
+    async def roles_and_category(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._do_archive(interaction, channels=False, roles=True)
+        self.stop()
+
+    @nextcord.ui.button(label="Remove Channels & Category", style=nextcord.ButtonStyle.blurple, row=1)
+    async def channels_and_category(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._do_archive(interaction, channels=True, roles=False)
+        self.stop()
+
+    @nextcord.ui.button(label="Remove All", style=nextcord.ButtonStyle.danger, row=1)
+    async def remove_all(self, button, interaction):
+        await interaction.response.defer(ephemeral=True)
+        await self._do_archive(interaction, channels=True, roles=True)
+        self.stop()
+
+    async def _do_archive(self, interaction, channels, roles):
+        results = []
+
+        if channels:
+            for cid, label in [(self.trial.spoilers_channel_id, "spoilers"), (self.trial.general_channel_id, "general")]:
+                if cid:
+                    try:
+                        ch = await self.discord_server.fetch_channel(cid)
+                    except nextcord.errors.NotFound:
+                        logging.warning(f"Archive trial '{self.trial.display_name}': {label} channel {cid} not found in Discord (already deleted?)")
+                        results.append(f"{label.capitalize()} channel not found (already deleted?)")
+                        continue
+                    except Exception as e:
+                        logging.error(f"Archive trial '{self.trial.display_name}': could not fetch {label} channel {cid}: {e}")
+                        results.append(f"Warning: could not fetch {label} channel: {e}")
+                        continue
+                    try:
+                        await ch.delete(reason=f"Trial archived: {self.trial.display_name}")
+                        results.append(f"{label.capitalize()} channel deleted")
+                    except Exception as e:
+                        logging.error(f"Archive trial '{self.trial.display_name}': could not delete {label} channel {cid}: {e}")
+                        results.append(f"Warning: could not delete {label} channel: {e}")
+
+        if roles:
+            for rid, label in [(self.trial.finisher_role_id, "finisher"), (self.trial.participant_role_id, "participant")]:
+                if rid:
+                    role = self.discord_server.get_role(rid)
+                    if role:
+                        try:
+                            await role.delete(reason=f"Trial archived: {self.trial.display_name}")
+                            results.append(f"{label.capitalize()} role deleted")
+                        except Exception as e:
+                            logging.error(f"Archive trial '{self.trial.display_name}': could not delete {label} role {rid}: {e}")
+                            results.append(f"Warning: could not delete {label} role: {e}")
+                    else:
+                        logging.warning(f"Archive trial '{self.trial.display_name}': {label} role {rid} not found in cache (already deleted?)")
+                        results.append(f"{label.capitalize()} role not found (already deleted?)")
+
+        if self.trial.category_id_id:
+            try:
+                cat = AsyncRaceCategory.get_by_id(self.trial.category_id_id)
+                cat.active = False
+                cat.save()
+                results.append(f"Bot category '{cat.name}' deactivated")
+            except Exception as e:
+                logging.error(f"Archive trial '{self.trial.display_name}': could not deactivate bot category {self.trial.category_id_id}: {e}")
+                results.append(f"Warning: could not deactivate bot category: {e}")
+            delete_messages_by_category_id(self.trial.category_id_id)
+            results.append("Pinned race messages cleared from DB")
+
+        self.trial.state = TrialState.Archived
+        self.trial.save()
+        results.append(f"**{self.trial.display_name}** marked as Archived")
+
+        # Defensive — should already be removed by end_trial
+        if self.trial.announcement_message_id in self.trial_cache:
+            del self.trial_cache[self.trial.announcement_message_id]
+
+        await send_message(interaction, "Archive complete:\n" + "\n".join(f"• {r}" for r in results))

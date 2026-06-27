@@ -37,6 +37,8 @@ SelectList = list[nextcord.SelectOption]
 ########################################################################################################################
 # Checks if a user has the provided role
 def user_has_role(server, user, role_id):
+    if role_id is None:
+        return False
     role = server.get_role(role_id)
     return role in user.roles
 

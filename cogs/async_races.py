@@ -13,6 +13,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
     def __init__(self, bot):
         self.bot = bot
         self.test_mode = False
+        self.trial_reaction_cache = {}  # announcement_message_id -> Trial
 
     def set_test_mode(self):
         self.test_mode = True
@@ -39,6 +40,103 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         if self.test_mode:
             logging.info("  Running in test mode")
         logging.info("AsyncRaces cog Ready")
+        await self._load_trial_reaction_cache()
+
+    ####################################################################################################################
+    async def _load_trial_reaction_cache(self):
+        self.trial_reaction_cache = {}
+        try:
+            trials = get_all_tracked_trials()
+            for trial in trials:
+                self.trial_reaction_cache[trial.announcement_message_id] = trial
+            logging.info(f"Loaded {len(self.trial_reaction_cache)} trial(s) into reaction cache")
+        except Exception as e:
+            logging.warning(f"Failed to load trial reaction cache: {e}")
+
+    ####################################################################################################################
+    async def _notify_trial_organizer(self, trial, guild, count):
+        try:
+            member = guild.get_member(trial.organizer_user_id)
+            if member is None:
+                member = await guild.fetch_member(trial.organizer_user_id)
+            msg_text = (f"The minimum signup threshold of {trial.min_signups} has been reached "
+                        f"for **{trial.display_name}**! Current signups: {count}")
+            notified = False
+            try:
+                await member.send(msg_text)
+                notified = True
+            except Exception:
+                pass
+            if not notified and trial.announcement_channel_id:
+                channel = guild.get_channel(trial.announcement_channel_id)
+                if channel:
+                    await channel.send(f"<@{trial.organizer_user_id}> {msg_text}")
+        except Exception as e:
+            logging.warning(f"Failed to notify trial organizer for trial {trial.id}: {e}")
+        trial.min_signups_notified = True
+        trial.save()
+
+    ####################################################################################################################
+    @commands.Cog.listener("on_raw_reaction_add")
+    async def on_raw_reaction_add_handler(self, payload):
+        if payload.message_id not in self.trial_reaction_cache:
+            return
+        trial = self.trial_reaction_cache[payload.message_id]
+        if payload.user_id == self.bot.user.id:
+            return
+        if not trial.accept_signups:
+            return
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+        member = guild.get_member(payload.user_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(payload.user_id)
+            except Exception:
+                return
+        role = guild.get_role(trial.participant_role_id)
+        if role is None:
+            return
+        try:
+            await member.add_roles(role, reason="Trial signup reaction")
+        except Exception as e:
+            logging.warning(f"Failed to add participant role to {payload.user_id}: {e}")
+            return
+        if trial.min_signups is not None and not trial.min_signups_notified:
+            count = len(role.members)
+            if count >= trial.min_signups:
+                await self._notify_trial_organizer(trial, guild, count)
+
+    ####################################################################################################################
+    @commands.Cog.listener("on_raw_reaction_remove")
+    async def on_raw_reaction_remove_handler(self, payload):
+        if payload.message_id not in self.trial_reaction_cache:
+            return
+        trial = self.trial_reaction_cache[payload.message_id]
+        if payload.user_id == self.bot.user.id:
+            return
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+        member = guild.get_member(payload.user_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(payload.user_id)
+            except Exception:
+                return
+        role = guild.get_role(trial.participant_role_id)
+        if role is not None:
+            try:
+                await member.remove_roles(role, reason="Trial signup reaction removed")
+            except Exception as e:
+                logging.warning(f"Failed to remove participant role from {payload.user_id}: {e}")
+        if trial.accept_signups and trial.current_race_id_id is not None:
+            assignment = get_race_assignment(payload.user_id, trial.current_race_id_id)
+            if assignment is not None:
+                submission = get_race_submission(payload.user_id, trial.current_race_id_id)
+                if submission is None:
+                    assignment.delete_instance()
 
     ####################################################################################################################
     async def close(self):
@@ -94,14 +192,13 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             server = self.get_server(interaction)
             if server is None:
                 if interaction.user.id == bot_config.CoolestGuy:
-                    admin_role = await prompt_for_role(interaction, placeholder="Select Race Admin Role...")
-                    mod_role = await prompt_for_role(interaction, placeholder="Select Race Moderator Role...")
-                    server = AsyncRaceServer(id=interaction.guild_id, admin_role=admin_role, mod_role=mod_role)
+                    server = AsyncRaceServer(id=interaction.guild_id, name=interaction.guild.name)
                     try:
-                        server.save()
-                    except:
-                        await send_message(interaction, "**ERROR** Could not save server information")
+                        server.save(force_insert=True)
+                    except Exception as e:
+                        await send_message(interaction, f"**ERROR** Could not save server information: {e}")
                         return
+                    await send_message(interaction, "Server registered with no roles configured. Run `/async_admin server_config` to set up roles before using.", ephemeral=True)
                 else:
                     await send_message(interaction, "**ERROR** This server is not setup for use with this bot, please contact the bot owner")
                     return
@@ -136,7 +233,7 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
         if racer_menu_count:  parts.append(f"{racer_menu_count} racer menu(s)")
         await send_message(interaction, f"Restoring {total} message(s): {', '.join(parts)}...", ephemeral=True)
 
-        failures = await self._do_startup(server_id, discord_server, interaction)
+        failures = await self._do_startup(server_id, discord_server, interaction, restore_rows)
 
         if mod_channel:
             try:
@@ -161,11 +258,28 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
 
 
     ####################################################################################################################
+    @async_admin.subcommand(description="View and update server configuration (roles, VC, trials)")
+    async def server_config(self, interaction):
+        if not user_is_admin(interaction.guild, interaction.user):
+            await interaction.response.send_message("Only Race Admins can use this command.", ephemeral=True)
+            return
+        self.log_command(interaction.user, "SERVER_CONFIG")
+        await interaction.response.defer(ephemeral=True)
+        server = self.get_server(interaction)
+        if server is None:
+            await interaction.followup.send("This server is not registered. Run `/async_admin startup` first.", ephemeral=True)
+            return
+        discord_server = get_server_from_interaction(interaction)
+        view = ServerConfigView(server, discord_server, interaction)
+        await interaction.followup.send(embed=view.build_embed(), view=view, ephemeral=True)
+
+    ####################################################################################################################
     async def _do_shutdown(self, server_id, discord_server):
         """Core shutdown logic. Saves restore state and deletes all tracked messages for the server."""
         RESTORABLE_TYPES = {RaceMessageType.ModMenu, RaceMessageType.RacerMenu,
                             RaceMessageType.Leaderboard, RaceMessageType.RaceInfo}
 
+        clear_restore_state(server_id)
         message_list = get_server_messages(server_id)
         seen_leaderboards = set()
         for m in message_list:
@@ -188,9 +302,10 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
             await delete_message(discord_server, m.id)
 
     ####################################################################################################################
-    async def _do_startup(self, server_id, discord_server, interaction):
+    async def _do_startup(self, server_id, discord_server, interaction, restore_rows=None):
         """Core startup logic. Restores messages from saved state. Returns list of failure strings."""
-        restore_rows = get_restore_state(server_id)
+        if restore_rows is None:
+            restore_rows = get_restore_state(server_id)
         if not restore_rows:
             return []
 
@@ -476,6 +591,279 @@ class AsyncRaces(commands.Cog, name='AsyncRaces'):
                     f.write(f"{race_id}, , {username}, {s.finish_time}, {par_time_str}, {points}, {cr}, {vod}, {s.comment}\n")
         f.close()
         await send_message(interaction, "Done!")
+
+########################################################################################################################
+# ASYNC_MOD
+########################################################################################################################
+    @nextcord.slash_command()
+    async def async_mod(self, interaction):
+        pass
+
+    ####################################################################################################################
+    @async_mod.subcommand(description="Post trial signup announcement and begin tracking reactions")
+    async def announce_trial(
+        self,
+        interaction,
+        message_id: str = nextcord.SlashOption(
+            description="ID of an existing announcement message to attach to (optional)",
+            required=False,
+            default=None)):
+
+        if not user_is_mod(interaction.guild, interaction.user):
+            await interaction.response.send_message("Only Race Mods can use this command.", ephemeral=True)
+            return
+
+        self.log_command(interaction.user, "ANNOUNCE_TRIAL")
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await interaction.response.send_message("Server not registered. Run `/async_admin startup` first.", ephemeral=True)
+            return
+
+        if not db_server.trials_enabled:
+            await interaction.response.send_message("Trials are not enabled for this server. Run `/async_admin server_config`.", ephemeral=True)
+            return
+
+        if db_server.trials_announcement_channel_id is None:
+            await interaction.response.send_message("No announcement channel configured. Run `/async_admin server_config`.", ephemeral=True)
+            return
+
+        discord_server = get_server_from_interaction(interaction)
+        existing_message_id = None
+        if message_id is not None:
+            try:
+                existing_message_id = int(message_id)
+                channel = discord_server.get_channel(db_server.trials_announcement_channel_id)
+                await channel.fetch_message(existing_message_id)
+            except Exception:
+                await interaction.response.send_message(
+                    "Could not find the specified message in the announcements channel.", ephemeral=True)
+                return
+
+        flow = TrialAnnounceFlow(db_server, discord_server, existing_message_id, self.trial_reaction_cache)
+        await flow.start(interaction)
+
+    ####################################################################################################################
+    @async_mod.subcommand(description="Cancel an unstarted trial and clean up created objects")
+    async def cancel_trial(self, interaction):
+        if not user_is_mod(interaction.guild, interaction.user):
+            await interaction.response.send_message("Only Race Mods can use this command.", ephemeral=True)
+            return
+
+        self.log_command(interaction.user, "CANCEL_TRIAL")
+        await interaction.response.defer(ephemeral=True)
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await send_message(interaction, "Server not registered. Run `/async_admin startup` first.")
+            return
+
+        trials = get_announcing_trials(db_server.id)
+        if not trials:
+            await send_message(interaction, "No trials in Announcing state to cancel.")
+            return
+
+        discord_server = get_server_from_interaction(interaction)
+
+        if len(trials) == 1:
+            await send_cancel_trial_confirm(interaction, trials[0], discord_server, self.trial_reaction_cache)
+        else:
+            select_list = [
+                nextcord.SelectOption(
+                    label=t.display_name,
+                    value=str(t.id))
+                for t in trials
+            ]
+            view = zSingleSelectView(select_list, None, "Select trial to cancel...")
+            await send_message(interaction, view=view)
+            await view.wait()
+            trial_id = view.get_selected_value()
+            if trial_id is not None:
+                trial = get_trial(int(trial_id))
+                if trial is not None:
+                    await send_cancel_trial_confirm(
+                        interaction, trial, discord_server, self.trial_reaction_cache)
+
+    ####################################################################################################################
+    @async_mod.subcommand(description="Create channels, finisher role, and bot category; transition trial to Active")
+    async def start_trial(self, interaction):
+        self.log_command(interaction.user, "START_TRIAL")
+        await interaction.response.defer(ephemeral=True)
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await send_message(interaction, "Server not registered. Run `/async_admin startup` first.")
+            return
+
+        if db_server.trials_discord_category_id is None:
+            await send_message(interaction, "No Discord category configured for trials. Run `/async_admin server_config`.")
+            return
+
+        trials = get_announcing_trials(db_server.id)
+        if not user_is_mod(interaction.guild, interaction.user):
+            trials = [t for t in trials if t.organizer_user_id == interaction.user.id]
+        if not trials:
+            await send_message(interaction, "No trials in Announcing state that you have permission to start.")
+            return
+
+        discord_server = get_server_from_interaction(interaction)
+
+        if len(trials) == 1:
+            trial = trials[0]
+        else:
+            select_list = [
+                nextcord.SelectOption(label=t.display_name, value=str(t.id))
+                for t in trials
+            ]
+            view = zSingleSelectView(select_list, None, "Select trial to start...")
+            await send_message(interaction, view=view)
+            await view.wait()
+            trial_id = view.get_selected_value()
+            if trial_id is None:
+                return
+            trial = get_trial(trial_id)
+            if trial is None:
+                await send_message(interaction, "Trial not found.")
+                return
+
+        # Detect partial start (objects created in a previous session that was abandoned)
+        partial_ids = [trial.general_channel_id, trial.spoilers_channel_id,
+                       trial.finisher_role_id, trial.category_id]
+        if any(v is not None for v in partial_ids):
+            lines = [f"**{trial.display_name}** has a partial start from a previous session:"]
+            if trial.general_channel_id:
+                lines.append(f"• General channel: <#{trial.general_channel_id}>")
+            if trial.spoilers_channel_id:
+                lines.append(f"• Spoilers channel: <#{trial.spoilers_channel_id}>")
+            if trial.finisher_role_id:
+                lines.append(f"• Finisher role: <@&{trial.finisher_role_id}>")
+            if trial.category_id:
+                lines.append(f"• Bot category ID: {trial.category_id}")
+            lines.append("\nUse **Rollback Partial Start** to clean up and restart, or **Continue Setup** to proceed from the extra info step.")
+            view = TrialPartialStartView(trial, db_server, discord_server)
+            await send_message(interaction, "\n".join(lines), view=view)
+            return
+
+        flow = TrialStartFlow(trial, db_server, discord_server)
+        await flow.start(interaction)
+
+    @async_mod.subcommand(description="End the current race and start a new one for an active trial")
+    async def start_trial_race(self, interaction):
+        self.log_command(interaction.user, "START_TRIAL_RACE")
+        await interaction.response.defer(ephemeral=True)
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await send_message(interaction, "Server not registered. Run `/async_admin startup` first.")
+            return
+
+        trials = get_active_trials(db_server.id)
+        if not user_is_mod(interaction.guild, interaction.user):
+            trials = [t for t in trials if t.organizer_user_id == interaction.user.id]
+        if not trials:
+            await send_message(interaction, "No active trials that you have permission to manage.")
+            return
+
+        discord_server = get_server_from_interaction(interaction)
+
+        if len(trials) == 1:
+            trial = trials[0]
+        else:
+            select_list = [
+                nextcord.SelectOption(label=t.display_name, value=str(t.id))
+                for t in trials
+            ]
+            view = zSingleSelectView(select_list, None, "Select trial...")
+            await send_message(interaction, view=view)
+            await view.wait()
+            trial_id = view.get_selected_value()
+            if trial_id is None:
+                return
+            trial = get_trial(trial_id)
+            if trial is None:
+                await send_message(interaction, "Trial not found.")
+                return
+
+        flow = TrialStartRaceFlow(trial, db_server, discord_server)
+        await flow.start(interaction)
+
+    ####################################################################################################################
+    @async_mod.subcommand(description="End an active trial, scoring the final race and stopping reaction tracking")
+    async def end_trial(self, interaction):
+        self.log_command(interaction.user, "END_TRIAL")
+        await interaction.response.defer(ephemeral=True)
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await send_message(interaction, "Server not registered. Run `/async_admin startup` first.")
+            return
+
+        trials = get_active_trials(db_server.id)
+        if not user_is_mod(interaction.guild, interaction.user):
+            trials = [t for t in trials if t.organizer_user_id == interaction.user.id]
+        if not trials:
+            await send_message(interaction, "No active trials that you have permission to end.")
+            return
+
+        if len(trials) == 1:
+            trial = trials[0]
+        else:
+            select_list = [
+                nextcord.SelectOption(label=t.display_name, value=str(t.id))
+                for t in trials
+            ]
+            view = zSingleSelectView(select_list, None, "Select trial to end...")
+            await send_message(interaction, view=view)
+            await view.wait()
+            trial_id = view.get_selected_value()
+            if trial_id is None:
+                return
+            trial = get_trial(trial_id)
+            if trial is None:
+                await send_message(interaction, "Trial not found.")
+                return
+
+        await send_end_trial_confirm(interaction, trial, self.trial_reaction_cache)
+
+    ####################################################################################################################
+    @async_mod.subcommand(description="Remove channels, roles, and archive a trial that has ended")
+    async def archive_trial(self, interaction):
+        self.log_command(interaction.user, "ARCHIVE_TRIAL")
+        await interaction.response.defer(ephemeral=True)
+
+        db_server = self.get_server(interaction)
+        if db_server is None:
+            await send_message(interaction, "Server not registered. Run `/async_admin startup` first.")
+            return
+
+        trials = get_ended_trials(db_server.id)
+        if not user_is_mod(interaction.guild, interaction.user):
+            trials = [t for t in trials if t.organizer_user_id == interaction.user.id]
+        if not trials:
+            await send_message(interaction, "No ended trials that you have permission to archive.")
+            return
+
+        discord_server = get_server_from_interaction(interaction)
+
+        if len(trials) == 1:
+            trial = trials[0]
+        else:
+            select_list = [
+                nextcord.SelectOption(label=t.display_name, value=str(t.id))
+                for t in trials
+            ]
+            view = zSingleSelectView(select_list, None, "Select trial to archive...")
+            await send_message(interaction, view=view)
+            await view.wait()
+            trial_id = view.get_selected_value()
+            if trial_id is None:
+                return
+            trial = get_trial(trial_id)
+            if trial is None:
+                await send_message(interaction, "Trial not found.")
+                return
+
+        await send_archive_trial_prompt(interaction, trial, discord_server, self.trial_reaction_cache)
 
 
 def setup(bot):

@@ -9,11 +9,14 @@ if bot_config.TEST_MODE:
 db = SqliteDatabase(db_path)
 
 class AsyncRaceServer(Model):
-    id                      = IntegerField(primary_key=True)
-    name                    = CharField()
-    mod_role_id             = IntegerField()
-    admin_role_id           = IntegerField()
-    enable_vc_create        = BooleanField(default=False)
+    id                              = IntegerField(primary_key=True)
+    name                            = CharField(default='')
+    mod_role_id                     = IntegerField(null=True)
+    admin_role_id                   = IntegerField(null=True)
+    enable_vc_create                = BooleanField(default=False)
+    trials_enabled                  = BooleanField(default=False)
+    trials_announcement_channel_id  = IntegerField(null=True)
+    trials_discord_category_id      = IntegerField(null=True)
 
     class Meta:
         table_name = 'async_race_servers'
@@ -197,6 +200,31 @@ class ServerUtilsVcList(Model):
         table_name = 'server_utils_vc_list'
         database = db
 
+class Trial(Model):
+    id                      = IntegerField(primary_key=True)
+    server_id               = ForeignKeyField(AsyncRaceServer, backref='trials')
+    short_name              = CharField()
+    display_name            = CharField()
+    short_description       = CharField(default='')
+    announcement_text       = TextField(null=True)
+    state                   = IntegerField(default=0)
+    accept_signups          = BooleanField(default=True)
+    announcement_message_id = IntegerField(null=True)
+    announcement_channel_id = IntegerField(null=True)
+    general_channel_id      = IntegerField(null=True)
+    spoilers_channel_id     = IntegerField(null=True)
+    participant_role_id     = IntegerField(null=True)
+    finisher_role_id        = IntegerField(null=True)
+    category_id             = ForeignKeyField(AsyncRaceCategory, null=True)
+    current_race_id         = ForeignKeyField(AsyncRace, null=True)
+    organizer_user_id       = IntegerField(null=True)
+    min_signups             = IntegerField(null=True)
+    min_signups_notified    = BooleanField(default=False)
+
+    class Meta:
+        table_name = 'trials'
+        database = db
+
 ####################################################################################################################
 # Deletes all existing tables, then recreates them.
 def drop_add_db_tables():
@@ -214,7 +242,8 @@ def drop_add_db_tables():
         AsyncRaceTrueSkillParams,
         AsyncRaceTrueSkillRacerParams,
         AsyncRaceCategoryDrawThreshold,
-        ServerUtilsVcList])
+        ServerUtilsVcList,
+        Trial])
     add_db_tables()
 
 ####################################################################################################################
@@ -235,7 +264,8 @@ def add_db_tables():
         AsyncRaceTrueSkillRacerParams,
         AsyncRaceCategoryDrawThreshold,
         ServerUtilsVcList,
-        StartupRestoreState])
+        StartupRestoreState,
+        Trial])
 
 ####################################################################################################################
 # Recreates the indicated table
@@ -288,6 +318,9 @@ def recreate_table(table_name):
         case "StartupRestoreState":
             db.drop_tables([StartupRestoreState])
             db.create_tables([StartupRestoreState])
+        case "Trial":
+            db.drop_tables([Trial])
+            db.create_tables([Trial])
         case _:
             logging.info(f"Unrecognized table name {table_name}")
             result = False

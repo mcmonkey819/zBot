@@ -116,6 +116,13 @@ class ValidationStatus:
         else:
             return "Unknown"
 
+class TrialState:
+    Announcing = 0
+    Active     = 1
+    Ended      = 2
+    Archived   = 3
+    Cancelled  = 4
+
 ForfeitFinishTime = "23:59:59"
 ForfeitFinishTimeSeconds = (3600 * 23) + (60 * 59) + 59
 
@@ -1006,6 +1013,10 @@ def get_messages_by_category_id(category_id):
     return AsyncRaceMessage.select().where(AsyncRaceMessage.category_id == category_id)
 
 ########################################################################################################################
+def delete_messages_by_category_id(category_id):
+    AsyncRaceMessage.delete().where(AsyncRaceMessage.category_id == category_id).execute()
+
+########################################################################################################################
 def save_restore_state(server_id, channel_id, message_type, category_id=None, race_id=None):
     try:
         StartupRestoreState.create(
@@ -1024,3 +1035,52 @@ def get_restore_state(server_id):
 ########################################################################################################################
 def clear_restore_state(server_id):
     StartupRestoreState.delete().where(StartupRestoreState.server_id == server_id).execute()
+
+########################################################################################################################
+def get_trial(trial_id):
+    trial = None
+    if trial_id is not None:
+        try:
+            trial = Trial.select().where(Trial.id == trial_id).get()
+        except:
+            logging.info(f"Could not find trial ID {trial_id}")
+    return trial
+
+########################################################################################################################
+def get_announcing_trials(server_id):
+    return list(Trial.select().where(
+        (Trial.server_id == server_id) &
+        (Trial.state == TrialState.Announcing)
+    ))
+
+########################################################################################################################
+def get_active_trials(server_id):
+    return list(Trial.select().where(
+        (Trial.server_id == server_id) &
+        (Trial.state == TrialState.Active)
+    ))
+
+########################################################################################################################
+def get_ended_trials(server_id):
+    return list(Trial.select().where(
+        (Trial.server_id == server_id) &
+        (Trial.state == TrialState.Ended)
+    ))
+
+########################################################################################################################
+def get_trial_by_category(category_id):
+    try:
+        return Trial.get(
+            (Trial.category_id == category_id) &
+            (Trial.state == TrialState.Active)
+        )
+    except Trial.DoesNotExist:
+        return None
+
+########################################################################################################################
+def get_all_tracked_trials():
+    """Return all Announcing/Active trials that have a tracked announcement message."""
+    return list(Trial.select().where(
+        (Trial.state << [TrialState.Announcing, TrialState.Active]) &
+        Trial.announcement_message_id.is_null(False)
+    ))
